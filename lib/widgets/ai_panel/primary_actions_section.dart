@@ -43,42 +43,61 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
 
     if (controller.isLoading || isBulkProcessing) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => onPauseOrResume(),
-                  icon: Icon(
-                    controller.status == TranslationStatus.paused
-                        ? Icons.play_arrow
-                        : Icons.pause,
-                    size: 20,
-                  ),
-                  label: Text(
-                    controller.status == TranslationStatus.paused
-                        ? (settings.trans['resume'] ?? 'Devam Et')
-                        : (settings.trans['pause'] ?? 'Duraklat'),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: controller.status == TranslationStatus.paused
-                        ? Colors.green.shade700
-                        : Colors.orange.shade800,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(
+                  height: kAiPanelPrimaryButtonHeight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => onPauseOrResume(),
+                    icon: Icon(
+                      controller.status == TranslationStatus.paused
+                          ? Icons.play_arrow
+                          : Icons.pause,
+                      size: 18,
+                    ),
+                    label: Text(
+                      controller.status == TranslationStatus.paused
+                          ? (settings.trans['resume'] ?? 'Devam Et')
+                          : (settings.trans['pause'] ?? 'Duraklat'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: controller.status == TranslationStatus.paused
+                          ? Colors.green.shade700
+                          : Colors.orange.shade800,
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: kAiPanelInlineGap),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => onStop(),
-                  icon: const Icon(Icons.stop, size: 20),
-                  label: Text(settings.trans['stop'] ?? 'Durdur'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(
+                  height: kAiPanelPrimaryButtonHeight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => onStop(),
+                    icon: const Icon(Icons.stop, size: 18),
+                    label: Text(settings.trans['stop'] ?? 'Durdur'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -92,33 +111,42 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
     final canStart = !(controller.isLoading || isBulkProcessing || selectedFilesCount == 0);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: canStart ? onStartTranslation : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: disabledBg,
-                  disabledForegroundColor: disabledFg,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: AutoSizeText(
-                  '${settings.trans['start_translation'] ?? 'Çeviriyi Başlat'} (1 ${settings.trans['credit'] ?? 'Kredi'})',
-                  maxLines: 1,
-                  minFontSize: 10,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+        SizedBox(
+          height: kAiPanelPrimaryButtonHeight,
+          child: ElevatedButton.icon(
+            onPressed: canStart ? onStartTranslation : null,
+            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.center,
+              child: AutoSizeText(
+                '${settings.trans['start_translation'] ?? 'Çeviriyi Başlat'} (1 ${settings.trans['credit'] ?? 'Kredi'})',
+                maxLines: 1,
+                minFontSize: 10,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
                 ),
               ),
             ),
-          ],
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: disabledBg,
+              disabledForegroundColor: disabledFg,
+              elevation: 3,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: kAiPanelSectionGap),
       ],

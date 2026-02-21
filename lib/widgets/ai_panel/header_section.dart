@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'layout_constants.dart';
+
 class AiPanelHeaderSection extends StatelessWidget {
   final bool sdhClear;
   final ValueChanged<bool> onSdhClearChanged;
@@ -56,7 +58,7 @@ class AiPanelHeaderSection extends StatelessWidget {
                   activeThumbColor: colorScheme.primary,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: kAiPanelInlineGap),
               Flexible(
                 child: Text(
                   sdhClearLabel,
@@ -70,7 +72,7 @@ class AiPanelHeaderSection extends StatelessWidget {
                 ),
               ),
               if (!hideInfoButtons) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: kAiPanelInlineGap),
                 InkWell(
                   customBorder: const CircleBorder(),
                   onTap: onInfoTap,
@@ -92,7 +94,7 @@ class AiPanelHeaderSection extends StatelessWidget {
           children: [
             if (sourceIndicator != null) ...[
               sourceIndicator!,
-              const SizedBox(width: 10),
+              const SizedBox(width: kAiPanelInlineGap),
             ],
             ElevatedButton.icon(
               key: historyButtonKey,

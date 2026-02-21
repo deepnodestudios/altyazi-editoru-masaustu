@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'layout_constants.dart';
+
 class AiPanelBatchProcessingBanner extends StatelessWidget {
   final String message;
   final ColorScheme colorScheme;
@@ -24,7 +26,7 @@ class AiPanelBatchProcessingBanner extends StatelessWidget {
           child: Row(
             children: [
               Icon(Icons.queue, color: colorScheme.primary, size: 20),
-              const SizedBox(width: 10),
+              const SizedBox(width: kAiPanelInlineGap),
               Expanded(
                 child: Text(
                   message,
@@ -38,7 +40,7 @@ class AiPanelBatchProcessingBanner extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: kAiPanelSectionGap),
       ],
     );
   }

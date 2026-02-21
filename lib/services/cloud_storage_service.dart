@@ -531,66 +531,6 @@ class CloudStorageService {
     return tokenData['access_token'] as String?;
   }
 
-  Future<void> _signInWithGoogleDesktopFirebase({
-    required User? currentUser,
-    required Function(String uid)? onGoogleSignInSuccess,
-  }) async {
-    final accessToken =
-        await _ensureDesktopGoogleAccessToken(interactive: true);
-    final idToken = await _secureRead(_prefsGoogleIdToken);
-
-    if (accessToken == null || accessToken.isEmpty) {
-      throw Exception('Google access token unavailable');
-    }
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception('Google id token unavailable');
-    }
-
-    final credential = GoogleAuthProvider.credential(
-      accessToken: accessToken,
-      idToken: idToken,
-    );
-
-    final auth = FirebaseAuth.instance;
-    late final UserCredential userCredential;
-    if (currentUser != null && currentUser.isAnonymous) {
-      try {
-        userCredential = await currentUser.linkWithCredential(credential);
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'credential-already-in-use') {
-          userCredential = await auth.signInWithCredential(credential);
-        } else {
-          rethrow;
-        }
-      }
-    } else {
-      userCredential = await auth.signInWithCredential(credential);
-    }
-
-    try {
-      await userCredential.user?.reload();
-    } catch (_) {}
-
-    final signedInUser = userCredential.user;
-    if (signedInUser == null) return;
-
-    await _firestore.collection('users').doc(signedInUser.uid).set({
-      'email': signedInUser.email,
-      'displayName': signedInUser.displayName,
-      'photoUrl': signedInUser.photoURL,
-      'lastSignIn': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    if (onGoogleSignInSuccess != null) {
-      await onGoogleSignInSuccess(signedInUser.uid);
-    }
-
-    _cloudStateManager.setIsGDriveConnected(true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_gdrive_connected', true);
-    onLog?.call('log_gdrive_connected', signedInUser.email);
-  }
-
   Future<void> _signInWithGoogleCredential({
     required User? currentUser,
     required AuthCredential credential,
@@ -634,69 +574,53 @@ class CloudStorageService {
     onLog?.call('log_gdrive_connected', connectedIdentity ?? signedInUser.email);
   }
 
-  Future<void> signInWithGoogle(
-      {required Function(String uid)? onGoogleSignInSuccess}) async {
+  /// [manageLoadingState]: true ise kendi loading state'ini yönetir.
+  /// false ise çağıran taraf yönetir ve hatalar yeniden fırlatılır.
+  Future<void> signInWithGoogle({
+    required Function(String uid)? onGoogleSignInSuccess,
+    bool manageLoadingState = true,
+  }) async {
     try {
-      _cloudStateManager.setLoadingAuthProvider('google_sign_in');
+      if (manageLoadingState) {
+        _cloudStateManager.setLoadingAuthProvider('google_sign_in');
+      }
 
       final auth = FirebaseAuth.instance;
       final currentUser = auth.currentUser;
 
       if (_isDesktop) {
-        // Desktop: PKCE akışını öncelikli kullan (refresh token saklayarak
-        // sonraki açılışlarda oturumu geri yükleyebilmek için).
-        try {
-          await _signInWithGoogleDesktopFirebase(
-            currentUser: currentUser,
-            onGoogleSignInSuccess: onGoogleSignInSuccess,
-          );
-          return;
-        } catch (e) {
-          onLog?.call(
-            'log_gdrive_signin_error',
-            jsonEncode({'desktopPKCE': true, 'error': e.toString()}),
-          );
-        }
+        // Desktop: GoogleSignIn eklentisi ile giriş yap, ardından
+        // Firebase Auth'a credential ile bağlan.
+        // NOT: PKCE akışı client_secret gerektirdiği için devre dışı.
+        await _ensureDesktopGoogleSignInRegistered();
+        final account = await _googleSignIn.signIn();
+        if (account == null) return;
 
-        // Fallback: GoogleSignIn eklentisi üzerinden dene
-        try {
-          await _ensureDesktopGoogleSignInRegistered();
-          final account = await _googleSignIn.signIn();
-          if (account == null) return;
-
-          final googleAuth = await account.authentication;
-          if (googleAuth.idToken != null && googleAuth.idToken!.isNotEmpty) {
-            // Eklentiden gelen token'ları da secure storage'a kaydet
-            // (refresh yok ama en azından kısa süreli restore için yeterli)
-            if (googleAuth.accessToken != null) {
-              await _secureWrite(
-                  _prefsGoogleAccessToken, googleAuth.accessToken!);
-              await _secureWriteInt(
-                _prefsGoogleExpiresAtMs,
-                DateTime.now()
-                    .add(const Duration(minutes: 55))
-                    .millisecondsSinceEpoch,
-              );
-            }
-            await _secureWrite(_prefsGoogleIdToken, googleAuth.idToken!);
-
-            final credential = GoogleAuthProvider.credential(
-              accessToken: googleAuth.accessToken,
-              idToken: googleAuth.idToken,
+        final googleAuth = await account.authentication;
+        if (googleAuth.idToken != null && googleAuth.idToken!.isNotEmpty) {
+          // Token'ları secure storage'a kaydet (kısa süreli restore için)
+          if (googleAuth.accessToken != null) {
+            await _secureWrite(
+                _prefsGoogleAccessToken, googleAuth.accessToken!);
+            await _secureWriteInt(
+              _prefsGoogleExpiresAtMs,
+              DateTime.now()
+                  .add(const Duration(minutes: 55))
+                  .millisecondsSinceEpoch,
             );
-
-            await _signInWithGoogleCredential(
-              currentUser: currentUser,
-              credential: credential,
-              onGoogleSignInSuccess: onGoogleSignInSuccess,
-              connectedIdentity: account.email,
-            );
-            return;
           }
-        } catch (e) {
-          onLog?.call(
-            'log_gdrive_signin_error',
-            jsonEncode({'desktopPlugin': true, 'error': e.toString()}),
+          await _secureWrite(_prefsGoogleIdToken, googleAuth.idToken!);
+
+          final credential = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+
+          await _signInWithGoogleCredential(
+            currentUser: currentUser,
+            credential: credential,
+            onGoogleSignInSuccess: onGoogleSignInSuccess,
+            connectedIdentity: account.email,
           );
         }
         return;
@@ -722,8 +646,12 @@ class CloudStorageService {
     } catch (e) {
       onLog?.call(
           'log_gdrive_signin_error', jsonEncode({'error': e.toString()}));
+      debugPrint('[CloudStorageService] signInWithGoogle error: $e');
+      if (!manageLoadingState) rethrow;
     } finally {
-      _cloudStateManager.setLoadingAuthProvider(null);
+      if (manageLoadingState) {
+        _cloudStateManager.setLoadingAuthProvider(null);
+      }
     }
   }
 

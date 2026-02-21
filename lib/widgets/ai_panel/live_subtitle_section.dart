@@ -52,7 +52,14 @@ class AiPanelLiveSubtitleSection extends StatelessWidget {
     );
 
     if (fillHeight) {
-      return SizedBox.expand(child: content);
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: content,
+      );
     }
 
     return Column(children: [content]);

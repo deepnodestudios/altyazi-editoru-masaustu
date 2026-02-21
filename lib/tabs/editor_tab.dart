@@ -27,7 +27,6 @@ class EditorTab extends StatefulWidget {
 
 class _EditorTabState extends State<EditorTab> {
   final TextEditingController _searchCtrl = TextEditingController();
-  bool _isLogExpanded = false;
   bool _isDropZoneActive = false;
   bool _isSwitchingEditorFile = false;
   final TextEditingController _replaceCtrl = TextEditingController();
@@ -742,180 +741,9 @@ class _EditorTabState extends State<EditorTab> {
     );
   }
 
-  Widget _buildFooter(BuildContext context, AppSettings settings) {
-    final trans = settings.trans;
-
-    void copyAllLogsToClipboard() {
-      if (settings.logs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              trans['system_log_empty'] ??
-                  'Sistem günlüğünde kopyalanacak kayıt yok.',
-            ),
-          ),
-        );
-        return;
-      }
-
-        final allLogs = settings.logs
-          .reversed
-          .map((log) {
-            String logText = trans[log.key] ?? log.key;
-            String fullLog = "${log.time} - $logText";
-            if (log.param != null && log.param!.isNotEmpty) {
-              fullLog += ": ${log.param}";
-            }
-            return fullLog;
-          })
-          .join('\n');
-
-      Clipboard.setData(ClipboardData(text: allLogs));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            trans['system_log_copied'] ?? 'Sistem günlüğü panoya kopyalandı.',
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          height:
-              _isLogExpanded ? MediaQuery.of(context).size.height * 0.33 : 50,
-          decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainer,
-              border: Border(
-                  top: BorderSide(
-                      color: Theme.of(context).dividerColor, width: 1)),
-              boxShadow: const [
-                BoxShadow(
-                    blurRadius: 5, color: Colors.black12, offset: Offset(0, -2))
-              ]),
-          child: Column(
-            children: [
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isLogExpanded = !_isLogExpanded;
-                    });
-                  },
-                  child: Container(
-                    height: 49,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Icon(
-                                  _isLogExpanded
-                                      ? Icons.keyboard_arrow_down
-                                      : Icons.keyboard_arrow_up,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
-                              const SizedBox(width: 8),
-                              AdaptiveText(
-                                trans["system_log"] ?? "Sistem Günlüğü",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface,
-                                ),
-                                maxLines: 1,
-                                minFontSize: 10,
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!_isLogExpanded && settings.logs.isNotEmpty)
-                          Expanded(
-                            child: AdaptiveText(
-                              trans[settings.logs.first.key] ??
-                                  settings.logs.first.key,
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
-                              textAlign: TextAlign.end,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                              minFontSize: 8,
-                            ),
-                          ),
-                        if (_isLogExpanded)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.copy_all),
-                                tooltip: trans['copy'] ?? 'Kopyala',
-                                onPressed: copyAllLogsToClipboard,
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.save_alt,
-                                ),
-                                tooltip: trans["save_log"],
-                                onPressed: () => settings.saveLogsToFile(),
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (_isLogExpanded)
-                Expanded(
-                  child: Container(
-                    color: Theme.of(context).colorScheme.surface,
-                    width: double.infinity,
-                    child: SelectionArea(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(8),
-                        child: SelectableText(
-                            settings.logs
-                              .reversed
-                              .map((log) {
-                                String logText = trans[log.key] ?? log.key;
-                                String fullLog = "${log.time} - $logText";
-                                if (log.param != null && log.param!.isNotEmpty) {
-                                  fullLog += ": ${log.param}";
-                                }
-                                return fullLog;
-                              })
-                              .join('\n'),
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'Courier',
-                              color: Theme.of(context).colorScheme.primary,
-                              height: 1.35),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTopControls(
       BuildContext context, AppSettings settings, Map<String, String> trans) {
+    const double topButtonHeight = 48;
     return Container(
       padding: const EdgeInsets.all(8),
       color: Theme.of(context).colorScheme.surfaceContainer,
@@ -925,90 +753,119 @@ class _EditorTabState extends State<EditorTab> {
             children: [
               // Dosya Seç
               Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.file_open, size: 20),
-                  label: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        trans["cloud_source_pick"] ?? "Dosya Seç",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'SRT - VTT',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          height: 1.0,
+                child: SizedBox(
+                  height: topButtonHeight,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.file_open, size: 20),
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        AdaptiveText(
+                          trans["cloud_source_pick"] ?? "Dosya Seç",
+                          maxLines: 1,
+                          minFontSize: 10,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            height: 1.0,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        const Text(
+                          'SRT - VTT',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade800,
+                      disabledForegroundColor: Colors.white38,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onPressed: () async {
+                      await _pickEditorFileWithSource(context, settings);
+                    },
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade800,
-                    disabledForegroundColor: Colors.white38,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () async {
-                    await _pickEditorFileWithSource(context, settings);
-                  },
                 ),
               ),
               const SizedBox(width: 8),
               // Kaldır / Kapat
               Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.close, size: 20),
-                  label: Text(trans["editor_close_tooltip"] ?? "Kapat",
-                      overflow: TextOverflow.ellipsis),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade800,
-                    disabledForegroundColor: Colors.white38,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: settings.selectedEditorFile != null
-                      ? () async {
-                          final allowRemove =
-                              await _confirmRemoveDirtyEditorIfNeeded(
-                                  context, settings);
-                          if (!mounted || !context.mounted || !allowRemove) {
-                            return;
+                child: SizedBox(
+                  height: topButtonHeight,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.close, size: 20),
+                    label: AdaptiveText(
+                      trans["editor_close_tooltip"] ?? "Kapat",
+                      maxLines: 1,
+                      minFontSize: 10,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        height: 1.0,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade800,
+                      disabledForegroundColor: Colors.white38,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onPressed: settings.selectedEditorFile != null
+                        ? () async {
+                            final allowRemove =
+                                await _confirmRemoveDirtyEditorIfNeeded(
+                                    context, settings);
+                            if (!mounted || !context.mounted || !allowRemove) {
+                              return;
+                            }
+                            settings.clearEditorFile();
                           }
-                          settings.clearEditorFile();
-                        }
-                      : null,
+                        : null,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               // Kaydet
               Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.save, size: 20),
-                  label: AdaptiveText(
-                    trans["editor_save_tooltip"] ?? "Kaydet",
-                    maxLines: 1,
-                    minFontSize: 10,
-                    overflow: TextOverflow.ellipsis,
+                child: SizedBox(
+                  height: topButtonHeight,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save, size: 20),
+                    label: AdaptiveText(
+                      trans["editor_save_tooltip"] ?? "Kaydet",
+                      maxLines: 1,
+                      minFontSize: 10,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        height: 1.0,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade800,
+                      disabledForegroundColor: Colors.white38,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onPressed: settings.isEditorDirty
+                        ? () => _saveEditorFileWithSource(context, settings)
+                        : null,
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade800,
-                    disabledForegroundColor: Colors.white38,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: settings.isEditorDirty
-                      ? () => _saveEditorFileWithSource(context, settings)
-                      : null,
                 ),
               ),
             ],
@@ -1708,187 +1565,199 @@ class _EditorTabState extends State<EditorTab> {
         autofocus: true,
         focusNode: _editorFocusNode,
         child: DropRegion(
-      formats: const [Formats.fileUri],
-      onDropOver: (event) {
-        if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-          return DropOperation.none;
-        }
-        if (!_isDropZoneActive && mounted) {
-          setState(() => _isDropZoneActive = true);
-        }
-        if (event.session.allowedOperations.contains(DropOperation.copy)) {
-          return DropOperation.copy;
-        }
-        if (event.session.allowedOperations.contains(DropOperation.move)) {
-          return DropOperation.move;
-        }
-        return DropOperation.none;
-      },
-      onDropLeave: (_) {
-        if (_isDropZoneActive && mounted) {
-          setState(() => _isDropZoneActive = false);
-        }
-      },
-      onDropEnded: (_) {
-        if (_isDropZoneActive && mounted) {
-          setState(() => _isDropZoneActive = false);
-        }
-      },
-      onPerformDrop: (event) async {
-        if (_isDropZoneActive && mounted) {
-          setState(() => _isDropZoneActive = false);
-        }
-        if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-          return;
-        }
-        try {
-          final droppedPaths = await _extractDroppedPaths(event);
-          if (!mounted) return;
-          _scheduleEditorDropHandling(settings, droppedPaths);
-        } catch (e) {
-          if (!mounted) return;
-          final template = settings.trans['snackbar_file_read_error'] ??
-              'File read error: {error}';
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(
-              content: Text(template.replaceAll('{error}', e.toString())),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      },
-      child: Container(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        child: Stack(
-          children: [
-          Column(
-            children: [
-              Expanded(
-                  child: useFixedDesktopSplit
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(
-                              width: desktopPaneWidth,
-                              child: Column(
+          formats: const [Formats.fileUri],
+          onDropOver: (event) {
+            if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+              return DropOperation.none;
+            }
+            if (!_isDropZoneActive && mounted) {
+              setState(() => _isDropZoneActive = true);
+            }
+            if (event.session.allowedOperations.contains(DropOperation.copy)) {
+              return DropOperation.copy;
+            }
+            if (event.session.allowedOperations.contains(DropOperation.move)) {
+              return DropOperation.move;
+            }
+            return DropOperation.none;
+          },
+          onDropLeave: (_) {
+            if (_isDropZoneActive && mounted) {
+              setState(() => _isDropZoneActive = false);
+            }
+          },
+          onDropEnded: (_) {
+            if (_isDropZoneActive && mounted) {
+              setState(() => _isDropZoneActive = false);
+            }
+          },
+          onPerformDrop: (event) async {
+            if (_isDropZoneActive && mounted) {
+              setState(() => _isDropZoneActive = false);
+            }
+            if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+              return;
+            }
+            try {
+              final droppedPaths = await _extractDroppedPaths(event);
+              if (!mounted) return;
+              _scheduleEditorDropHandling(settings, droppedPaths);
+            } catch (e) {
+              if (!mounted) return;
+              final template = settings.trans['snackbar_file_read_error'] ??
+                  'File read error: {error}';
+              ScaffoldMessenger.of(this.context).showSnackBar(
+                SnackBar(
+                  content: Text(template.replaceAll('{error}', e.toString())),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          child: MediaQuery.removePadding(
+            context: context,
+            removeLeft: true,
+            child: Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Stack(
+                children: [
+                Column(
+                  children: [
+                    Expanded(
+                        child: useFixedDesktopSplit
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  _buildTopControls(context, settings, trans),
-                                  if (settings.selectedEditorFile != null)
-                                    _buildSearchPanel(
-                                      context,
-                                      settings,
-                                      trans,
-                                      isRegexError,
+                                  SizedBox(
+                                    width: desktopPaneWidth,
+                                    child: Column(
+                                      children: [
+                                        _buildTopControls(context, settings, trans),
+                                        if (settings.selectedEditorFile != null)
+                                          _buildSearchPanel(
+                                            context,
+                                            settings,
+                                            trans,
+                                            isRegexError,
+                                          ),
+                                      ],
                                     ),
+                                  ),
+                                  const VerticalDivider(width: 1, thickness: 1),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 8.0),
+                                      child: _buildEditorList(context, settings, trans),
+                                    ),
+                                  ),
                                 ],
-                              ),
-                            ),
-                            const VerticalDivider(width: 1, thickness: 1),
-                            Expanded(
-                              child: _buildEditorList(context, settings, trans),
-                            ),
-                          ],
-                        )
-                      : isTablet
-                          ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(
-                                  width: 400,
-                                  child: Column(
+                              )
+                            : isTablet
+                                ? Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        width: 400,
+                                        child: Column(
+                                          children: [
+                                            _buildTopControls(context, settings, trans),
+                                            if (settings.selectedEditorFile != null)
+                                              _buildSearchPanel(
+                                                  context, settings, trans, isRegexError),
+                                          ],
+                                        ),
+                                      ),
+                                      const VerticalDivider(width: 1),
+                                      Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: _buildEditorList(context, settings, trans),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
                                     children: [
                                       _buildTopControls(context, settings, trans),
                                       if (settings.selectedEditorFile != null)
                                         _buildSearchPanel(
                                             context, settings, trans, isRegexError),
+                                      Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(left: 8.0),
+                                          child: _buildEditorList(context, settings, trans),
+                                        ),
+                                      ),
                                     ],
-                                  ),
-                                ),
-                                const VerticalDivider(width: 1),
-                                Expanded(
-                                  child: _buildEditorList(context, settings, trans),
-                                ),
-                              ],
-                            )
-                          : Column(
-                              children: [
-                                _buildTopControls(context, settings, trans),
-                                if (settings.selectedEditorFile != null)
-                                  _buildSearchPanel(
-                                      context, settings, trans, isRegexError),
-                                Expanded(
-                                  child: _buildEditorList(context, settings, trans),
-                                ),
-                              ],
-                            )),
-              SafeArea(top: false, child: _buildFooter(context, settings)),
-            ],
-          ),
-
-            if (_isDropZoneActive)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.08),
-                  ),
+                                  )),
+                  ],
                 ),
-              ),
-
-            // Loading overlay when bringing a project into the editor.
-            if (settings.isOpeningEditor)
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: false,
-                  child: Container(
-                    color: Colors.black54,
-                    alignment: Alignment.center,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                trans["editor_loading"] ?? "Editör yükleniyor…",
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
+          
+                  if (_isDropZoneActive)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.08),
+                        ),
+                      ),
+                    ),
+          
+                  // Loading overlay when bringing a project into the editor.
+                  if (settings.isOpeningEditor)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: false,
+                        child: Container(
+                          color: Colors.black54,
+                          alignment: Alignment.center,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Text(
+                                      trans["editor_loading"] ?? "Editör yükleniyor…",
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    LinearProgressIndicator(
+                                      value: settings.editorOpenProgress.clamp(0.0, 1.0),
+                                      minHeight: 8,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      "${(settings.editorOpenProgress * 100).clamp(0, 100).toStringAsFixed(0)}%",
+                                      textAlign: TextAlign.center,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(color: Colors.black54),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 12),
-                              LinearProgressIndicator(
-                                value: settings.editorOpenProgress.clamp(0.0, 1.0),
-                                minHeight: 8,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                "${(settings.editorOpenProgress * 100).clamp(0, 100).toStringAsFixed(0)}%",
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: Colors.black54),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
       ),
-    ),
-    ),
     );
   }
 }

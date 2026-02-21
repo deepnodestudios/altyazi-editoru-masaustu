@@ -20,6 +20,7 @@ import 'tabs/translation_tab.dart';
 import 'tabs/editor_tab.dart';
 import 'settings.dart';
 import 'widgets/adaptive_text.dart';
+import 'widgets/shared_system_log.dart';
 import 'translations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -373,26 +374,28 @@ void main() async {
     FlutterError.dumpErrorToConsole(details);
     unawaited(
       appendFlutterError(
-          'FlutterError.onError', details.toString(), details.stack),
+          'FlutterError.onError', details.exceptionAsString(), details.stack),
     );
   };
 
   PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
     unawaited(appendFlutterError('PlatformDispatcher.onError', error, stack));
-    return false;
+    // Returning true prevents the error from being treated as unhandled,
+    // which can terminate the app in release builds on desktop.
+    return true;
   };
 
     final double savedScale = (prefs.getDouble('ui_scale') ?? 1.0).clamp(0.75, 1.25);
+    // Minimum boyut ölçeğe göre orantılı.
     final double scaledMinW = (_kDesktopMinWidth * savedScale).roundToDouble();
     final double scaledMinH = (_kDesktopMinHeight * savedScale).roundToDouble();
 
     final double width =
-      (prefs.getDouble('window_width') ?? 1280).clamp(scaledMinW, double.infinity);
+      (prefs.getDouble('window_width') ?? (1280 * savedScale)).clamp(scaledMinW, double.infinity);
     final double height =
-      (prefs.getDouble('window_height') ?? 720).clamp(scaledMinH, double.infinity);
+      (prefs.getDouble('window_height') ?? (720 * savedScale)).clamp(scaledMinH, double.infinity);
   final double? x = prefs.getDouble('window_x');
   final double? y = prefs.getDouble('window_y');
-  final bool isMaximized = prefs.getBool('window_maximized') ?? false;
   final bool isAlwaysOnTop = prefs.getBool(_kPrefWindowAlwaysOnTop) ?? false;
   final String startupAppTitle = _resolveStartupAppTitle(prefs);
 
@@ -414,13 +417,9 @@ void main() async {
       await windowManager.setPreventClose(true);
       await windowManager.setTitle(startupAppTitle);
       await windowManager.setAlwaysOnTop(isAlwaysOnTop);
-      if (isMaximized) {
-        await windowManager.show();
-        await windowManager.focus();
-        await windowManager.maximize();
-      } else {
-        // If a saved window position is off-screen (monitor layout changes),
-        // the app will look like it "won't open" while still running.
+      // Daima kaydedilen boyut/pozisyonda aç — maximize yapma.
+      // Kullanıcı isterse manuel maximize edebilir.
+      {
         Offset? target;
         if (x != null && y != null) {
           final virtualBounds = await _getDesktopVirtualScreenBounds();
@@ -432,7 +431,6 @@ void main() async {
               target = _centerPositionWithin(virtualBounds, Size(width, height));
             }
           } else {
-            // Fallback: still attempt the saved position.
             target = Offset(x, y);
           }
         }
@@ -762,6 +760,10 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
 
   Future<void> _checkDesktopUpdateOnStartup(AppSettings settings) async {
     if (!Platform.isWindows || _desktopUpdatePromptShown) return;
+    
+    // Test ortamında güncellemeleri kontrol etme
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted || _isShuttingDown || _desktopUpdatePromptShown) return;
 
@@ -1209,8 +1211,8 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     _saveTimer = Timer(const Duration(milliseconds: 500), () async {
       final prefs = await SharedPreferences.getInstance();
       final isMaximized = await windowManager.isMaximized();
-      await prefs.setBool('window_maximized', isMaximized);
-
+      // Maximize durumunu kaydetme — daima normal boyutta açılsın.
+      // Maximize iken boyut/pozisyon güncelleme (orijinal değerler korunsun).
       if (!isMaximized) {
         final size = await windowManager.getSize();
         final pos = await windowManager.getPosition();
@@ -1351,7 +1353,9 @@ class _MainScreenState extends State<MainScreen>
         final oldScale = theme.uiScale;
         if (value == oldScale) return;
 
-        // Resize & adjust minimum window size for the new scale.
+        // Ölçek değiştiğinde pencere boyutunu aynı oranda büyüt/küçült.
+        // Taban boyutu (ölçek=1.0'daki boyut) üzerinden hesapla —
+        // böylece yuvarlama hataları birikmez.
         if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
           final isMax = await windowManager.isMaximized();
           final newMinW = (_kDesktopMinWidth * value).roundToDouble();
@@ -1359,30 +1363,30 @@ class _MainScreenState extends State<MainScreen>
 
           if (!isMax) {
             final currentSize = await windowManager.getSize();
-            // Derive 100%-base size and compute new target.
+            // Mevcut boyuttan taban (ölçek=1.0) boyutunu hesapla.
             final baseW = currentSize.width / oldScale;
             final baseH = currentSize.height / oldScale;
             var newW = (baseW * value).roundToDouble();
             var newH = (baseH * value).roundToDouble();
-            // Clamp to screen bounds so window never goes off-screen.
-            final screen = WidgetsBinding.instance.platformDispatcher.views.first.physicalSize;
-            final dpr = WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
-            final screenW = screen.width / dpr;
-            final screenH = screen.height / dpr;
-            if (newW > screenW) newW = screenW;
-            if (newH > screenH - 48) newH = screenH - 48; // taskbar
-            // Ensure not smaller than minimum.
+
+            // Minimumun altına düşmesin.
             if (newW < newMinW) newW = newMinW;
             if (newH < newMinH) newH = newMinH;
 
-            await windowManager.setMinimumSize(Size(newMinW, newMinH));
+            // Minimum boyutu geçici olarak küçült (küçülme yönünde
+            // eski minimum engel olmasın), boyutu ayarla, sonra
+            // gerçek minimum'u koy.
+            await windowManager.setMinimumSize(const Size(400, 300));
+            await Future<void>.delayed(const Duration(milliseconds: 20));
             await windowManager.setSize(Size(newW, newH));
+            await Future<void>.delayed(const Duration(milliseconds: 60));
+            await windowManager.setMinimumSize(Size(newMinW, newMinH));
           } else {
             await windowManager.setMinimumSize(Size(newMinW, newMinH));
           }
         }
 
-        // Wait a frame for window resize to settle, then update scale.
+        // Pencere boyutu oturması için kısa bekle, sonra ölçeği uygula.
         await Future<void>.delayed(const Duration(milliseconds: 100));
         theme.setUiScale(value);
       },
@@ -1664,7 +1668,7 @@ class _MainScreenState extends State<MainScreen>
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                   child: Column(
                     children: [
                       Row(
@@ -1689,28 +1693,30 @@ class _MainScreenState extends State<MainScreen>
                           _buildUiScaleMenu(theme, colorScheme),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                       Expanded(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(16),
-                            border:
-                                Border.all(color: colorScheme.outlineVariant),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: TabBarView(
-                              controller: _tabController,
-                              physics: const NeverScrollableScrollPhysics(),
-                              children: const [
-                                TranslationTab(),
-                                EditorTab(),
+                        child: AnimatedBuilder(
+                          animation: _tabController!,
+                          builder: (context, _) {
+                            final controller = _tabController!;
+                            final index = controller.index;
+                            return IndexedStack(
+                              index: index,
+                              children: [
+                                TickerMode(
+                                  enabled: index == 0,
+                                  child: const TranslationTab(),
+                                ),
+                                TickerMode(
+                                  enabled: index == 1,
+                                  child: EditorTab(),
+                                ),
                               ],
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ),
+                      const SharedSystemLog(),
                     ],
                   ),
                 ),
@@ -1724,27 +1730,31 @@ class _MainScreenState extends State<MainScreen>
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 50,
-        title: Row(
-          children: [
-            Icon(Icons.translate, color: colorScheme.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  Translations.resolveAppName(
-                    theme.language,
-                    trans: theme.trans,
-                  ),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+        titleSpacing: 32,
+        title: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Row(
+            children: [
+              Icon(Icons.translate, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    Translations.resolveAppName(
+                      theme.language,
+                      trans: theme.trans,
+                    ),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         bottom: _buildDynamicTabBar(),
         actions: [
@@ -1757,11 +1767,31 @@ class _MainScreenState extends State<MainScreen>
           const SizedBox(width: 8),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          TranslationTab(),
-          EditorTab(),
+      body: Column(
+        children: [
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _tabController!,
+              builder: (context, _) {
+                final controller = _tabController!;
+                final index = controller.index;
+                return IndexedStack(
+                  index: index,
+                  children: [
+                    TickerMode(
+                      enabled: index == 0,
+                      child: TranslationTab(),
+                    ),
+                    TickerMode(
+                      enabled: index == 1,
+                      child: EditorTab(),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SharedSystemLog(),
         ],
       ),
     );

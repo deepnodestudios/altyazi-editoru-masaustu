@@ -975,27 +975,35 @@ class AppSettings extends ChangeNotifier {
         await _cloudStorageService.disconnectGDrive();
         addLog("log_gdrive_disconnected");
       } else {
-        await refreshCloudOAuthConfig();
-        final account =
-            await _cloudStorageService.ensureGDriveAccount(interactive: true);
-        if (account == null) {
-          if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-            final user = FirebaseAuth.instance.currentUser;
-            final isGoogleUser = user != null &&
-                !user.isAnonymous &&
-                user.providerData.any((p) => p.providerId == 'google.com');
-            if (isGoogleUser) {
-              addLog("log_gdrive_connected", user.email);
-            } else {
-              addLog("log_error",
-                  "Google Drive sign-in returned null (cancelled or failed)");
-            }
-          } else {
-            addLog("log_error",
-                "Google Drive sign-in returned null (cancelled or failed)");
+        final isDesktop =
+            Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+        if (isDesktop) {
+          // Desktop: PKCE akışı ile hem Firebase Auth hem GDrive erişimi
+          // sağlanır. Böylece kredi sistemi de aktif olur.
+          // manageLoadingState: false → loading state'i biz yönetiyoruz,
+          // hata olursa rethrow edilir ve catch bloğumuz yakalar.
+          await refreshCloudOAuthConfig();
+          await _cloudStorageService.signInWithGoogle(
+            onGoogleSignInSuccess: onGoogleSignInSuccess,
+            manageLoadingState: false,
+          );
+
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null && !user.isAnonymous) {
+            addLog("log_gdrive_connected", user.email);
           }
         } else {
-          addLog("log_gdrive_connected", account.email);
+          // Mobil: GoogleSignIn eklentisi ile bağlan.
+          await refreshCloudOAuthConfig();
+          final account =
+              await _cloudStorageService.ensureGDriveAccount(interactive: true);
+          if (account == null) {
+            addLog("log_error",
+                "Google Drive sign-in returned null (cancelled or failed)");
+          } else {
+            addLog("log_gdrive_connected", account.email);
+          }
         }
       }
     } catch (e) {

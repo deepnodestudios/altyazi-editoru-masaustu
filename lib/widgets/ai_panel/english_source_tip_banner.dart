@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'layout_constants.dart';
+
 class AiPanelEnglishSourceTipBanner extends StatelessWidget {
   final String text;
   final bool fillHeight;
@@ -72,7 +74,7 @@ class AiPanelEnglishSourceTipBanner extends StatelessWidget {
     );
 
     return Container(
-      padding: EdgeInsets.all(fillHeight ? 18 : 12),
+      padding: EdgeInsets.all(fillHeight ? kAiPanelSectionGap + 2 : kAiPanelSectionGap),
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(8),
@@ -86,7 +88,7 @@ class AiPanelEnglishSourceTipBanner extends StatelessWidget {
             color: colorScheme.primary,
             size: fillHeight ? 24 : 20,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: kAiPanelInlineGap),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {

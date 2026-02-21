@@ -5,6 +5,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../app_settings.dart';
@@ -22,7 +23,12 @@ class AiPanelSelectedFilesSection extends StatefulWidget {
 
   final VoidCallback onClearAll;
   final Future<void> Function(String path) onRemoveByPath;
-  final void Function(int oldIndex, int newIndex) onReorder;
+  final void Function(
+    int oldIndex,
+    int newIndex,
+    Set<String> selectedPaths,
+    String draggedPath,
+  ) onReorder;
   final void Function(int index) onTapPreview;
   final Future<void> Function(int index) onStartTranslation;
   final bool scrollableList;
@@ -52,6 +58,7 @@ class AiPanelSelectedFilesSection extends StatefulWidget {
 class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSection> {
   static const double _desktopTileHeight = 46;
   static const double _marqueeDragThreshold = 6;
+  static const Duration _kDeleteLabelDelay = Duration(milliseconds: 850);
 
   final FocusNode _focusNode = FocusNode(debugLabel: 'ai_selected_files_list');
   final GlobalKey _listStackKey = GlobalKey();
@@ -68,8 +75,44 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
   int? _suppressMarqueePointerId;
   int? _hoveredIndex;
   String? _lastSelectedPath;
+  bool _isReorderDragging = false;
+  DateTime? _lastReorderEndedAt;
+  Timer? _deleteHoverTimer;
+  int? _deleteLabelIndex;
+  String? _draggedPath;
+  Set<String> _dragGroupPaths = <String>{};
+  List<BatchFileItem> _dragGroupItems = const <BatchFileItem>[];
 
-  bool get _isDesktopLayout => widget.scrollableList;
+  bool get _isDesktopLayout =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  bool get _isTooltipCooldownActive {
+    final endedAt = _lastReorderEndedAt;
+    if (endedAt == null) return false;
+    return DateTime.now().difference(endedAt) < const Duration(milliseconds: 500);
+  }
+
+  bool get _shouldSuppressHoverUi =>
+      _isReorderDragging || _isTooltipCooldownActive || _marqueeArmed || _isMarqueeActive;
+
+    bool get _isMultiDragProxyActive =>
+      _isReorderDragging &&
+      _draggedPath != null &&
+      _dragGroupItems.length > 1 &&
+      _dragGroupPaths.contains(_draggedPath);
+
+  void _setStateSafely(VoidCallback fn) {
+    if (!mounted) return;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(fn);
+      });
+      return;
+    }
+    setState(fn);
+  }
 
   @override
   void didUpdateWidget(covariant AiPanelSelectedFilesSection oldWidget) {
@@ -86,15 +129,109 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
 
     final allowed = widget.selectedFiles.map((f) => f.path).toSet();
     _selectedPaths.removeWhere((p) => !allowed.contains(p));
+    _dragGroupPaths.removeWhere((p) => !allowed.contains(p));
+    _dragGroupItems = widget.selectedFiles
+        .where((item) => _dragGroupPaths.contains(item.path))
+        .toList(growable: false);
     if (_lastSelectedPath != null && !allowed.contains(_lastSelectedPath)) {
       _lastSelectedPath = null;
+    }
+    if (_draggedPath != null && !allowed.contains(_draggedPath)) {
+      _draggedPath = null;
+      _dragGroupPaths = <String>{};
+      _dragGroupItems = const <BatchFileItem>[];
     }
   }
 
   @override
   void dispose() {
+    _deleteHoverTimer?.cancel();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  Widget _buildDragProxyTile(BatchFileItem fileInfo, {required bool primary}) {
+    return Container(
+      height: _desktopTileHeight,
+      margin: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: primary
+            ? widget.colorScheme.primaryContainer
+            : widget.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: primary
+              ? widget.colorScheme.primary
+              : widget.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        children: [
+          _sourceIcon(fileInfo.source),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              fileInfo.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: widget.colorScheme.onSurface,
+                fontSize: 12,
+                fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.drag_handle_rounded,
+            size: 16,
+            color: widget.colorScheme.outline,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDragProxyGroup() {
+    final visibleCount = _dragGroupItems.length;
+    final children = <Widget>[];
+
+    for (var i = 0; i < visibleCount; i++) {
+      final item = _dragGroupItems[i];
+      final isPrimary = item.path == _draggedPath;
+      children.add(_buildDragProxyTile(item, primary: isPrimary));
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 560),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
+        decoration: BoxDecoration(
+          color: widget.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: widget.colorScheme.outlineVariant),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  double _movingGroupGapHeight() {
+    final count = _dragGroupItems.isEmpty ? 1 : _dragGroupItems.length;
+    final rowUnit = _isDesktopLayout ? (_desktopTileHeight + 2) : 58.0;
+    const containerVerticalPadding = 10.0; // top 6 + bottom 4
+    return (count * rowUnit) + containerVerticalPadding;
+  }
+
+  Widget _buildMovingGroupGapPlaceholder() {
+    return SizedBox(
+      height: _movingGroupGapHeight(),
+      child: const ColoredBox(color: Colors.transparent),
+    );
   }
 
   bool get _isCtrlPressed =>
@@ -129,7 +266,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
     _marqueeCurrentGlobal = currentGlobalPosition;
     final marquee = _marqueeRectGlobal();
     if (marquee == null) {
-      setState(() {});
+      _setStateSafely(() {});
       return;
     }
 
@@ -141,7 +278,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
       }
     }
 
-    setState(() {
+    _setStateSafely(() {
       if (!setEquals(next, _selectedPaths)) {
         _selectedPaths
           ..clear()
@@ -163,14 +300,14 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
     if (!_isMarqueeActive && !_marqueeArmed) {
       if (!clearSelection) return;
       if (_selectedPaths.isEmpty) return;
-      setState(() {
+      _setStateSafely(() {
         _selectedPaths.clear();
         _lastSelectedPath = null;
       });
       return;
     }
 
-    setState(() {
+    _setStateSafely(() {
       _marqueeArmed = false;
       _isMarqueeActive = false;
       _marqueeStartGlobal = null;
@@ -494,24 +631,26 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
   Widget _buildContent() {
     if (widget.selectedFiles.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.playlist_add_check_circle_rounded,
-              size: 48,
-              color: widget.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              widget.settings.trans['empty_translation_list_hint'] ?? '',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: widget.colorScheme.onSurfaceVariant,
-                fontSize: 16,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.playlist_add_check_circle_rounded,
+                size: 48,
+                color: widget.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                widget.settings.trans['empty_translation_list_hint'] ?? '',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: widget.colorScheme.onSurfaceVariant,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -573,6 +712,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
       onPointerDown: (event) {
         _focusNode.requestFocus();
         if (!_isDesktopLayout) return;
+        if (_isReorderDragging) return;
         if (event.buttons != kPrimaryMouseButton) return;
 
         if (_suppressMarqueePointerId == event.pointer) {
@@ -584,6 +724,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         _startMarquee(event.position);
       },
       onPointerMove: (event) {
+        if (_isReorderDragging) return;
         if (_suppressMarqueePointerId == event.pointer) return;
         if (!_marqueeArmed || _marqueeStartGlobal == null) return;
         if (!_isMarqueeActive) {
@@ -591,7 +732,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
           if (distance < _marqueeDragThreshold) {
             return;
           }
-          setState(() {
+          _setStateSafely(() {
             _isMarqueeActive = true;
             if (!_isCtrlPressed) {
               _selectedPaths.clear();
@@ -601,6 +742,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         _updateSelectionFromMarquee(event.position);
       },
       onPointerUp: (event) {
+        if (_isReorderDragging) return;
         if (_suppressMarqueePointerId == event.pointer) {
           _suppressMarqueePointerId = null;
           return;
@@ -622,6 +764,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         if (_suppressMarqueePointerId == event.pointer) {
           _suppressMarqueePointerId = null;
         }
+        if (_isReorderDragging) return;
         _endMarquee();
       },
       child: Stack(
@@ -634,26 +777,142 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
           : const NeverScrollableScrollPhysics(),
       buildDefaultDragHandles: false,
       itemCount: widget.selectedFiles.length,
-      onReorder: widget.onReorder,
+      proxyDecorator: (child, index, animation) {
+        final pathAtIndex =
+            (index >= 0 && index < widget.selectedFiles.length)
+                ? widget.selectedFiles[index].path
+                : null;
+        final useGroupProxy =
+            _isMultiDragProxyActive &&
+            pathAtIndex != null &&
+            pathAtIndex == _draggedPath;
+
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            final elevation = Tween<double>(begin: 2, end: 10).transform(animation.value);
+            return Material(
+              color: Colors.transparent,
+              elevation: elevation,
+              shadowColor: widget.colorScheme.shadow.withValues(alpha: 0.28),
+              child: useGroupProxy ? _buildDragProxyGroup() : child,
+            );
+          },
+        );
+      },
+      onReorderStart: (index) {
+        final draggedPath =
+            (index >= 0 && index < widget.selectedFiles.length)
+                ? widget.selectedFiles[index].path
+                : null;
+        final selectedInList = widget.selectedFiles
+            .map((f) => f.path)
+            .where(_selectedPaths.contains)
+            .toSet();
+
+        final shouldDragAsGroup =
+            draggedPath != null &&
+            selectedInList.contains(draggedPath) &&
+            selectedInList.length > 1;
+        final dragPaths = shouldDragAsGroup
+            ? selectedInList
+            : (draggedPath == null ? <String>{} : <String>{draggedPath});
+        final dragItems = widget.selectedFiles
+            .where((item) => dragPaths.contains(item.path))
+            .toList(growable: false);
+
+        if (mounted) {
+          setState(() {
+            _isReorderDragging = true;
+            _lastReorderEndedAt = null;
+            _deleteLabelIndex = null;
+            _draggedPath = draggedPath;
+            _dragGroupPaths = dragPaths;
+            _dragGroupItems = dragItems;
+          });
+        } else {
+          _isReorderDragging = true;
+          _lastReorderEndedAt = null;
+          _deleteLabelIndex = null;
+          _draggedPath = draggedPath;
+          _dragGroupPaths = dragPaths;
+          _dragGroupItems = dragItems;
+        }
+        _deleteHoverTimer?.cancel();
+        _endMarquee();
+      },
+      onReorderEnd: (_) {
+        if (mounted) {
+          setState(() {
+            _isReorderDragging = false;
+            _lastReorderEndedAt = DateTime.now();
+            _hoveredIndex = null;
+            _draggedPath = null;
+            _dragGroupPaths = <String>{};
+            _dragGroupItems = const <BatchFileItem>[];
+          });
+        } else {
+          _isReorderDragging = false;
+          _lastReorderEndedAt = DateTime.now();
+          _hoveredIndex = null;
+          _draggedPath = null;
+          _dragGroupPaths = <String>{};
+          _dragGroupItems = const <BatchFileItem>[];
+        }
+      },
+      onReorder: (oldIndex, newIndex) {
+        if (oldIndex < 0 || oldIndex >= widget.selectedFiles.length) return;
+        final draggedPath = widget.selectedFiles[oldIndex].path;
+        widget.onReorder(
+          oldIndex,
+          newIndex,
+          {..._selectedPaths},
+          draggedPath,
+        );
+      },
       itemBuilder: (context, index) {
         final isActive = index == widget.activeIndex;
         final fileInfo = widget.selectedFiles[index];
         final filePath = fileInfo.path;
         final isSelected = _selectedPaths.contains(filePath);
 
+        final tile = _buildTile(
+          index: index,
+          isActive: isActive,
+          isSelected: isSelected,
+          fileInfo: fileInfo,
+          tileKey: _keyForPath(filePath),
+        );
+
+        final hideAsPartOfDragGroup =
+            _isMultiDragProxyActive &&
+            _dragGroupPaths.contains(filePath) &&
+            filePath != _draggedPath;
+        final isDraggedGroupAnchor =
+            _isMultiDragProxyActive && filePath == _draggedPath;
+        final itemTile = AnimatedSize(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: hideAsPartOfDragGroup
+              ? const SizedBox.shrink()
+              : (isDraggedGroupAnchor ? _buildMovingGroupGapPlaceholder() : tile),
+        );
+
+        if (_isDesktopLayout) {
+          return KeyedSubtree(
+            key: ObjectKey(fileInfo),
+            child: itemTile,
+          );
+        }
+
         return Dismissible(
           key: ObjectKey(fileInfo),
-          direction: (isActive || _isDesktopLayout) ? DismissDirection.none : DismissDirection.horizontal,
+          direction: isActive ? DismissDirection.none : DismissDirection.horizontal,
           background: _buildDismissBackground(left: true),
           secondaryBackground: _buildDismissBackground(left: false),
           onDismissed: (_) => unawaited(widget.onRemoveByPath(filePath)),
-          child: _buildTile(
-            index: index,
-            isActive: isActive,
-            isSelected: isSelected,
-            fileInfo: fileInfo,
-            tileKey: _keyForPath(filePath),
-          ),
+          child: itemTile,
         );
       },
     ),
@@ -754,10 +1013,12 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
 
     return MouseRegion(
       onEnter: (_) {
-        if (_isDesktopLayout) setState(() => _hoveredIndex = index);
+        if (!_isDesktopLayout || _shouldSuppressHoverUi) return;
+        _setStateSafely(() => _hoveredIndex = index);
       },
       onExit: (_) {
-        if (_isDesktopLayout) setState(() => _hoveredIndex = null);
+        if (!_isDesktopLayout || _shouldSuppressHoverUi) return;
+        _setStateSafely(() => _hoveredIndex = null);
       },
       child: Container(
         key: tileKey,
@@ -810,31 +1071,28 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
           vertical: _isDesktopLayout ? 0 : 4,
         ),
         leading: null,
-        title: Tooltip(
-          message: fileInfo.name,
-          waitDuration: const Duration(milliseconds: 500),
-          child: Row(
-            children: [
-              Tooltip(
-                message: _sourceLabel(fileInfo.source),
-                waitDuration: const Duration(milliseconds: 500),
-                child: _sourceIcon(fileInfo.source),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  fileInfo.name,
-                  style: TextStyle(
-                    color: widget.colorScheme.onSurface,
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                    fontSize: _isDesktopLayout ? 12 : 14,
+        title: Row(
+          children: [
+            (_isDesktopLayout && _shouldSuppressHoverUi)
+                ? _sourceIcon(fileInfo.source)
+                : Tooltip(
+                    message: _sourceLabel(fileInfo.source),
+                    child: _sourceIcon(fileInfo.source),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                fileInfo.name,
+                style: TextStyle(
+                  color: widget.colorScheme.onSurface,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                  fontSize: _isDesktopLayout ? 12 : 14,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         onTap: () {
           _focusNode.requestFocus();
@@ -847,7 +1105,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
             if (anchorIndex != -1) {
               final start = anchorIndex < index ? anchorIndex : index;
               final end = anchorIndex > index ? anchorIndex : index;
-              setState(() {
+              _setStateSafely(() {
                 if (!_isCtrlPressed) {
                   _selectedPaths.clear();
                 }
@@ -861,7 +1119,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
             }
           }
           if (_isDesktopLayout && _isCtrlPressed) {
-            setState(() {
+            _setStateSafely(() {
               if (isSelected) {
                 _selectedPaths.remove(fileInfo.path);
               } else {
@@ -871,7 +1129,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
             });
             return;
           }
-          setState(() {
+          _setStateSafely(() {
             _selectedPaths
               ..clear()
               ..add(fileInfo.path);
@@ -881,7 +1139,7 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         },
         onLongPress: () {
           if (!_isDesktopLayout) return;
-          setState(() {
+          _setStateSafely(() {
             _selectedPaths.add(fileInfo.path);
             _lastSelectedPath = fileInfo.path;
           });
@@ -890,16 +1148,56 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_isDesktopLayout && !isActive) ...[
-              IconButton(
-                icon: Icon(
-                  Icons.delete,
-                  size: 20,
-                  color: Colors.red,
+              if (_deleteLabelIndex == index && !_shouldSuppressHoverUi)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: widget.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: widget.colorScheme.outlineVariant),
+                    ),
+                    child: Text(
+                      widget.settings.trans['delete'] ?? 'Sil',
+                      style: TextStyle(
+                        color: widget.colorScheme.onSurface,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
-                tooltip: widget.settings.trans['delete'] ?? 'Sil',
-                onPressed: () => unawaited(_confirmAndRemove(fileInfo.path)),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+              MouseRegion(
+                onEnter: (_) {
+                  if (_shouldSuppressHoverUi) return;
+                  _deleteHoverTimer?.cancel();
+                  _deleteHoverTimer = Timer(_kDeleteLabelDelay, () {
+                    if (!mounted || _shouldSuppressHoverUi) return;
+                    _setStateSafely(() {
+                      _deleteLabelIndex = index;
+                    });
+                  });
+                },
+                onExit: (_) {
+                  _deleteHoverTimer?.cancel();
+                  if (_deleteLabelIndex == index) {
+                    _setStateSafely(() {
+                      _deleteLabelIndex = null;
+                    });
+                  }
+                },
+                child: IconButton(
+                  icon: Icon(
+                    Icons.delete,
+                    size: 20,
+                    color: Colors.red,
+                  ),
+                  tooltip: null,
+                  onPressed: () => unawaited(_confirmAndRemove(fileInfo.path)),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                ),
               ),
               const SizedBox(width: 4),
             ],

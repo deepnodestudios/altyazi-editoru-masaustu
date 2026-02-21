@@ -49,7 +49,8 @@ class AITranslationPanel extends StatefulWidget {
 }
 
 class _AITranslationPanelState extends State<AITranslationPanel> {
-  bool _isLogExpanded = false;
+  bool? _lastTickerModeEnabled;
+
   bool _isDropZoneActive = false;
   late ConfettiController _confettiController;
   StreamSubscription? _purchaseSubscription;
@@ -71,6 +72,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   final GlobalKey _desktopPrimaryActionsKey = GlobalKey();
   final GlobalKey _desktopActionButtonsBlockKey = GlobalKey();
   final GlobalKey _desktopBatchBannerKey = GlobalKey();
+  final GlobalKey _desktopFilePickerKey = GlobalKey();
   bool _desktopTopBandSyncQueued = false;
   bool _desktopCreditBandSyncQueued = false;
   bool _desktopTopControlsSyncQueued = false;
@@ -82,8 +84,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   double _desktopCreditCardBandHeight = 120.0;
   double _desktopTopControlsHeight = 280.0;
   double _desktopPrimaryActionsTopOffset = 120.0;
-  double _desktopActionButtonsBlockHeight = 120.0;
   double _desktopBatchBannerTopOffset = 90.0;
+  double _desktopFilePickerBottomOffset = 240.0;
   String? _desktopPreviewFilePath;
   String? _desktopPreviewFileName;
 
@@ -91,6 +93,57 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
   List<Map<String, String>>? _cachedLanguageOptions;
   String? _cachedLocale;
+
+  void _resetDesktopLayoutSyncMeasurements() {
+    _desktopTopBandSyncQueued = false;
+    _desktopCreditBandSyncQueued = false;
+    _desktopTopControlsSyncQueued = false;
+    _desktopPrimaryActionsSyncQueued = false;
+    _desktopActionButtonsBlockSyncQueued = false;
+    _desktopBatchBannerSyncQueued = false;
+
+    // Reset to safe defaults (avoid a visible "0px" broken layout) and then
+    // re-measure on subsequent frames.
+    _desktopTopBandHeight = 136.0;
+    _desktopCreditCardTopOffset = 8.0;
+    _desktopCreditCardBandHeight = 120.0;
+    _desktopTopControlsHeight = 280.0;
+    _desktopPrimaryActionsTopOffset = 120.0;
+    _desktopBatchBannerTopOffset = 90.0;
+    _desktopFilePickerBottomOffset = 240.0;
+  }
+
+  void _onBecameActiveTab() {
+    if (!mounted) return;
+
+    setState(_resetDesktopLayoutSyncMeasurements);
+
+    // Trigger a fresh sync once the first active frame is laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scheduleDesktopTopBandHeightSync();
+      _scheduleDesktopCreditBandSync();
+      _scheduleDesktopTopControlsHeightSync();
+      _scheduleDesktopPrimaryActionsTopSync();
+      _scheduleDesktopActionButtonsBlockHeightSync();
+      _scheduleDesktopBatchBannerTopSync();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final enabled = TickerMode.valuesOf(context).enabled;
+    final previous = _lastTickerModeEnabled;
+    _lastTickerModeEnabled = enabled;
+
+    // TabBarView/PageView toggles TickerMode; use this to detect when the
+    // translation tab becomes visible again after being offstage.
+    if (previous == false && enabled == true) {
+      _onBecameActiveTab();
+    }
+  }
 
   Future<void> _openHistoryPage() async {
     if (!mounted) return;
@@ -150,7 +203,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     return topLeft & renderObject.size;
   }
 
-  void _scheduleDesktopTopBandHeightSync() {
+  void _scheduleDesktopTopBandHeightSync({int attempt = 0}) {
     if (_desktopTopBandSyncQueued) return;
     _desktopTopBandSyncQueued = true;
 
@@ -159,7 +212,14 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       if (!mounted) return;
 
       final topBandRect = _resolveGlobalRect(_desktopLeftTopBandContentKey);
-      if (topBandRect == null) return;
+      if (topBandRect == null) {
+        // When returning to this tab, the subtree can be present but not laid
+        // out yet for 1-2 frames. Retry a few times to avoid stale offsets.
+        if (attempt < 8) {
+          _scheduleDesktopTopBandHeightSync(attempt: attempt + 1);
+        }
+        return;
+      }
 
       final targetHeight = topBandRect.height.clamp(96.0, 260.0);
       if ((targetHeight - _desktopTopBandHeight).abs() < 0.5) return;
@@ -169,7 +229,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     });
   }
 
-  void _scheduleDesktopCreditBandSync() {
+  void _scheduleDesktopCreditBandSync({int attempt = 0}) {
     if (_desktopCreditBandSyncQueued) return;
     _desktopCreditBandSyncQueued = true;
 
@@ -177,16 +237,28 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       _desktopCreditBandSyncQueued = false;
       if (!mounted) return;
 
-      final controlsRect = _resolveGlobalRect(_desktopLeftTopControlsKey);
-      final historyRect = _resolveGlobalRect(_desktopHistoryButtonKey);
-      final selectorRect = _resolveGlobalRect(_languageSelectorTapKey);
-      if (controlsRect == null || historyRect == null || selectorRect == null) {
+      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
+      final historyCtx = _desktopHistoryButtonKey.currentContext;
+      final selectorCtx = _languageSelectorTapKey.currentContext;
+      if (controlsCtx == null || historyCtx == null || selectorCtx == null) {
+        if (attempt < 8) {
+          _scheduleDesktopCreditBandSync(attempt: attempt + 1);
+        }
         return;
       }
-
-      final targetTop = (historyRect.top - controlsRect.top).clamp(0.0, 120.0);
-      final targetBottom =
-          (selectorRect.bottom - controlsRect.top).clamp(80.0, 260.0);
+      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
+      final historyBox = historyCtx.findRenderObject()! as RenderBox;
+      final selectorBox = selectorCtx.findRenderObject()! as RenderBox;
+      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
+      final targetTop = controlsBox
+          .globalToLocal(historyBox.localToGlobal(Offset.zero))
+          .dy
+          .clamp(0.0, 120.0);
+      final targetBottom = controlsBox
+          .globalToLocal(
+              selectorBox.localToGlobal(Offset(0, selectorBox.size.height)))
+          .dy
+          .clamp(80.0, 260.0);
       final targetHeight = (targetBottom - targetTop).clamp(88.0, 220.0);
 
       final topChanged =
@@ -202,7 +274,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     });
   }
 
-  void _scheduleDesktopTopControlsHeightSync() {
+  void _scheduleDesktopTopControlsHeightSync({int attempt = 0}) {
     if (_desktopTopControlsSyncQueued) return;
     _desktopTopControlsSyncQueued = true;
 
@@ -211,7 +283,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       if (!mounted) return;
 
       final controlsRect = _resolveGlobalRect(_desktopLeftTopControlsKey);
-      if (controlsRect == null) return;
+      if (controlsRect == null) {
+        if (attempt < 8) {
+          _scheduleDesktopTopControlsHeightSync(attempt: attempt + 1);
+        }
+        return;
+      }
 
       final targetHeight = controlsRect.height.clamp(180.0, 520.0);
       if ((targetHeight - _desktopTopControlsHeight).abs() < 0.5) return;
@@ -221,7 +298,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     });
   }
 
-  void _scheduleDesktopPrimaryActionsTopSync() {
+  void _scheduleDesktopPrimaryActionsTopSync({int attempt = 0}) {
     if (_desktopPrimaryActionsSyncQueued) return;
     _desktopPrimaryActionsSyncQueued = true;
 
@@ -229,12 +306,21 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       _desktopPrimaryActionsSyncQueued = false;
       if (!mounted) return;
 
-      final controlsRect = _resolveGlobalRect(_desktopLeftTopControlsKey);
-      final primaryActionsRect = _resolveGlobalRect(_desktopPrimaryActionsKey);
-      if (controlsRect == null || primaryActionsRect == null) return;
-
-      final targetOffset =
-          (primaryActionsRect.top - controlsRect.top).clamp(120.0, 420.0);
+      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
+      final primaryCtx = _desktopPrimaryActionsKey.currentContext;
+      if (controlsCtx == null || primaryCtx == null) {
+        if (attempt < 8) {
+          _scheduleDesktopPrimaryActionsTopSync(attempt: attempt + 1);
+        }
+        return;
+      }
+      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
+      final primaryBox = primaryCtx.findRenderObject()! as RenderBox;
+      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
+      final targetOffset = controlsBox
+          .globalToLocal(primaryBox.localToGlobal(Offset.zero))
+          .dy
+          .clamp(8.0, 800.0);
       if ((targetOffset - _desktopPrimaryActionsTopOffset).abs() < 0.5) return;
       setState(() {
         _desktopPrimaryActionsTopOffset = targetOffset;
@@ -242,7 +328,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     });
   }
 
-  void _scheduleDesktopActionButtonsBlockHeightSync() {
+  void _scheduleDesktopActionButtonsBlockHeightSync({int attempt = 0}) {
     if (_desktopActionButtonsBlockSyncQueued) return;
     _desktopActionButtonsBlockSyncQueued = true;
 
@@ -250,20 +336,37 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       _desktopActionButtonsBlockSyncQueued = false;
       if (!mounted) return;
 
-      final blockRect = _resolveGlobalRect(_desktopActionButtonsBlockKey);
-      if (blockRect == null) return;
-
-      final targetHeight = blockRect.height.clamp(96.0, 260.0);
-      if ((targetHeight - _desktopActionButtonsBlockHeight).abs() < 0.5) {
+      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
+      final filePickerCtx = _desktopFilePickerKey.currentContext;
+      if (controlsCtx == null || filePickerCtx == null) {
+        if (attempt < 8) {
+          _scheduleDesktopActionButtonsBlockHeightSync(attempt: attempt + 1);
+        }
+        return;
+      }
+      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
+      final filePickerBox = filePickerCtx.findRenderObject()! as RenderBox;
+      // "Dosya Ekle" butonunun alt kenarını (trailing gap háriç) sol panel
+      // kontrolleri başlangıcına göre sanal koordinatta ölç.
+      // globalToLocal FittedBox ölçeğini iptal eder → ölçekten bağımsız.
+      final filePickerLocalTop = controlsBox
+          .globalToLocal(filePickerBox.localToGlobal(Offset.zero))
+          .dy;
+      // filePickerSection içindeki trailing SizedBox(16) hariç buton alt kenarı:
+      // renderObject.size.height = toplam yükseklik (buton + trailing gap).
+      // "Dosya Ekle" face bottom = filePickerLocalTop + height - kAiPanelSectionGap
+      final filePickerFaceBottom =
+          filePickerLocalTop + filePickerBox.size.height - kAiPanelSectionGap;
+      if ((filePickerFaceBottom - _desktopFilePickerBottomOffset).abs() < 0.5) {
         return;
       }
       setState(() {
-        _desktopActionButtonsBlockHeight = targetHeight;
+        _desktopFilePickerBottomOffset = filePickerFaceBottom;
       });
     });
   }
 
-  void _scheduleDesktopBatchBannerTopSync() {
+  void _scheduleDesktopBatchBannerTopSync({int attempt = 0}) {
     if (_desktopBatchBannerSyncQueued) return;
     _desktopBatchBannerSyncQueued = true;
 
@@ -271,12 +374,21 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       _desktopBatchBannerSyncQueued = false;
       if (!mounted) return;
 
-      final controlsRect = _resolveGlobalRect(_desktopLeftTopControlsKey);
-      final bannerRect = _resolveGlobalRect(_desktopBatchBannerKey);
-      if (controlsRect == null || bannerRect == null) return;
-
-      final targetOffset =
-          (bannerRect.top - controlsRect.top).clamp(90.0, 420.0);
+      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
+      final bannerCtx = _desktopBatchBannerKey.currentContext;
+      if (controlsCtx == null || bannerCtx == null) {
+        if (attempt < 8) {
+          _scheduleDesktopBatchBannerTopSync(attempt: attempt + 1);
+        }
+        return;
+      }
+      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
+      final bannerBox = bannerCtx.findRenderObject()! as RenderBox;
+      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
+      final targetOffset = controlsBox
+          .globalToLocal(bannerBox.localToGlobal(Offset.zero))
+          .dy
+          .clamp(8.0, 800.0);
       if ((targetOffset - _desktopBatchBannerTopOffset).abs() < 0.5) return;
       setState(() {
         _desktopBatchBannerTopOffset = targetOffset;
@@ -2055,12 +2167,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       controller: controller,
       selectedFilesNotEmpty: _selectedFiles.isNotEmpty,
       estimatedTimeText: _estimatedTime,
-      isLogExpanded: _isLogExpanded,
-      onToggleLogExpanded: () {
-        setState(() {
-          _isLogExpanded = !_isLogExpanded;
-        });
-      },
     );
   }
 
@@ -2309,7 +2415,79 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       onRemoveByPath: _removeFileByPath,
       scrollableList: scrollableList,
       onGetOriginalPath: (p) => _originalPaths[p] ?? p,
-      onReorder: (oldIndex, newIndex) {
+      onReorder: (oldIndex, newIndex, selectedPaths, draggedPath) {
+        if (oldIndex < 0 || oldIndex >= _selectedFiles.length) return;
+
+        final selectedIndices = <int>[];
+        for (var i = 0; i < _selectedFiles.length; i++) {
+          if (selectedPaths.contains(_selectedFiles[i].path)) {
+            selectedIndices.add(i);
+          }
+        }
+
+        final draggedIsSelected = selectedPaths.contains(draggedPath);
+        final canMultiReorder = draggedIsSelected && selectedIndices.length > 1;
+
+        if (canMultiReorder) {
+          selectedIndices.sort();
+          final normalizedNew = newIndex > oldIndex ? newIndex - 1 : newIndex;
+          final rawDelta = normalizedNew - oldIndex;
+
+          final minIndex = selectedIndices.first;
+          final maxIndex = selectedIndices.last;
+          final minDelta = -minIndex;
+          final maxDelta = (_selectedFiles.length - 1) - maxIndex;
+          final delta = rawDelta.clamp(minDelta, maxDelta);
+          if (delta == 0) return;
+
+          if (activeIndex != -1) {
+            if (selectedIndices.contains(activeIndex)) return;
+
+            for (final idx in selectedIndices) {
+              final shifted = idx + delta;
+              final crossesActive =
+                  (idx < activeIndex && shifted >= activeIndex) ||
+                  (idx > activeIndex && shifted <= activeIndex);
+              if (crossesActive) return;
+            }
+          }
+
+          final selectedSet = selectedIndices.toSet();
+          final original = List<BatchFileItem>.from(_selectedFiles);
+          final selectedItems = <BatchFileItem>[];
+          final unselectedItems = <BatchFileItem>[];
+
+          for (var i = 0; i < original.length; i++) {
+            if (selectedSet.contains(i)) {
+              selectedItems.add(original[i]);
+            } else {
+              unselectedItems.add(original[i]);
+            }
+          }
+
+          final shiftedSelectedIndices = selectedIndices
+              .map((idx) => idx + delta)
+              .toSet();
+
+          final reordered = <BatchFileItem>[];
+          var selectedCursor = 0;
+          var unselectedCursor = 0;
+          for (var i = 0; i < original.length; i++) {
+            if (shiftedSelectedIndices.contains(i)) {
+              reordered.add(selectedItems[selectedCursor++]);
+            } else {
+              reordered.add(unselectedItems[unselectedCursor++]);
+            }
+          }
+
+          setState(() {
+            _selectedFiles
+              ..clear()
+              ..addAll(reordered);
+          });
+          return;
+        }
+
         if (activeIndex != -1) {
           if (oldIndex == activeIndex) return;
           if (activeIndex == 0 && newIndex <= 0) {
@@ -2373,24 +2551,26 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.playlist_add_check_circle_rounded,
-              size: 48,
-              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              settings.trans['empty_translation_list_hint'] ?? '',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant,
-                fontSize: 16,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.playlist_add_check_circle_rounded,
+                size: 48,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                settings.trans['empty_translation_list_hint'] ?? '',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2420,11 +2600,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   }
 
   Widget _buildBottomSpacer(BuildContext context) {
-    return SizedBox(
-      height: _isLogExpanded
-          ? MediaQuery.of(context).size.height * 0.33 + 150
-          : 240,
-    );
+    return const SizedBox.shrink();
   }
 
   String _normalizeForMatch(String p) {
@@ -2744,15 +2920,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
                         controller.status == TranslationStatus.paused) &&
                       controller.currentFileName != null;
                     final isCompactDesktopHeight = constraints.maxHeight < 420;
-                    final bottomInsetMin = isCompactDesktopHeight ? 44.0 : 88.0;
-                    final bottomInsetMax = isCompactDesktopHeight ? 96.0 : 140.0;
+                    // Footer artık sadece ilerleme çubuğu (log main.dart'ta ortak).
+                    // Bu yüzden split layout'ta alttan sadece footer'ın üstüne binmemek
+                    // için küçük, sabit bir inset ayırıyoruz.
                     final desktopBottomInset =
-                      ((constraints.maxHeight * 0.13).clamp(
-                            bottomInsetMin,
-                            isCompactDesktopHeight ? 88.0 : 112.0,
-                          ) +
-                          (hasFooterFileNameRow ? 28.0 : 0.0))
-                        .clamp(bottomInsetMin, bottomInsetMax);
+                        (isCompactDesktopHeight ? 44.0 : 44.0) +
+                        (hasFooterFileNameRow ? 28.0 : 0.0);
 
                     _scheduleDesktopTopBandHeightSync();
                     _scheduleDesktopCreditBandSync();
@@ -2776,13 +2949,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
                       _desktopPrimaryActionsTopOffset > 0
                         ? _desktopPrimaryActionsTopOffset
                         : 120.0;
-                    final measuredButtonsBlockHeight =
-                      _desktopActionButtonsBlockHeight > 0
-                        ? _desktopActionButtonsBlockHeight
-                        : 120.0;
-                    final infoBoxHeight =
-                      (measuredButtonsBlockHeight - kAiPanelSectionGap)
-                        .clamp(88.0, 220.0);
+                    // infoBoxHeight = "Çeviriyi Başlat" üst kenarından
+                    // "Dosya Ekle" alt kenarına kadar tam mesafe.
+                    // Her ikisi de globalToLocal ile ölçüldüğünden
+                    // hiçbir ölçekte hiza bozulmaz.
+                    final infoBoxHeight = (_desktopFilePickerBottomOffset - infoBoxTopOffset)
+                        .clamp(88.0, 400.0);
                     final rightAlignedTopHeight = showInfoBanner
                       ? (_desktopTopControlsHeight > 0
                         ? _desktopTopControlsHeight
@@ -2818,9 +2990,9 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
                             width: leftPaneWidth,
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
-                                16,
-                                16,
-                                16,
+                                0,
+                                0,
+                                8,
                                 desktopBottomInset,
                               ),
                               child: Column(
@@ -2880,10 +3052,13 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
                                                   settings: settings,
                                                   controller: controller,
                                                 ),
-                                                _buildFilePickerSection(
-                                                  context,
-                                                  settings: settings,
-                                                  controller: controller,
+                                                KeyedSubtree(
+                                                  key: _desktopFilePickerKey,
+                                                  child: _buildFilePickerSection(
+                                                    context,
+                                                    settings: settings,
+                                                    controller: controller,
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -2905,17 +3080,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
                               ),
                             ),
                           ),
-                          VerticalDivider(
-                            width: 1,
-                            thickness: 1,
-                            color: colorScheme.outlineVariant,
-                          ),
                           Expanded(
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
-                                16,
-                                16,
-                                16,
+                                8,
+                                0,
+                                0,
                                 desktopBottomInset,
                               ),
                               child: Column(

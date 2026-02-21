@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_settings.dart';
 import '../../controllers/translation_controller.dart';
+import 'layout_constants.dart';
 
 class _WordSafeTwoLineText extends StatelessWidget {
   final String text;
@@ -163,11 +164,15 @@ class AiPanelCreditCardSection extends StatelessWidget {
                 size: 24,
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: kAiPanelInlineGap),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
@@ -210,10 +215,11 @@ class AiPanelCreditCardSection extends StatelessWidget {
                   ),
                 ],
               ),
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: kAiPanelInlineGap),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 170),
+              constraints: const BoxConstraints(minWidth: 128, maxWidth: 170),
               child: ElevatedButton(
                 onPressed: onAddCredits,
                 style: ElevatedButton.styleFrom(
