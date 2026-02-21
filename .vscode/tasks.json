@@ -1,0 +1,147 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Get debug SHA1",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"& 'C:\\Program Files\\Java\\jdk-21.0.4.0.7-1\\bin\\keytool.exe' -list -v -keystore \"$env:USERPROFILE\\.android\\debug.keystore\" -alias androiddebugkey -storepass android -keypass android | Select-String -Pattern 'SHA1'"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "flutter analyze",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"analyze"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "flutter build appbundle (quiet)",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"build",
+				"appbundle",
+				"--quiet"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Generate App Icons",
+			"type": "shell",
+			"command": "dart",
+			"args": [
+				"run",
+				"flutter_launcher_icons"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Generate Splash Screen",
+			"type": "shell",
+			"command": "dart",
+			"args": [
+				"run",
+				"flutter_native_splash:create"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build Windows Installer",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"tool/build_windows_installer.ps1"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build Windows Release (stable)",
+			"type": "shell",
+			"command": "tool\\build_windows_release_direct.cmd",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Windows Release EXE",
+			"type": "shell",
+			"command": "tool\\run_windows_release_exe.cmd",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build + Run Windows Release EXE",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/d",
+				"/c",
+				"echo Build and run completed."
+			],
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Build Windows Release (stable)",
+				"Run Windows Release EXE"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run Windows (Manual NMake Stable)",
+			"type": "shell",
+			"command": "tool\\run_windows_manual_nmake.cmd",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Windows Debug (Manual NMake)",
+			"type": "shell",
+			"command": "tool\\flutter_run_windows_prebuilt_debug.cmd",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Windows Debug (Manual NMake Rebuild)",
+			"type": "shell",
+			"command": "tool\\run_windows_manual_nmake_debug.cmd",
+			"args": [],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Windows Preview (No Build)",
+			"type": "shell",
+			"command": "tool\\run_windows_preview.cmd",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Windows (VS DevCmd)",
+			"type": "shell",
+			"command": "tool\\run_windows_with_vsdevcmd.cmd",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

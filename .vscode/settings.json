@@ -1,0 +1,27 @@
+{
+  // Force VS Code Dart/Flutter extensions to use the Windows Flutter SDK.
+  // This avoids URI/path issues like "missing drive letter" when global/user
+  // settings point to WSL/MSYS paths.
+  "dart.flutterSdkPath": "C:/Src/flutter",
+  "dart.sdkPath": "C:/Src/flutter/bin/cache/dart-sdk",
+
+  // Keep tooling consistent.
+  "dart.analysisServerLogFile": "${workspaceFolder}/.dart_tool/analysis_server.log",
+
+  // Optional: reduce noise by excluding generated folders from analysis.
+  "dart.analysisExcludedFolders": [
+    "build",
+    ".dart_tool",
+    ".idea",
+    ".flutter-plugins",
+    ".flutter-plugins-dependencies"
+  ],
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "java.enabled": false,
+  "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.import.exclusions": [
+    "**/android/**",
+    "**/build/**"
+  ]
+}

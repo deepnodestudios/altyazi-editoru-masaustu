@@ -1,0 +1,15 @@
+# Bu dosya, çözümleyici (analyzer) tarafından statik analizi yapılandırmak için kullanılır.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+  # Belirli lint kurallarından kaynaklanan uyarıları görmezden gelmek için
+  errors:
+    included_file_warning: ignore
+
+linter:
+  rules:
+    # Buraya ek özel kurallar ekleyebilirsin
+    # unrecognized lint kuralları sistem tarafından otomatik pas geçilecektir

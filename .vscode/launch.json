@@ -1,0 +1,99 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        
+
+        {
+            "name": "altyazi_editoru",
+            "request": "launch",
+            "type": "node-terminal",
+            "command": "cmd /d /c tool\\run_windows_with_vsdevcmd.cmd --disable-dds"
+        },
+        {
+            "name": "altyazi_editoru (flutter run - native build)",
+            "request": "launch",
+            "type": "node-terminal",
+            "command": "cmd /d /c tool\\run_windows_with_vsdevcmd.cmd"
+        },
+        {
+            "name": "altyazi_editoru (flutter run - NMake)",
+            "request": "launch",
+            "type": "node-terminal",
+            "command": "cmd /d /c tool\\flutter_run_windows_nmake.cmd"
+        },
+        {
+            "name": "altyazi_editoru (Manual Debug)",
+            "request": "launch",
+            "type": "node-terminal",
+            "command": "cmd /d /c tool\\flutter_run_windows_prebuilt_debug.cmd"
+        },
+        {
+            "name": "altyazi_editoru (Manual Debug Rebuild)",
+            "request": "launch",
+            "type": "node-terminal",
+            "command": "cmd /d /c tool\\run_windows_manual_nmake_debug.cmd"
+        },
+        {
+            "name": "altyazi_editoru (with Cloud OAuth)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "env": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "INCLUDE": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\winrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\cppwinrt;${env:INCLUDE}",
+                "LIB": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64;${env:LIB}",
+                "JAVA_HOME": "C:\\Program Files\\Java\\jdk-21.0.4.0.7-1",
+                "PATH": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64;C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64;C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64;C:\\Program Files\\Java\\jdk-21.0.4.0.7-1\\bin;${env:PATH}"
+            },
+            "toolArgs": [
+                "--dart-define=ONEDRIVE_CLIENT_ID=PASTE_HERE",
+                "--dart-define=DROPBOX_CLIENT_ID=PASTE_HERE",
+                "--dart-define=YANDEX_CLIENT_ID=PASTE_HERE",
+                "--dart-define=YANDEX_CLIENT_SECRET=PASTE_HERE"
+            ]
+        },
+        {
+            "name": "altyazi_editoru (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "flutterMode": "profile",
+            "env": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "PATH": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64;C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64;C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64;${env:PATH}",
+                "INCLUDE": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\winrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\cppwinrt;${env:INCLUDE}",
+                "LIB": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64;${env:LIB}"
+            }
+        },
+        {
+            "name": "altyazi_editoru (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "flutterMode": "release",
+            "env": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "PATH": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64;C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\MSBuild\\Current\\Bin\\amd64;C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64;${env:PATH}",
+                "INCLUDE": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\include;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\ucrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\shared;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\um;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\winrt;C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.26100.0\\cppwinrt;${env:INCLUDE}",
+                "LIB": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\lib\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\ucrt\\x64;C:\\Program Files (x86)\\Windows Kits\\10\\Lib\\10.0.26100.0\\um\\x64;${env:LIB}"
+            }
+        },
+        {
+            "name": "Tool: Trim Splash Icon",
+            "request": "launch",
+            "type": "dart",
+            "program": "tool/trim_splash_icon.dart",
+            "args": [
+                "--padding-regular=0.06",
+                "--padding-android12=0.22"
+            ]
+        }
+    ]
+}

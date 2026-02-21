@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function encodingAllowed() {
+      // Some writers store `encoding`, some store `encodingDetected`, and some store none.
+      // If present, only allow modern encodings.
+      return (!('encoding' in request.resource.data)
+          || request.resource.data.encoding == null
+          || (request.resource.data.encoding is string
+            && request.resource.data.encoding in ['UTF-8', 'UTF-16LE', 'UTF-16BE', 'UTF-16']))
+        && (!('encodingDetected' in request.resource.data)
+          || request.resource.data.encodingDetected == null
+          || (request.resource.data.encodingDetected is string
+            && request.resource.data.encodingDetected in ['UTF-8', 'UTF-16LE', 'UTF-16BE', 'UTF-16']));
+    }
+
+    // Global translations (shared cache)
+    match /global_translations/{translationId} {
+      allow read: if isSignedIn();
+
+      // Create new cache entries from clients (including anonymous users).
+      allow create: if isSignedIn()
+        && encodingAllowed()
+        && ('translatedContent' in request.resource.data)
+        && ('targetLanguage' in request.resource.data)
+        && ('sourceHash' in request.resource.data);
+
+      // Allow only lightweight usage tracking updates; prevent overwriting translation content.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['usageCount', 'lastUsedAt'])
+        && (!('usageCount' in request.resource.data) || request.resource.data.usageCount is int);
+
+      allow delete: if false;
+    }
+
+    // Legacy cache read-only (used by older code paths)
+    match /translated_files/{hash} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // Users: allow owner read; allow only safe profile field writes from the client.
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create, update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'email',
+          'displayName',
+          'photoUrl',
+          'lastSignIn'
+        ]);
+
+      allow delete: if false;
+
+      match /translation_history/{historyId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+
+      // Some code paths write to `users/{uid}/history`
+      match /history/{historyId} {
+        allow read, write, delete: if isOwner(userId);
+      }
+
+      // Written by Cloud Functions only
+      match /purchase_history/{purchaseId} {
+        allow read: if isOwner(userId);
+        allow write, delete: if false;
+      }
+
+      // Written by Cloud Functions only
+      match /credit_usage/{usageId} {
+        allow read: if isOwner(userId);
+        allow write, delete: if false;
+      }
+
+      // Written by Cloud Functions only (unified history)
+      match /credit_transactions/{txId} {
+        allow read: if isOwner(userId);
+        allow write, delete: if false;
+      }
+
+      // Device-scoped credits (starter bonus and other non-transferable credits)
+      // Readable by the owner so the app can show device-only remaining credits.
+      // Written by Cloud Functions only.
+      match /devices/{deviceId} {
+        allow read: if isOwner(userId);
+        allow write, delete: if false;
+      }
+    }
+
+    // Server-only collections
+    match /purchases/{purchaseId} {
+      allow read, write: if false;
+    }
+
+    match /device_bonuses/{deviceId} {
+      allow read, write: if false;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

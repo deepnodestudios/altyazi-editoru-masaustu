@@ -1,0 +1,207 @@
+*** Begin Patch
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ar.dart
+@@
+-  'clear_list': 'مسح القائمة',
++  'clear_list': 'مسح القائمة',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_cn.dart
+@@
+-  'clear_list': '清空列表',
++  'clear_list': '清空列表',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_cs.dart
+@@
+-  'clear_list': 'Vymazat seznam',
++  'clear_list': 'Vymazat seznam',
++  'clear_list_confirm': 'Vše bude trvale smazáno a nelze to vrátit.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_da.dart
+@@
+-  'clear_list': 'Ryd listen',
++  'clear_list': 'Ryd listen',
++  'clear_list_confirm': 'Alle elementer slettes permanent og kan ikke gendannes.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_de.dart
+@@
+-  'clear_list': 'Liste leeren',
++  'clear_list': 'Liste leeren',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_el.dart
+@@
+-  'clear_list': 'Καθαρισμός λίστας',
++  'clear_list': 'Καθαρισμός λίστας',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_en.dart
+@@
+-  'clear_list': 'Clear List',
++  'clear_list': 'Clear List',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_es.dart
+@@
+-  'clear_list': 'Vaciar lista',
++  'clear_list': 'Vaciar lista',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_fa.dart
+@@
+-  'clear_list': 'پاک کردن لیست',
++  'clear_list': 'پاک کردن لیست',
++  'clear_list_confirm': 'تمام فایل‌ها به‌طور دائم حذف خواهند شد و قابل بازیابی نیستند.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_fr.dart
+@@
+-  'clear_list': 'Vider la liste',
++  'clear_list': 'Vider la liste',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_gu.dart
+@@
+-  'clear_list': 'સૂચિ સાફ કરો',
++  'clear_list': 'સૂચિ સાફ કરો',
++  'clear_list_confirm': 'બધી ફાઇલો કાયમી રીતે કાઢી નાખવામાં આવશે અને પુનઃસ્થાપિત કરી શકાશે નહીં.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_he.dart
+@@
+-  'clear_list': 'נקה רשימה',
++  'clear_list': 'נקה רשימה',
++  'clear_list_confirm': 'כל הקבצים יימחקו לצמיתות ולא ניתן לשחזרם.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_hu.dart
+@@
+-  'clear_list': 'Lista törlése',
++  'clear_list': 'Lista törlése',
++  'clear_list_confirm': 'Minden elem véglegesen törlődik, és nem állítható vissza.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_id.dart
+@@
+-  'clear_list': 'Bersihkan daftar',
++  'clear_list': 'Bersihkan daftar',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_in.dart
+@@
+-  'clear_list': 'सूची साफ़ करें',
++  'clear_list': 'सूची साफ़ करें',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_it.dart
+@@
+-  'clear_list': 'Svuota elenco',
++  'clear_list': 'Svuota elenco',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ja.dart
+@@
+-  'clear_list': 'リストをクリア',
++  'clear_list': 'リストをクリア',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_kn.dart
+@@
+-  'clear_list': 'ಪಟ್ಟಿ ತೆರವುಗೊಳಿಸಿ',
++  'clear_list': 'ಪಟ್ಟಿ ತೆರವುಗೊಳಿಸಿ',
++  'clear_list_confirm': 'ಎಲ್ಲಾ ಫೈಲ್‌ಗಳು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲ್ಪಡುತ್ತವೆ, ಮರುಸ್ಥಾಪಿಸಲಾಗುವುದಿಲ್ಲ.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ko.dart
+@@
+-  'clear_list': '목록 지우기',
++  'clear_list': '목록 지우기',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ml.dart
+@@
+-  'clear_list': 'ലിസ്റ്റ് മായ്ക്കുക',
++  'clear_list': 'ലിസ്റ്റ് മായ്ക്കുക',
++  'clear_list_confirm': 'എല്ലാ ഫയലുകളും സ്ഥിരമായി ഇല്ലാതാക്കപ്പെടും, പുനഃസ്ഥാപിക്കാനാവില്ല.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_mr.dart
+@@
+-  'clear_list': 'यादी साफ करा',
++  'clear_list': 'यादी साफ करा',
++  'clear_list_confirm': 'सर्व फाइल्स कायमस्वरूपी हटवल्या जातील आणि पुनर्संचयित करता येणार नाहीत.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_nl.dart
+@@
+-  'clear_list': 'Lijst wissen',
++  'clear_list': 'Lijst wissen',
++  'clear_list_confirm': 'Alle bestanden worden permanent verwijderd en kunnen niet worden hersteld.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_pa.dart
+@@
+-  'clear_list': 'ਸੂਚੀ ਸਾਫ਼ ਕਰੋ',
++  'clear_list': 'ਸੂਚੀ ਸਾਫ਼ ਕਰੋ',
++  'clear_list_confirm': 'ਸਾਰੀਆਂ ਫਾਈਲਾਂ ਸਥਾਈ ਤੌਰ ’ਤੇ ਮਿਟਾਈਆਂ ਜਾਣਗੀਆਂ ਅਤੇ ਮੁੜ ਪ੍ਰਾਪਤ ਨਹੀਂ ਕੀਤੀਆਂ ਜਾ ਸਕਦੀਆਂ।',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_pl.dart
+@@
+-  'clear_list': 'Wyczyść listę',
++  'clear_list': 'Wyczyść listę',
++  'clear_list_confirm': 'Wszystkie pliki zostaną trwale usunięte i nie można ich przywrócić.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_pt.dart
+@@
+-  'clear_list': 'Limpar lista',
++  'clear_list': 'Limpar lista',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ro.dart
+@@
+-  'clear_list': 'Golește lista',
++  'clear_list': 'Golește lista',
++  'clear_list_confirm': 'Toate elementele vor fi șterse permanent și nu pot fi recuperate.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ru.dart
+@@
+-  'clear_list': 'Очистить список',
++  'clear_list': 'Очистить список',
++  'clear_list_confirm': 'All items will be permanently deleted and cannot be restored.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_sv.dart
+@@
+-  'clear_list': 'Rensa lista',
++  'clear_list': 'Rensa lista',
++  'clear_list_confirm': 'Alla filer raderas permanent och kan inte återställas.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_ta.dart
+@@
+-  'clear_list': 'பட்டியலை அழி',
++  'clear_list': 'பட்டியலை அழி',
++  'clear_list_confirm': 'அனைத்து கோப்புகளும் நிரந்தரமாக நீக்கப்படும், மீட்க இயலாது.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_te.dart
+@@
+-  'clear_list': 'జాబితా క్లియర్',
++  'clear_list': 'జాబితా క్లియర్',
++  'clear_list_confirm': 'అన్ని ఫైళ్లు శాశ్వతంగా తొలగించబడతాయి, పునరుద్ధరించలేరు.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_th.dart
+@@
+-  'clear_list': 'ล้างรายการ',
++  'clear_list': 'ล้างรายการ',
++  'clear_list_confirm': 'ไฟล์ทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_tr.dart
+@@
+-  'clear_list': 'Listeyi Temizle',
++  'clear_list': 'Listeyi Temizle',
++  'clear_list_confirm': 'Tüm öğeler kalıcı olarak silinecek ve geri getirilemeyecek.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_uk.dart
+@@
+-  'clear_list': 'Очистити список',
++  'clear_list': 'Очистити список',
++  'clear_list_confirm': 'Усі елементи будуть безповоротно видалені.',
+
+*** Update File: C:/Users/mehme/Desktop/altyazi_editoru Masaustu/lib/translations/translations_vi.dart
+@@
+-  'clear_list': 'Xóa danh sách',
++  'clear_list': 'Xóa danh sách',
++  'clear_list_confirm': 'Tất cả tệp sẽ bị xóa vĩnh viễn và không thể khôi phục.',
+
+*** End Patch
+

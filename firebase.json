@@ -1,0 +1,58 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "altyazi-ceviri-editor",
+          "appId": "1:203321032277:android:3f6400b8637da9dd8cdedc",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "altyazi-ceviri-editor",
+          "configurations": {
+            "android": "1:203321032277:android:3f6400b8637da9dd8cdedc",
+            "ios": "1:203321032277:ios:0e047616ed0a9d538cdedc",
+            "macos": "1:203321032277:ios:0e047616ed0a9d538cdedc",
+            "web": "1:203321032277:web:9c8451dcc4cd9c2f8cdedc",
+            "windows": "1:203321032277:web:3e912f844ef3d01d8cdedc"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ],
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
+  }
+}
