@@ -294,6 +294,76 @@ class TranslationEngine {
     return text.replaceAll('\r', '').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  /// Detects block-content drift: when the model merges two source blocks into
+  /// one translated block (or vice versa), block COUNT stays equal but per-block
+  /// line counts diverge. Returns true when a meaningful share of blocks drift.
+  bool _hasSignificantLineAlignmentShift(
+    List<SubtitleBlock> sourceBlocks,
+    List<SubtitleBlock> translatedBlocks,
+  ) {
+    final n = sourceBlocks.length < translatedBlocks.length
+        ? sourceBlocks.length
+        : translatedBlocks.length;
+    if (n == 0) return false;
+
+    int mismatched = 0;
+    for (int i = 0; i < n; i++) {
+      final srcLines = sourceBlocks[i].text
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .length;
+      final dstLines = translatedBlocks[i].text
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .length;
+      if (srcLines != dstLines) mismatched++;
+    }
+
+    // Require a meaningful share of mismatches (and at least 2 blocks) to avoid
+    // false positives from natural line-wrapping differences.
+    return mismatched >= 2 && mismatched / n > 0.15;
+  }
+
+  /// Repairs content drift by translating every block individually.
+  /// Per-block translation makes it nearly impossible for the model to merge
+  /// or shift block contents, at the cost of more API calls.
+  Future<List<SubtitleBlock>> _translateBlocksIndividually({
+    required List<SubtitleBlock> sourceBlocks,
+    required String targetLanguage,
+    String? contextHint,
+    String? sourceLanguageHint,
+  }) async {
+    final repaired = <SubtitleBlock>[];
+    for (int i = 0; i < sourceBlocks.length; i++) {
+      final src = sourceBlocks[i];
+      try {
+        final singleSrt = SubtitleBuilder.buildSrt([src]);
+        final singleTranslated = await _geminiService.translateChunk(
+          singleSrt,
+          targetLanguage: targetLanguage,
+          contextHint: contextHint,
+          sourceLanguageHint: sourceLanguageHint,
+          expectedBlockCount: 1,
+        );
+        final parsed = SubtitleParser.parseSrt(singleTranslated);
+        if (parsed.length == 1) {
+          repaired.add(
+            SubtitleBlock(
+              index: i + 1,
+              timecode: src.timecode,
+              text: parsed.first.text.trim(),
+            ),
+          );
+          continue;
+        }
+      } catch (_) {
+        // Best-effort repair only; keep source block below.
+      }
+      repaired.add(src);
+    }
+    return repaired;
+  }
+
   Future<List<SubtitleBlock>> _fixLikelyUntranslatedBlocks({
     required List<SubtitleBlock> sourceBlocks,
     required List<SubtitleBlock> translatedBlocks,
@@ -445,9 +515,26 @@ class TranslationEngine {
           contextHint: contextHint,
           sourceLanguageHint: sourceLanguageHint,
         );
+        if (!_hasSignificantLineAlignmentShift(expectedBlocks, fixedBlocks)) {
+          return (
+            srt: SubtitleBuilder.buildSrt(fixedBlocks),
+            blocks: fixedBlocks,
+          );
+        }
+        // Line alignment shifted (model merged/split blocks): repair block-by-block.
+        onLog?.call(
+          'log_line_alignment_shift',
+          jsonEncode({'blocks': expectedCount, 'depth': depth}),
+        );
+        final repaired = await _translateBlocksIndividually(
+          sourceBlocks: expectedBlocks,
+          targetLanguage: targetLanguage,
+          contextHint: contextHint,
+          sourceLanguageHint: sourceLanguageHint,
+        );
         return (
-          srt: SubtitleBuilder.buildSrt(fixedBlocks),
-          blocks: fixedBlocks,
+          srt: SubtitleBuilder.buildSrt(repaired),
+          blocks: repaired,
         );
       }
     }
@@ -472,9 +559,25 @@ class TranslationEngine {
             contextHint: contextHint,
             sourceLanguageHint: sourceLanguageHint,
           );
+          if (!_hasSignificantLineAlignmentShift(expectedBlocks, fixedBlocks)) {
+            return (
+              srt: SubtitleBuilder.buildSrt(fixedBlocks),
+              blocks: fixedBlocks,
+            );
+          }
+          onLog?.call(
+            'log_line_alignment_shift',
+            jsonEncode({'blocks': expectedCount, 'depth': depth}),
+          );
+          final repaired = await _translateBlocksIndividually(
+            sourceBlocks: expectedBlocks,
+            targetLanguage: targetLanguage,
+            contextHint: contextHint,
+            sourceLanguageHint: sourceLanguageHint,
+          );
           return (
-            srt: SubtitleBuilder.buildSrt(fixedBlocks),
-            blocks: fixedBlocks,
+            srt: SubtitleBuilder.buildSrt(repaired),
+            blocks: repaired,
           );
         }
       } catch (_) {

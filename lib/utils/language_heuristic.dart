@@ -6,14 +6,11 @@ class LanguageHeuristic {
       've',
       'bir',
       'bu',
-      'da',
-      'de',
       'için',
       'ile',
       'çok',
       'olarak',
       'gibi',
-      'en',
       'daha',
       'olan',
       'ama',
@@ -167,6 +164,20 @@ class LanguageHeuristic {
     ],
   };
 
+  /// Hedef dile özgü karakterler: metinde bu karakterlerden hiçbiri yoksa
+  /// kaynağın o dilde olma ihtimali yok denecek kadar azdır.
+  /// (Örn: İspanyolca metinde ğ/ş/ı/ç/ö/ü bulunmaz → Türkçe olamaz.)
+  static const Map<String, String> _distinctiveChars = {
+    'TR': 'ğşıçöüĞŞİÇÖÜ',
+    'ES': 'ñÑ¿¡',
+    'FR': 'àâçèéêëîïôûùÿœÀÂÇÈÉÊËÎÏÔÛÙŸŒ',
+    'DE': 'äöüßÄÖÜ',
+    'IT': 'àèéìòùÀÈÉÌÒÙ',
+    'RU': 'а-яА-ЯёЁ',
+    'AR': 'ء-ي',
+    'EL': 'α-ωΑ-Ω',
+  };
+
   static Future<bool> isLikelyTargetLanguage(
       List<File> files, String targetLang) async {
     if (files.isEmpty) return false;
@@ -190,6 +201,13 @@ class LanguageHeuristic {
     try {
       final text = await files.first.readAsString();
       final cleanText = text.toLowerCase();
+
+      // Hedef dile özgü karakterlerden hiçbiri yoksa kaynak o dil değildir.
+      final distinctive = _distinctiveChars[code];
+      if (distinctive != null) {
+        final hasDistinctiveChar = RegExp('[$distinctive]').hasMatch(cleanText);
+        if (!hasDistinctiveChar) return false;
+      }
 
       int matchCount = 0;
       for (final w in words) {
