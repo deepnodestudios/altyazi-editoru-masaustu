@@ -2,20 +2,62 @@ import 'dart:convert';
 import '../models/subtitle_block.dart';
 
 class SubtitleParser {
-  static final RegExp _sdhRegex = RegExp(r'\(.*?\)|\[.*?\]');
+  static final RegExp _sdhRegex = RegExp(r'\([^)]*\)|\[[^\]]*\]');
   static final RegExp _multiNewLineRegex = RegExp(r'\n+');
+  static final RegExp _htmlTagRegex = RegExp(r'<[^>]+>');
+  // Common SRT/ASS-style inline formatting tags like: {\an8} {\pos(0,0)}
+  static final RegExp _srtBraceTagRegex = RegExp(r'\{\\[^}]*\}');
+  // Removes empty tags that can remain after SDH removal (e.g. <i></i>).
+  static final RegExp _emptyHtmlTagPairRegex = RegExp(
+    r'<(\w+)(?:\s+[^>]*)?>\s*<\/\1>',
+    caseSensitive: false,
+  );
   static final RegExp _hasMeaningfulTextRegex = RegExp(
     r'[\p{L}\p{N}]',
     unicode: true,
   );
 
+  // A regex to match speaker names. It accounts for optional initial formatting tags (e.g. <i>, <font>)
+  // and dashes, followed by an all-caps speaker name with potential spaces/numbers/dots, optionally
+  // enclosed in trailing html tags, followed by a colon.
+  // It captures the initial dash/html tags in group 1 and 2, to preserve them.
+  static final RegExp _speakerRegex = RegExp(
+    r'(^|\n)([ \t]*(?:<[^>]+>\s*)*-\s*(?:<[^>]+>\s*)*|[ \t]*(?:<[^>]+>\s*)*)([A-ZÇĞIİÖŞÜ0-9\s\.\-\:]{2,})((?:\s*<[^>]+>\s*)*):\s*',
+    multiLine: true,
+  );
+
+  static String _stripTagsForMeaningCheck(String text) {
+    // Important: We only use this for detecting whether a cue contains
+    // meaningful dialogue. We do NOT want to strip tags from the actual output
+    // unless they're empty.
+    return text
+        .replaceAll(_srtBraceTagRegex, '')
+        .replaceAll(_htmlTagRegex, '');
+  }
+
   static String normalizeSdhCleanedText(String text) {
-    final cleaned = text.replaceAll(_sdhRegex, '').trim();
+    var cleaned = text.replaceAll(_sdhRegex, '');
+
+    // Clean speaker strings like "POSSESSED GIRL: "
+    cleaned = cleaned.replaceAllMapped(_speakerRegex, (m) {
+      return (m.group(1) ?? '') + (m.group(2) ?? '') + (m.group(4) ?? '');
+    });
+
+    // Remove empty tags that may remain after SDH removal.
+    // Example: "<i>(CLICKS)</i>" -> "<i></i>" -> "".
+    String prev;
+    do {
+      prev = cleaned;
+      cleaned = cleaned.replaceAll(_emptyHtmlTagPairRegex, '');
+    } while (cleaned != prev);
+
+    cleaned = cleaned.trim();
     return cleaned.replaceAll(_multiNewLineRegex, '\n').trim();
   }
 
   static bool hasMeaningfulDialogueText(String text) {
-    return _hasMeaningfulTextRegex.hasMatch(text);
+    final stripped = _stripTagsForMeaningCheck(text);
+    return _hasMeaningfulTextRegex.hasMatch(stripped);
   }
 
   static int? parseTimestampToMs(String value) {
@@ -215,8 +257,8 @@ class SubtitleParser {
 
     for (final line in lines) {
       buffer.add(line);
-      // 150 satır ≈ 37-38 blok
-      if (buffer.length >= 150 && line.trim().isEmpty) {
+      // 400 satır ≈ 100 blok
+      if (buffer.length >= 400 && line.trim().isEmpty) {
         chunks.add(buffer.join('\n'));
         buffer.clear();
       }
@@ -238,8 +280,8 @@ class SubtitleParser {
     String content, {
     // Strongly prefer single-request translation for quality/consistency.
     // Still keep a safety ceiling to avoid hitting model/context limits.
-    int maxChars = 60000,
-    int maxBlocks = 600,
+    int maxChars = 40000,
+    int maxBlocks = 100,
   }) {
     final trimmed = content.trim();
     if (trimmed.isEmpty) return [content];
@@ -256,14 +298,13 @@ class SubtitleParser {
 
   /// Desktop-safe chunking preset.
   ///
-  /// On desktop, a single large request is more likely to exceed timeouts or
-  /// stall due to network/proxy issues. Keeping chunks smaller improves
-  /// reliability without changing the core chunking algorithm.
+  /// Cross-platform resume consistency depends on desktop and web using the
+  /// same chunk plan as mobile.
   static List<String> buildSrtChunksAdaptiveDesktop(String content) {
     return buildSrtChunksAdaptive(
       content,
-      maxChars: 20000,
-      maxBlocks: 220,
+      maxChars: 40000,
+      maxBlocks: 100,
     );
   }
   

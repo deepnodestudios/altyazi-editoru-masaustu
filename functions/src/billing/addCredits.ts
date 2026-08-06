@@ -113,7 +113,8 @@ export const addCredits = onCall<AddCreditsData>(async (request) => {
       // Purchase kaydı oluştur
       transaction.set(purchaseRef, {
         userId,
-        amount,
+        email: auth.token.email || null,
+          amount,
         productId,
         purchaseToken,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),

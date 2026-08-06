@@ -2,13 +2,87 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from 'firebase-admin';
 
-interface StarterCreditsData {
-    deviceId: string;
+const MOBILE_STARTER_BONUS = 5;
+const GOOGLE_LOGIN_BONUS = 2;
+const DESKTOP_PLATFORMS = new Set(['windows', 'macos', 'linux', 'desktop', 'desktop_client']);
+
+type AuthLike = {
+    token?: {
+        email?: unknown;
+        firebase?: {
+            sign_in_provider?: unknown;
+            identities?: unknown;
+        };
+    };
+} | null;
+
+function getAuthEmail(auth?: AuthLike): string | null {
+    const raw = auth?.token?.email;
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim().toLowerCase();
+    return trimmed.length > 0 ? trimmed : null;
 }
 
-export const giveStarterCredits = onCall<StarterCreditsData>(async (request) => {
+function getGoogleTrackingEmail(auth?: AuthLike): string | null {
+    const email = getAuthEmail(auth);
+    if (!email) return null;
 
-    const { deviceId } = request.data;
+    const firebaseToken = auth?.token?.firebase;
+    const signInProvider = typeof firebaseToken?.sign_in_provider === 'string'
+        ? firebaseToken.sign_in_provider
+        : '';
+    const identities = firebaseToken?.identities;
+    const hasGoogleIdentity = identities && typeof identities === 'object'
+        ? Object.prototype.hasOwnProperty.call(identities, 'google.com')
+        : false;
+
+    return signInProvider === 'google.com' || hasGoogleIdentity
+        ? email
+        : null;
+}
+
+async function resolveGoogleTrackingEmail({
+    auth,
+    uid,
+}: {
+    auth?: AuthLike;
+    uid: string;
+}): Promise<string | null> {
+    const tokenEmail = getGoogleTrackingEmail(auth);
+    if (tokenEmail) {
+        return tokenEmail;
+    }
+
+    try {
+        const userRecord = await admin.auth().getUser(uid);
+        const hasGoogleProvider = userRecord.providerData
+            .some((provider) => provider.providerId === 'google.com');
+        if (!hasGoogleProvider) return null;
+
+        const email = (userRecord.email ?? '').trim().toLowerCase();
+        return email.length > 0 ? email : null;
+    } catch (error) {
+        logger.warn('giveStarterCredits: failed to resolve google provider from auth record', {
+            uid,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+}
+
+interface StarterCreditsData {
+    deviceId?: string;
+    platform?: string;
+}
+
+export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
+
+    const { deviceId, platform } = request.data;
+    const resolvedPlatform = String(platform ?? '').trim().toLowerCase();
+    const isMobilePlatform = resolvedPlatform === 'android' || resolvedPlatform === 'ios';
+    const isWebPlatform = resolvedPlatform === 'web';
+    const isDesktopPlatform = DESKTOP_PLATFORMS.has(resolvedPlatform);
+    const normalizedDeviceId = String(deviceId ?? '').trim();
 
     // NOTE: Starter bonus is device-based and must not require Google sign-in.
     // However, we still require Firebase Auth (anonymous is OK) to reduce abuse
@@ -20,8 +94,8 @@ export const giveStarterCredits = onCall<StarterCreditsData>(async (request) => 
         throw new HttpsError('unauthenticated', 'Auth is required.');
     }
 
-    // 1. Validasyon: Device ID zorunlu
-    if (!deviceId) {
+    // Device ID remains mandatory only on mobile.
+    if (isMobilePlatform && !normalizedDeviceId) {
         logger.warn('giveStarterCredits: missing deviceId', { uid: userId });
         throw new HttpsError(
             'invalid-argument',
@@ -29,16 +103,24 @@ export const giveStarterCredits = onCall<StarterCreditsData>(async (request) => 
         );
     }
 
-    const deviceIdSuffix = deviceId.length >= 6 ? deviceId.slice(-6) : deviceId;
+    const deviceIdSuffix = normalizedDeviceId.length >= 6
+        ? normalizedDeviceId.slice(-6)
+        : normalizedDeviceId;
     logger.info('giveStarterCredits: called', {
         uid: userId,
-        deviceIdLen: deviceId.length,
+        deviceIdLen: normalizedDeviceId.length,
         deviceIdSuffix,
     });
 
     const db = admin.firestore();
-    const deviceBonusRef = db.collection('device_bonuses').doc(deviceId);
+    const deviceBonusRef = normalizedDeviceId
+        ? db.collection('device_bonuses').doc(normalizedDeviceId)
+        : null;
     const userRef = db.collection('users').doc(userId);
+    const googleTrackingEmail = await resolveGoogleTrackingEmail({ auth, uid: userId });
+    const trackingRef = googleTrackingEmail
+        ? db.collection('claimed_login_bonuses').doc(googleTrackingEmail)
+        : null;
 
     let deviceBonusExisted = false;
     let grantedNow = false;
@@ -46,120 +128,201 @@ export const giveStarterCredits = onCall<StarterCreditsData>(async (request) => 
     // Transaction kullanarak veri bütünlüğünü sağlıyoruz (Atomik işlem)
     try {
         const payload = await db.runTransaction(async (transaction) => {
-                // IMPORTANT: In Firestore transactions, all reads must happen before any writes.
-                const deviceBonusDoc = await transaction.get(deviceBonusRef);
-                const userDoc = await transaction.get(userRef);
+            // IMPORTANT: In Firestore transactions, all reads must happen before any writes.
+            const deviceBonusDoc = deviceBonusRef
+                ? await transaction.get(deviceBonusRef)
+                : null;
+            const userDoc = await transaction.get(userRef);
+            const trackingDoc = trackingRef ? await transaction.get(trackingRef) : null;
 
-                deviceBonusExisted = deviceBonusDoc.exists;
+            deviceBonusExisted = !!deviceBonusDoc?.exists;
 
-                const bonusAmount = 5;
+            const starterBonusAmount = isMobilePlatform ? MOBILE_STARTER_BONUS : 0;
+            const trackingPlatform = resolvedPlatform || 'unknown';
 
-                // Existing schema variants:
-                // - legacy: { deviceId, userId, timestamp }
-                // - legacy v2: { bonusCredits: 5 }
-                // - new: { deviceCredits: <remaining> }
-                const existingData = deviceBonusDoc.exists ? (deviceBonusDoc.data() ?? {}) : {};
-                const legacyBonus = Number(existingData.bonusCredits ?? 0);
-                let deviceCredits = Number(existingData.deviceCredits ?? 0);
+            // Existing schema variants:
+            // - legacy: { deviceId, userId, timestamp }
+            // - legacy v2: { bonusCredits: 5 }
+            // - new: { deviceCredits: <remaining> }
+            const existingData = deviceBonusDoc?.exists ? (deviceBonusDoc.data() ?? {}) : {};
+            const legacyBonus = Number(existingData.bonusCredits ?? 0);
+            let deviceCredits = Number(existingData.deviceCredits ?? 0);
 
-                                const hasTrackingFields =
-                                    Object.prototype.hasOwnProperty.call(existingData, 'deviceCredits') ||
-                                    Object.prototype.hasOwnProperty.call(existingData, 'bonusCredits') ||
-                                    Object.prototype.hasOwnProperty.call(existingData, 'totalBonusConsumed');
+            const hasTrackingFields =
+                Object.prototype.hasOwnProperty.call(existingData, 'deviceCredits') ||
+                Object.prototype.hasOwnProperty.call(existingData, 'bonusCredits') ||
+                Object.prototype.hasOwnProperty.call(existingData, 'totalBonusConsumed');
 
-                                // Legacy marker migration: old docs may exist without any tracking fields
-                                // (only deviceId/userId/timestamp). Treat them as "bonus granted" but
-                                // initialize remaining bonus to full amount once so users don't lose credits
-                                // on schema change. Lifetime cap is still enforced by totalBonusConsumed.
-                                if (deviceBonusDoc.exists && !hasTrackingFields) {
-                                    deviceCredits = bonusAmount;
-                                }
+            // Legacy marker migration: old docs may exist without any tracking fields
+            // (only deviceId/userId/timestamp). Treat them as "bonus granted" but
+            // initialize remaining bonus to full amount once so users don't lose credits
+            // on schema change. Lifetime cap is still enforced by totalBonusConsumed.
+            if (deviceBonusDoc?.exists && !hasTrackingFields) {
+                deviceCredits = starterBonusAmount;
+            }
 
-                // Track total bonus consumption per device to prevent any form of top-up.
-                let totalBonusConsumed = Number(existingData.totalBonusConsumed ?? NaN);
-                if (!Number.isFinite(totalBonusConsumed) || totalBonusConsumed < 0) {
-                                    if (deviceBonusDoc.exists && !hasTrackingFields) {
-                                        totalBonusConsumed = 0;
-                                    } else {
-                                        // Infer best-effort from remaining deviceCredits.
-                                        const inferredRemaining = Number.isFinite(deviceCredits) ? deviceCredits : 0;
-                                        const clampedRemaining = Math.max(0, Math.min(bonusAmount, inferredRemaining));
-                                        totalBonusConsumed = Math.max(0, bonusAmount - clampedRemaining);
-                                    }
-                }
-
-                // If we have an old doc but no deviceCredits field, seed it from legacy bonus.
-                if (deviceBonusDoc.exists && (!Number.isFinite(deviceCredits) || deviceCredits <= 0)) {
-                    if (Number.isFinite(legacyBonus) && legacyBonus > 0) {
-                        deviceCredits = legacyBonus;
-                    } else {
-                        deviceCredits = 0;
-                    }
-                }
-
-                // Clamp to remaining allowed bonus (bonusAmount - totalBonusConsumed)
-                const remainingAllowed = Math.max(0, bonusAmount - totalBonusConsumed);
-                if (!Number.isFinite(deviceCredits) || deviceCredits < 0) deviceCredits = 0;
-                deviceCredits = Math.min(deviceCredits, remainingAllowed);
-
-                const canGiveBonus = !deviceBonusDoc.exists;
-                if (canGiveBonus) {
-                    grantedNow = true;
-                    deviceCredits = bonusAmount;
+            // Track total bonus consumption per device to prevent any form of top-up.
+            let totalBonusConsumed = Number(existingData.totalBonusConsumed ?? NaN);
+            if (!Number.isFinite(totalBonusConsumed) || totalBonusConsumed < 0) {
+                if (deviceBonusDoc?.exists && !hasTrackingFields) {
                     totalBonusConsumed = 0;
+                } else {
+                    // Infer best-effort from remaining deviceCredits.
+                    const inferredRemaining = Number.isFinite(deviceCredits) ? deviceCredits : 0;
+                    const clampedRemaining = Math.max(0, Math.min(starterBonusAmount, inferredRemaining));
+                    totalBonusConsumed = Math.max(0, starterBonusAmount - clampedRemaining);
                 }
+            }
 
-                // Purchased credits read (done before any writes).
-                let purchasedCredits: number | null = 0;
-                if (userDoc.exists) {
-                    const userData = userDoc.data() ?? {};
-                    const raw = userData.purchasedCredits ?? userData.credits ?? 0;
-                    purchasedCredits = Number.isFinite(Number(raw)) ? Number(raw) : 0;
+            // If we have an old doc but no deviceCredits field, seed it from legacy bonus.
+            if (deviceBonusDoc?.exists && (!Number.isFinite(deviceCredits) || deviceCredits <= 0)) {
+                if (Number.isFinite(legacyBonus) && legacyBonus > 0) {
+                    deviceCredits = legacyBonus;
+                } else {
+                    deviceCredits = 0;
                 }
+            }
 
-                // Write after all reads are complete.
+            // Clamp to remaining allowed bonus (starterBonusAmount - totalBonusConsumed)
+            const remainingAllowed = Math.max(0, starterBonusAmount - totalBonusConsumed);
+            if (!Number.isFinite(deviceCredits) || deviceCredits < 0) deviceCredits = 0;
+            deviceCredits = Math.min(deviceCredits, remainingAllowed);
+
+            const canGiveStarterBonus = starterBonusAmount > 0 && !deviceBonusDoc?.exists;
+            if (canGiveStarterBonus) {
+                grantedNow = true;
+                deviceCredits = starterBonusAmount;
+                totalBonusConsumed = 0;
+            }
+
+            const trackingData = trackingDoc?.exists ? (trackingDoc.data() ?? {}) : {};
+            const firstPlatform = String(trackingData.firstPlatform || trackingData.platform || trackingPlatform).trim() || trackingPlatform;
+
+            // Unified Google login bonus: one-time 2 googleLoginCredits per Google account (any platform).
+            // Uses claimed_login_bonuses/{email} for cross-platform dedup.
+            // Backward-compat: also skip if loginBonusGranted === true (old desktop purchasedCredits grant).
+            const alreadyHasLoginBonus =
+                trackingData.googleLoginBonusGranted === true ||
+                trackingData.loginBonusGranted === true;
+            const deviceAlreadyHasLoginBonus =
+                existingData.googleLoginBonusGranted === true ||
+                existingData.loginBonusGranted === true ||
+                existingData.googleLoginBonusClaimedAt != null;
+
+            // Purchased credits and optional Google login bonus read (done before any writes).
+            let purchasedCredits = 0;
+            let googleLoginCredits = 0;
+            if (userDoc.exists) {
+                const userData = userDoc.data() ?? {};
+                const raw = userData.purchasedCredits ?? userData.credits ?? 0;
+                purchasedCredits = Number.isFinite(Number(raw)) ? Number(raw) : 0;
+                googleLoginCredits = Number.isFinite(Number(userData.googleLoginCredits)) ? Number(userData.googleLoginCredits) : 0;
+            }
+
+            const googleLoginBonusToGive = trackingRef && !alreadyHasLoginBonus && !deviceAlreadyHasLoginBonus
+                ? GOOGLE_LOGIN_BONUS
+                : 0;
+
+            if (trackingRef && (!trackingDoc?.exists || googleLoginBonusToGive > 0)) {
+                transaction.set(
+                    trackingRef,
+                    {
+                        uid: userId,
+                        email: googleTrackingEmail,
+                        platform: firstPlatform,
+                        firstPlatform,
+                        lastPlatform: trackingPlatform,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        googleLoginBonusGranted: alreadyHasLoginBonus || googleLoginBonusToGive > 0,
+                        loginBonusGranted: alreadyHasLoginBonus || googleLoginBonusToGive > 0,
+                        ...(trackingDoc?.exists ? {} : {
+                            firstSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+                            source: 'signup_tracking',
+                        }),
+                        ...(googleLoginBonusToGive > 0 ? {
+                            creditsAdded: googleLoginBonusToGive,
+                            creditType: 'google_login',
+                            claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            googleLoginBonusGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            googleLoginBonusPlatform: trackingPlatform,
+                        } : {}),
+                    },
+                    { merge: true },
+                );
+            }
+
+            const shouldWriteDeviceState = !!deviceBonusRef && (
+                !isWebPlatform ||
+                !!deviceBonusDoc?.exists ||
+                canGiveStarterBonus ||
+                googleLoginBonusToGive > 0
+            );
+            if (shouldWriteDeviceState && deviceBonusRef) {
                 transaction.set(
                     deviceBonusRef,
                     {
-                        deviceId,
+                        deviceId: normalizedDeviceId,
                         deviceCredits,
                         bonusGranted: true,
-                        bonusAmount,
+                        bonusAmount: starterBonusAmount,
                         totalBonusConsumed,
-                        createdAt: deviceBonusDoc.exists
+                        createdAt: deviceBonusDoc?.exists
                             ? (existingData.createdAt ?? admin.firestore.FieldValue.serverTimestamp())
                             : admin.firestore.FieldValue.serverTimestamp(),
                         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                         lastUserId: userId,
+                        ...(googleLoginBonusToGive > 0 ? {
+                            googleLoginBonusGranted: true,
+                            loginBonusGranted: true,
+                            googleLoginBonusClaimedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            googleLoginBonusClaimedByUid: userId,
+                            googleLoginBonusClaimedByEmail: googleTrackingEmail,
+                        } : {}),
+                    },
+                    { merge: true },
+                );
+            }
+
+            if (googleLoginBonusToGive > 0) {
+                googleLoginCredits = Math.max(googleLoginCredits, googleLoginBonusToGive);
+
+                transaction.set(
+                    userRef,
+                    {
+                        googleLoginCredits,
+                        googleLoginBonusGranted: true,
+                        googleLoginBonusDate: admin.firestore.FieldValue.serverTimestamp(),
                     },
                     { merge: true },
                 );
 
-                // Unified credit history (preferred by UI)
-                // Only write when starter credits are granted now.
-                if (canGiveBonus) {
-                    const suffix = deviceId.length >= 6 ? deviceId.slice(-6) : deviceId;
-                    const txRef = userRef.collection('credit_transactions').doc(`starter_${deviceId}`);
-                    transaction.set(txRef, {
-                        type: 'add',
-                        amount: bonusAmount,
-                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-                        source: 'starter',
-                        deviceIdSuffix: suffix,
-                    }, { merge: true });
-                }
+                const creditTxRef = userRef.collection('credit_transactions').doc();
+                transaction.set(creditTxRef, {
+                    type: 'add',
+                    amount: googleLoginBonusToGive,
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    source: 'google_login_bonus',
+                    creditType: 'google_login',
+                    platform: resolvedPlatform || 'unknown',
+                });
+            }
 
-                const totalCredits = (purchasedCredits ?? 0) + deviceCredits;
-                return {
-                    success: true,
-                    message: canGiveBonus
-                        ? 'Başlangıç kredisi verildi.'
-                        : 'Cihaz kredisi hazır.',
-                    deviceCredits,
-                    purchasedCredits,
-                    totalCredits,
-                    bonusAmount: canGiveBonus ? bonusAmount : 0,
-                };
+            const totalCredits = purchasedCredits + googleLoginCredits + deviceCredits;
+            const baseMessage = canGiveStarterBonus
+                ? 'Başlangıç kredisi verildi.'
+                : ((isWebPlatform || isDesktopPlatform) ? 'Hesap kredisi hazır.' : 'Cihaz kredisi hazır.');
+
+            return {
+                success: true,
+                message: googleLoginBonusToGive > 0
+                    ? `${baseMessage} Google oturum açma bonusu eklendi!`
+                    : baseMessage,
+                deviceCredits,
+                purchasedCredits,
+                googleLoginCredits,
+                totalCredits,
+                bonusAmount: (canGiveStarterBonus ? starterBonusAmount : 0) + googleLoginBonusToGive,
+            };
         });
 
         logger.info('giveStarterCredits: success', {
@@ -185,3 +348,6 @@ export const giveStarterCredits = onCall<StarterCreditsData>(async (request) => 
         throw e;
     }
 });
+
+// force redeploy
+// test change

@@ -11,7 +11,7 @@ interface TransferDeviceCreditsData {
  *
  * This prevents client-side tampering with credit amounts.
  */
-export const transferDeviceCreditsToGoogleAccount = onCall<TransferDeviceCreditsData>(async (request) => {
+export const transferDeviceCreditsToGoogleAccount = onCall<TransferDeviceCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
   const { data, auth } = request;
 
   if (!auth) {
@@ -89,17 +89,30 @@ export const transferDeviceCreditsToGoogleAccount = onCall<TransferDeviceCredits
       { merge: true },
     );
 
-    // Best-effort: decrement `credits` if present; always zero-out purchasedCredits.
-    tx.set(
-      sourceRef,
-      {
-        credits: admin.firestore.FieldValue.increment(-purchasedCredits),
-        purchasedCredits: 0,
-        transferredTo: targetUserId,
-        transferredAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+      // google_users koleksiyonunu da eşzamanlı olarak güncelle
+      const googleUserRef = db.collection('google_users').doc(targetUserId);
+      tx.set(
+        googleUserRef,
+        {
+          credits: increment,
+          purchasedCredits: increment,
+          transferredFrom: deviceId,
+          transferredAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      // Best-effort: decrement credits if present; always zero-out purchasedCredits.
+      tx.set(
+        sourceRef,
+        {
+          credits: admin.firestore.FieldValue.increment(-purchasedCredits),
+          purchasedCredits: 0,
+          transferredTo: targetUserId,
+          transferredAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
 
     // Optional audit record
     const auditRef = db.collection('credit_transfers').doc();
@@ -115,3 +128,5 @@ export const transferDeviceCreditsToGoogleAccount = onCall<TransferDeviceCredits
     return { success: true, transferred: purchasedCredits, newCredits: targetCredits + purchasedCredits };
   });
 });
+
+// force redeploy
