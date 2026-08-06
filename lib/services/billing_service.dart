@@ -462,6 +462,7 @@ class BillingService extends ChangeNotifier {
   }
 
   void _recomputeTotalCredits() {
+    // Desktop cannot spend device/bonus buckets (no rewarded ads). Paid credits only.
     final effectiveDeviceCredits = _isDesktopPlatform ? 0 : _deviceCredits;
     _userCredits = _purchasedCredits + effectiveDeviceCredits;
   }
@@ -558,7 +559,7 @@ class BillingService extends ChangeNotifier {
         if (Platform.isAndroid) return 'android';
         if (Platform.isIOS) return 'ios';
         if (Platform.isWindows) return 'windows';
-        if (Platform.isMacOS) return 'mac';
+        if (Platform.isMacOS) return 'macos';
         if (Platform.isLinux) return 'linux';
         return Platform.operatingSystem.toLowerCase();
       }
@@ -743,11 +744,15 @@ class BillingService extends ChangeNotifier {
     if (_auth.currentUser == null) return;
 
     if (_isDesktopPlatform) {
-      // Desktop doesn't use device-based credits, but it CAN receive account-based login bonuses.
+      // Desktop does not spend bonus buckets, but login/purchase bonuses may still be granted server-side.
       try {
         final data = await _callCloudFunction('giveStarterCredits', {
           'deviceId': _deviceId ?? 'desktop_client',
-          'platform': 'windows',
+          'platform': Platform.isWindows
+              ? 'windows'
+              : (Platform.isMacOS
+                  ? 'macos'
+                  : (Platform.isLinux ? 'linux' : 'windows')),
         });
 
         if (data.containsKey('purchasedCredits')) {

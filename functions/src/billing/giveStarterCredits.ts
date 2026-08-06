@@ -2,6 +2,11 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from 'firebase-admin';
 import { meetsMinimumVersion, shouldUseV160ClientRules } from '../referral/referralUtils';
+import {
+    isFreeRewardsRestricted,
+    restrictedReason,
+    RESTRICTED_STARTER_BONUS,
+} from './regionPolicy';
 
 const MOBILE_STARTER_BONUS_LEGACY = 5;
 const MOBILE_STARTER_BONUS_V160 = 2;
@@ -80,16 +85,26 @@ interface StarterCreditsData {
     deviceId?: string;
     platform?: string;
     appVersion?: string;
+    timeZoneOffsetMinutes?: number;
+    languageCodes?: string[];
 }
 
 export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
 
-    const { deviceId, platform, appVersion } = request.data;
+    const { deviceId, platform, appVersion, timeZoneOffsetMinutes, languageCodes } = request.data;
     const resolvedPlatform = String(platform ?? '').trim().toLowerCase();
     const isMobilePlatform = resolvedPlatform === 'android' || resolvedPlatform === 'ios';
     const isWebPlatform = resolvedPlatform === 'web';
     const isDesktopPlatform = DESKTOP_PLATFORMS.has(resolvedPlatform);
     const normalizedDeviceId = String(deviceId ?? '').trim();
+    const freeRewardsRestricted = isFreeRewardsRestricted({
+        languageCodes,
+        timeZoneOffsetMinutes,
+    });
+    const freeRewardsRestrictedReason = restrictedReason({
+        languageCodes,
+        timeZoneOffsetMinutes,
+    });
 
     // NOTE: Starter bonus is device-based and must not require Google sign-in.
     // However, we still require Firebase Auth (anonymous is OK) to reduce abuse
@@ -148,9 +163,11 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 appVersion,
                 platform: resolvedPlatform,
             });
-            const mobileStarterBonus = useV160StarterBonus
-                ? MOBILE_STARTER_BONUS_V160
-                : MOBILE_STARTER_BONUS_LEGACY;
+            const mobileStarterBonus = freeRewardsRestricted
+                ? RESTRICTED_STARTER_BONUS
+                : (useV160StarterBonus
+                    ? MOBILE_STARTER_BONUS_V160
+                    : MOBILE_STARTER_BONUS_LEGACY);
             const starterBonusAmount = isMobilePlatform ? mobileStarterBonus : 0;
             const shouldEnforceStarterCreditIntegrity = meetsMinimumVersion(
                 appVersion,
@@ -170,6 +187,17 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             const existingData = deviceBonusDoc?.exists ? (deviceBonusDoc.data() ?? {}) : {};
             const legacyBonus = Number(existingData.bonusCredits ?? 0);
             let deviceCredits = Number(existingData.deviceCredits ?? 0);
+            const isAdRewardOnlyInit = existingData.adRewardOnlyInit === true;
+            // Existing grants keep their historical cap so we don't claw back
+            // already-issued free device credits when region policy lowers the starter amount.
+            const historicalBonusAmount = Number(existingData.bonusAmount ?? NaN);
+            const starterCapForClamp =
+                deviceBonusDoc?.exists &&
+                !isAdRewardOnlyInit &&
+                Number.isFinite(historicalBonusAmount) &&
+                historicalBonusAmount > 0
+                    ? Math.max(starterBonusAmount, historicalBonusAmount)
+                    : starterBonusAmount;
 
             const hasTrackingFields =
                 Object.prototype.hasOwnProperty.call(existingData, 'deviceCredits') ||
@@ -181,7 +209,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             // initialize remaining bonus to full amount once so users don't lose credits
             // on schema change. Lifetime cap is still enforced by totalBonusConsumed.
             if (deviceBonusDoc?.exists && !hasTrackingFields) {
-                deviceCredits = starterBonusAmount;
+                deviceCredits = starterCapForClamp;
             }
 
             // Track total bonus consumption per device to prevent any form of top-up.
@@ -192,8 +220,8 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 } else {
                     // Infer best-effort from remaining deviceCredits.
                     const inferredRemaining = Number.isFinite(deviceCredits) ? deviceCredits : 0;
-                    const clampedRemaining = Math.max(0, Math.min(starterBonusAmount, inferredRemaining));
-                    totalBonusConsumed = Math.max(0, starterBonusAmount - clampedRemaining);
+                    const clampedRemaining = Math.max(0, Math.min(starterCapForClamp, inferredRemaining));
+                    totalBonusConsumed = Math.max(0, starterCapForClamp - clampedRemaining);
                 }
             }
 
@@ -206,12 +234,10 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 }
             }
 
-            // Clamp to remaining allowed bonus (starterBonusAmount - totalBonusConsumed)
-            const remainingAllowed = Math.max(0, starterBonusAmount - totalBonusConsumed);
+            // Clamp to remaining allowed bonus (starterCapForClamp - totalBonusConsumed)
+            const remainingAllowed = Math.max(0, starterCapForClamp - totalBonusConsumed);
             if (!Number.isFinite(deviceCredits) || deviceCredits < 0) deviceCredits = 0;
             deviceCredits = Math.min(deviceCredits, remainingAllowed);
-
-            const isAdRewardOnlyInit = existingData.adRewardOnlyInit === true;
 
             const canGiveStarterBonus =
                 starterBonusAmount > 0 &&
@@ -247,7 +273,10 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 googleLoginCredits = Number.isFinite(Number(userData.googleLoginCredits)) ? Number(userData.googleLoginCredits) : 0;
             }
 
-            const googleLoginBonusToGive = trackingRef && !alreadyHasLoginBonus && !deviceAlreadyHasLoginBonus
+            const googleLoginBonusToGive = !freeRewardsRestricted &&
+                trackingRef &&
+                !alreadyHasLoginBonus &&
+                !deviceAlreadyHasLoginBonus
                 ? GOOGLE_LOGIN_BONUS
                 : 0;
 
@@ -293,7 +322,9 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                     deviceId: normalizedDeviceId,
                     deviceCredits,
                     bonusGranted: true,
-                    bonusAmount: starterBonusAmount,
+                    bonusAmount: canGiveStarterBonus
+                        ? starterBonusAmount
+                        : starterCapForClamp,
                     totalBonusConsumed,
                     createdAt: deviceBonusDoc?.exists
                         ? (existingData.createdAt ?? admin.firestore.FieldValue.serverTimestamp())
@@ -342,6 +373,18 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 });
             }
 
+            if (freeRewardsRestricted) {
+                transaction.set(
+                    userRef,
+                    {
+                        freeRewardsRestricted: true,
+                        freeRewardsRestrictedReason: freeRewardsRestrictedReason ?? 'RESTRICTED',
+                        freeRewardsRestrictedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                    { merge: true },
+                );
+            }
+
             const totalCredits = purchasedCredits + googleLoginCredits + deviceCredits;
             const baseMessage = starterBonusBlockedOnRootedDevice
                 ? 'Cihaz bütünlüğü doğrulanamadığı için başlangıç kredisi verilmedi.'
@@ -375,6 +418,8 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             totalCredits: payload.totalCredits,
             bonusAmount: payload.bonusAmount,
             starterBonusBlockedReason: payload.starterBonusBlockedReason ?? null,
+            freeRewardsRestricted,
+            freeRewardsRestrictedReason,
         });
 
         return payload;

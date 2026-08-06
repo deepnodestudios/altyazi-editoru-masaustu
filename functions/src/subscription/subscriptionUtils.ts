@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { GoogleAuth } from 'google-auth-library';
+import { shouldGrantPurchaseBonus } from '../referral/referralUtils';
 
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
 
@@ -264,6 +265,7 @@ export async function applySubscriptionRenewal(args: {
   autoRenewEnabled: boolean | null;
   linkedPurchaseToken: string | null;
   cancellationReason: SubscriptionCancellationReason;
+  appVersion?: string | null;
 }): Promise<{ alreadyProcessed: boolean; credits: number; tier: string }> {
   const {
     db,
@@ -278,6 +280,7 @@ export async function applySubscriptionRenewal(args: {
     autoRenewEnabled,
     linkedPurchaseToken,
     cancellationReason,
+    appVersion,
   } = args;
   const canonicalProductId = normalizeSubscriptionProductId(productId);
   const product = SUBSCRIPTION_PRODUCTS[canonicalProductId];
@@ -338,6 +341,11 @@ export async function applySubscriptionRenewal(args: {
         : (normalizedSubscriptionBucket + product.credits);
       const newExtraBucket = normalizedExtraBucket;
       const newPurchasedCredits = Math.max(0, newSubscriptionBucket + newExtraBucket);
+      const grantPurchaseBonus = shouldGrantPurchaseBonus(appVersion);
+      const purchaseBonusAmount = grantPurchaseBonus
+        ? Math.max(1, Math.floor(product.credits * 0.10))
+        : 0;
+      const currentFreeCredits = Number(userData.freeCredits ?? 0);
 
       tx.set(userRef, {
         email,
@@ -353,6 +361,9 @@ export async function applySubscriptionRenewal(args: {
           ? admin.firestore.Timestamp.fromMillis(expiryTimeMillis)
           : admin.firestore.FieldValue.serverTimestamp(),
         isPaidUser: true,
+        ...(purchaseBonusAmount > 0
+          ? { freeCredits: currentFreeCredits + purchaseBonusAmount }
+          : {}),
       }, { merge: true });
 
       const txLogRef = userRef.collection('credit_transactions').doc();
@@ -367,6 +378,23 @@ export async function applySubscriptionRenewal(args: {
         orderId,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      if (purchaseBonusAmount > 0) {
+        const purchaseBonusTxRef = userRef
+          .collection('credit_transactions')
+          .doc(`${orderId || purchaseToken}_purchase_bonus`);
+        tx.set(purchaseBonusTxRef, {
+          type: 'add',
+          amount: purchaseBonusAmount,
+          reason: 'purchase_bonus',
+          source: 'purchase_bonus',
+          creditType: 'bonus',
+          productId,
+          tier: product.tier,
+          orderId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     tx.set(subscriptionRef, {

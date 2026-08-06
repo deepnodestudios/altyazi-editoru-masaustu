@@ -36,6 +36,11 @@ export const monthlyGoogleBonus = onSchedule(
 
       for (const user of googleUsers) {
         const userRef = db.collection('users').doc(user.uid);
+        const userDoc = await userRef.get();
+        if (userDoc.exists && userDoc.data()?.freeRewardsRestricted === true) {
+          continue;
+        }
+
         const bonusRef = db.collection('monthly_bonuses').doc(`${user.uid}_${monthKey}`);
         const bonusDoc = await bonusRef.get();
         if (bonusDoc.exists) continue;

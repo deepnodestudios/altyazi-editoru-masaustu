@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { createHash } from 'crypto';
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
+import { shouldGrantPurchaseBonus } from '../referral/referralUtils';
 
 // UYGULAMA PAKET ADI (Android Manifest'teki applicationId)
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
@@ -15,6 +16,7 @@ interface AddCreditsData {
   productId: string;
   purchaseToken: string;
   trackAsPurchased?: boolean;
+  appVersion?: string;
 }
 
 interface PurchaseAuditBase {
@@ -245,6 +247,8 @@ export const addCredits = onCall<AddCreditsData>({
   const purchaseId = normalizeOptionalString(data.purchaseId);
   const productId = normalizeOptionalString(data.productId);
   const purchaseToken = normalizeOptionalString(data.purchaseToken);
+  const appVersion = normalizeOptionalString(data.appVersion);
+  const grantPurchaseBonus = shouldGrantPurchaseBonus(appVersion);
   const resolvedEmail = await resolvePurchaseEmail({
     uid: auth.uid,
     token: auth.token as Record<string, any>,
@@ -373,6 +377,10 @@ export const addCredits = onCall<AddCreditsData>({
 
       const newExtraPurchasedCredits = normalizedExtraBucket + amount;
       const newPurchasedCredits = newExtraPurchasedCredits + normalizedSubscriptionBucket;
+      const purchaseBonusAmount = grantPurchaseBonus
+        ? Math.max(1, Math.floor(amount * 0.10))
+        : 0;
+      const currentFreeCredits = Number(userData.freeCredits ?? 0);
 
       // Purchase kaydı oluştur
       transaction.set(purchaseRef, {
@@ -410,6 +418,23 @@ export const addCredits = onCall<AddCreditsData>({
         platform: 'android',
       }, { merge: true });
 
+      if (purchaseBonusAmount > 0) {
+        const purchaseBonusTxRef = userRef
+          .collection('credit_transactions')
+          .doc(`${purchaseRecordId}_purchase_bonus`);
+        transaction.set(purchaseBonusTxRef, {
+          type: 'add',
+          amount: purchaseBonusAmount,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          source: 'purchase_bonus',
+          reason: 'purchase_bonus',
+          purchaseId: purchaseId ?? purchaseRecordId,
+          purchaseRecordId,
+          productId,
+          platform: 'android',
+        }, { merge: true });
+      }
+
       // Kullanıcı kredilerini güncelle
       // `credits` is kept as an alias of `purchasedCredits` for backwards compatibility.
       transaction.set(userRef, {
@@ -418,6 +443,9 @@ export const addCredits = onCall<AddCreditsData>({
         purchasedCredits: newPurchasedCredits,  // Satın alınan kredileri track et
         extraPurchasedCredits: newExtraPurchasedCredits,
         subscriptionPurchasedCredits: normalizedSubscriptionBucket,
+        ...(purchaseBonusAmount > 0
+          ? { freeCredits: currentFreeCredits + purchaseBonusAmount }
+          : {}),
         lastPurchase: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 

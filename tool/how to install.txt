@@ -1,4 +1,4 @@
-AI Subtitle Translator & Editor - How to Install (Unsigned Build)
+﻿AI Subtitle Translator & Editor - How to Install (Unsigned Build)
 
 EN:
 Why antivirus may warn:
@@ -14,46 +14,46 @@ If antivirus blocks or quarantines the installer/app:
 4) Complete setup and launch the app.
 
 TR:
-Neden antivirüs uyarısı çıkar:
-İmzasız yükleyiciler/uygulamalar, özellikle yeni sürümlerde itibar düşük olduğunda, dosyalar paketli/obfuscate olduğunda veya ikili dosyalar değiştiğinde sezgisel taramalarda şüpheli görünebilir. Bu her zaman zararlı yazılım olduğu anlamına gelmez.
-Antivirüs engeller veya karantinaya alırsa:
-1) Windows Güvenliği > Virüs ve tehdit koruması > Koruma geçmişi bölümünü açın.
-2) Bu kurulum/uygulama kaydını bulun ve Geri yükle / Cihaza izin ver seçin.
-3) Gerekirse kurulum dosyası ve kurulum klasörü için hariç tutma ekleyin.
-4) Kurulumu resmi kaynaktan yeniden indirip tekrar çalıştırın.
+Neden antivirÃ¼s uyarÄ±sÄ± Ã§Ä±kar:
+Ä°mzasÄ±z yÃ¼kleyiciler/uygulamalar, Ã¶zellikle yeni sÃ¼rÃ¼mlerde itibar dÃ¼ÅŸÃ¼k olduÄŸunda, dosyalar paketli/obfuscate olduÄŸunda veya ikili dosyalar deÄŸiÅŸtiÄŸinde sezgisel taramalarda ÅŸÃ¼pheli gÃ¶rÃ¼nebilir. Bu her zaman zararlÄ± yazÄ±lÄ±m olduÄŸu anlamÄ±na gelmez.
+AntivirÃ¼s engeller veya karantinaya alÄ±rsa:
+1) Windows GÃ¼venliÄŸi > VirÃ¼s ve tehdit korumasÄ± > Koruma geÃ§miÅŸi bÃ¶lÃ¼mÃ¼nÃ¼ aÃ§Ä±n.
+2) Bu kurulum/uygulama kaydÄ±nÄ± bulun ve Geri yÃ¼kle / Cihaza izin ver seÃ§in.
+3) Gerekirse kurulum dosyasÄ± ve kurulum klasÃ¶rÃ¼ iÃ§in hariÃ§ tutma ekleyin.
+4) Kurulumu resmi kaynaktan yeniden indirip tekrar Ã§alÄ±ÅŸtÄ±rÄ±n.
 1) Kurulumu resmi kaynaktan indirin.
-2) Windows SmartScreen çıkarsa Daha fazla bilgi > Yine de çalıştır'a tıklayın.
-3) Kuruluma sağ tıklayıp Yönetici olarak çalıştır seçin.
-4) Kurulumu tamamlayın ve uygulamayı açın.
+2) Windows SmartScreen Ã§Ä±karsa Daha fazla bilgi > Yine de Ã§alÄ±ÅŸtÄ±r'a tÄ±klayÄ±n.
+3) Kuruluma saÄŸ tÄ±klayÄ±p YÃ¶netici olarak Ã§alÄ±ÅŸtÄ±r seÃ§in.
+4) Kurulumu tamamlayÄ±n ve uygulamayÄ± aÃ§Ä±n.
 
 FR:
 Pourquoi l'antivirus peut afficher une alerte :
-Les installateurs/applications non signés peuvent paraître suspects pour l'analyse heuristique, surtout après une nouvelle version, lorsque la réputation est faible, que les fichiers sont empaquetés/obfusqués ou que les binaires ont changé. Cela ne signifie pas toujours un malware.
+Les installateurs/applications non signÃ©s peuvent paraÃ®tre suspects pour l'analyse heuristique, surtout aprÃ¨s une nouvelle version, lorsque la rÃ©putation est faible, que les fichiers sont empaquetÃ©s/obfusquÃ©s ou que les binaires ont changÃ©. Cela ne signifie pas toujours un malware.
 Si l'antivirus bloque ou met en quarantaine :
-1) Ouvrez Sécurité Windows > Protection contre les virus et menaces > Historique de protection.
-2) Trouvez l'événement de cet installateur/app et choisissez Restaurer / Autoriser sur l'appareil.
-3) Ajoutez une exclusion pour le fichier d'installation et le dossier d'installation si nécessaire.
-4) Retéléchargez depuis la source officielle puis relancez l'installation.
-1) Téléchargez l'installateur depuis la source officielle.
-2) Si SmartScreen s'affiche, cliquez sur Informations complémentaires > Exécuter quand même.
-3) Clic droit sur l'installateur puis Exécuter en tant qu'administrateur.
+1) Ouvrez SÃ©curitÃ© Windows > Protection contre les virus et menaces > Historique de protection.
+2) Trouvez l'Ã©vÃ©nement de cet installateur/app et choisissez Restaurer / Autoriser sur l'appareil.
+3) Ajoutez une exclusion pour le fichier d'installation et le dossier d'installation si nÃ©cessaire.
+4) RetÃ©lÃ©chargez depuis la source officielle puis relancez l'installation.
+1) TÃ©lÃ©chargez l'installateur depuis la source officielle.
+2) Si SmartScreen s'affiche, cliquez sur Informations complÃ©mentaires > ExÃ©cuter quand mÃªme.
+3) Clic droit sur l'installateur puis ExÃ©cuter en tant qu'administrateur.
 4) Terminez l'installation et lancez l'application.
 
 DE:
 Warum Antivirus warnen kann:
-Unsigneierte Installer/Apps können für heuristische Scanner verdächtig wirken, besonders direkt nach einem Release, bei geringer Reputation, gepackten/obfuskierten Dateien oder geänderten Binärdateien. Das bedeutet nicht automatisch Malware.
-Wenn Antivirus blockiert oder in Quarantäne verschiebt:
-1) Öffne Windows-Sicherheit > Viren- & Bedrohungsschutz > Schutzverlauf.
-2) Suche den Eintrag zu diesem Installer/App und wähle Wiederherstellen / Auf Gerät zulassen.
-3) Füge bei Bedarf Ausnahmen für Installer-Datei und Installationsordner hinzu.
+Unsigneierte Installer/Apps kÃ¶nnen fÃ¼r heuristische Scanner verdÃ¤chtig wirken, besonders direkt nach einem Release, bei geringer Reputation, gepackten/obfuskierten Dateien oder geÃ¤nderten BinÃ¤rdateien. Das bedeutet nicht automatisch Malware.
+Wenn Antivirus blockiert oder in QuarantÃ¤ne verschiebt:
+1) Ã–ffne Windows-Sicherheit > Viren- & Bedrohungsschutz > Schutzverlauf.
+2) Suche den Eintrag zu diesem Installer/App und wÃ¤hle Wiederherstellen / Auf GerÃ¤t zulassen.
+3) FÃ¼ge bei Bedarf Ausnahmen fÃ¼r Installer-Datei und Installationsordner hinzu.
 4) Lade die Datei erneut aus offizieller Quelle und starte die Installation erneut.
 1) Lade den Installer aus der offiziellen Quelle herunter.
-2) Falls SmartScreen erscheint: Weitere Informationen > Trotzdem ausführen.
-3) Rechtsklick auf den Installer > Als Administrator ausführen.
-4) Installation abschließen und App starten.
+2) Falls SmartScreen erscheint: Weitere Informationen > Trotzdem ausfÃ¼hren.
+3) Rechtsklick auf den Installer > Als Administrator ausfÃ¼hren.
+4) Installation abschlieÃŸen und App starten.
 
 IT:
-Perché l'antivirus può mostrare un avviso:
+PerchÃ© l'antivirus puÃ² mostrare un avviso:
 Installer/app non firmati possono sembrare sospetti ai controlli euristici, soprattutto dopo una nuova release, con reputazione bassa, file impacchettati/offuscati o binari modificati. Non significa sempre malware.
 Se l'antivirus blocca o mette in quarantena:
 1) Apri Sicurezza di Windows > Protezione da virus e minacce > Cronologia protezione.
@@ -66,82 +66,82 @@ Se l'antivirus blocca o mette in quarantena:
 4) Completa l'installazione e avvia l'app.
 
 ES:
-Por qué el antivirus puede mostrar una alerta:
-Los instaladores/aplicaciones sin firma pueden parecer sospechosos para el análisis heurístico, especialmente tras una nueva versión, con baja reputación, archivos empaquetados/ofuscados o binarios cambiados. No siempre significa malware.
+Por quÃ© el antivirus puede mostrar una alerta:
+Los instaladores/aplicaciones sin firma pueden parecer sospechosos para el anÃ¡lisis heurÃ­stico, especialmente tras una nueva versiÃ³n, con baja reputaciÃ³n, archivos empaquetados/ofuscados o binarios cambiados. No siempre significa malware.
 Si el antivirus bloquea o pone en cuarentena:
-1) Abre Seguridad de Windows > Protección contra virus y amenazas > Historial de protección.
+1) Abre Seguridad de Windows > ProtecciÃ³n contra virus y amenazas > Historial de protecciÃ³n.
 2) Busca el evento de este instalador/app y elige Restaurar / Permitir en el dispositivo.
-3) Agrega una exclusión para el instalador y la carpeta de instalación si hace falta.
+3) Agrega una exclusiÃ³n para el instalador y la carpeta de instalaciÃ³n si hace falta.
 4) Vuelve a descargar desde la fuente oficial y ejecuta otra vez.
 1) Descarga el instalador desde la fuente oficial.
-2) Si aparece SmartScreen: Más información > Ejecutar de todas formas.
+2) Si aparece SmartScreen: MÃ¡s informaciÃ³n > Ejecutar de todas formas.
 3) Clic derecho en el instalador > Ejecutar como administrador.
-4) Completa la instalación y abre la app.
+4) Completa la instalaciÃ³n y abre la app.
 
 PT:
-Por que o antivírus pode alertar:
-Instaladores/apps sem assinatura podem parecer suspeitos para análise heurística, especialmente após uma nova versão, com baixa reputação, arquivos empacotados/ofuscados ou binários alterados. Isso nem sempre significa malware.
-Se o antivírus bloquear ou colocar em quarentena:
-1) Abra Segurança do Windows > Proteção contra vírus e ameaças > Histórico de proteção.
+Por que o antivÃ­rus pode alertar:
+Instaladores/apps sem assinatura podem parecer suspeitos para anÃ¡lise heurÃ­stica, especialmente apÃ³s uma nova versÃ£o, com baixa reputaÃ§Ã£o, arquivos empacotados/ofuscados ou binÃ¡rios alterados. Isso nem sempre significa malware.
+Se o antivÃ­rus bloquear ou colocar em quarentena:
+1) Abra SeguranÃ§a do Windows > ProteÃ§Ã£o contra vÃ­rus e ameaÃ§as > HistÃ³rico de proteÃ§Ã£o.
 2) Encontre o evento deste instalador/app e escolha Restaurar / Permitir no dispositivo.
-3) Adicione exclusão para o arquivo instalador e pasta de instalação, se necessário.
+3) Adicione exclusÃ£o para o arquivo instalador e pasta de instalaÃ§Ã£o, se necessÃ¡rio.
 4) Baixe novamente da fonte oficial e execute outra vez.
 1) Baixe o instalador da fonte oficial.
-2) Se o SmartScreen aparecer: Mais informações > Executar assim mesmo.
-3) Clique com o botão direito no instalador > Executar como administrador.
-4) Conclua a instalação e inicie o app.
+2) Se o SmartScreen aparecer: Mais informaÃ§Ãµes > Executar assim mesmo.
+3) Clique com o botÃ£o direito no instalador > Executar como administrador.
+4) Conclua a instalaÃ§Ã£o e inicie o app.
 
 RU:
-Почему антивирус может предупреждать:
-Неподписанные установщики/приложения могут выглядеть подозрительно для эвристики, особенно сразу после релиза, при низкой репутации, упаковке/обфускации или изменении бинарников. Это не всегда означает вредоносное ПО.
-Если антивирус блокирует или помещает в карантин:
-1) Откройте Безопасность Windows > Защита от вирусов и угроз > Журнал защиты.
-2) Найдите событие для этого установщика/приложения и выберите Восстановить / Разрешить на устройстве.
-3) При необходимости добавьте исключение для файла установщика и папки установки.
-4) Скачайте снова из официального источника и повторите запуск.
-1) Скачайте установщик из официального источника.
-2) Если появится SmartScreen: Дополнительно > Выполнить в любом случае.
-3) Нажмите правой кнопкой по установщику > Запуск от имени администратора.
-4) Завершите установку и запустите приложение.
+ĞŸĞ¾Ñ‡ĞµĞ¼Ñƒ Ğ°Ğ½Ñ‚Ğ¸Ğ²Ğ¸Ñ€ÑƒÑ Ğ¼Ğ¾Ğ¶ĞµÑ‚ Ğ¿Ñ€ĞµĞ´ÑƒĞ¿Ñ€ĞµĞ¶Ğ´Ğ°Ñ‚ÑŒ:
+ĞĞµĞ¿Ğ¾Ğ´Ğ¿Ğ¸ÑĞ°Ğ½Ğ½Ñ‹Ğµ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ñ‰Ğ¸ĞºĞ¸/Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ñ Ğ¼Ğ¾Ğ³ÑƒÑ‚ Ğ²Ñ‹Ğ³Ğ»ÑĞ´ĞµÑ‚ÑŒ Ğ¿Ğ¾Ğ´Ğ¾Ğ·Ñ€Ğ¸Ñ‚ĞµĞ»ÑŒĞ½Ğ¾ Ğ´Ğ»Ñ ÑĞ²Ñ€Ğ¸ÑÑ‚Ğ¸ĞºĞ¸, Ğ¾ÑĞ¾Ğ±ĞµĞ½Ğ½Ğ¾ ÑÑ€Ğ°Ğ·Ñƒ Ğ¿Ğ¾ÑĞ»Ğµ Ñ€ĞµĞ»Ğ¸Ğ·Ğ°, Ğ¿Ñ€Ğ¸ Ğ½Ğ¸Ğ·ĞºĞ¾Ğ¹ Ñ€ĞµĞ¿ÑƒÑ‚Ğ°Ñ†Ğ¸Ğ¸, ÑƒĞ¿Ğ°ĞºĞ¾Ğ²ĞºĞµ/Ğ¾Ğ±Ñ„ÑƒÑĞºĞ°Ñ†Ğ¸Ğ¸ Ğ¸Ğ»Ğ¸ Ğ¸Ğ·Ğ¼ĞµĞ½ĞµĞ½Ğ¸Ğ¸ Ğ±Ğ¸Ğ½Ğ°Ñ€Ğ½Ğ¸ĞºĞ¾Ğ². Ğ­Ñ‚Ğ¾ Ğ½Ğµ Ğ²ÑĞµĞ³Ğ´Ğ° Ğ¾Ğ·Ğ½Ğ°Ñ‡Ğ°ĞµÑ‚ Ğ²Ñ€ĞµĞ´Ğ¾Ğ½Ğ¾ÑĞ½Ğ¾Ğµ ĞŸĞ.
+Ğ•ÑĞ»Ğ¸ Ğ°Ğ½Ñ‚Ğ¸Ğ²Ğ¸Ñ€ÑƒÑ Ğ±Ğ»Ğ¾ĞºĞ¸Ñ€ÑƒĞµÑ‚ Ğ¸Ğ»Ğ¸ Ğ¿Ğ¾Ğ¼ĞµÑ‰Ğ°ĞµÑ‚ Ğ² ĞºĞ°Ñ€Ğ°Ğ½Ñ‚Ğ¸Ğ½:
+1) ĞÑ‚ĞºÑ€Ğ¾Ğ¹Ñ‚Ğµ Ğ‘ĞµĞ·Ğ¾Ğ¿Ğ°ÑĞ½Ğ¾ÑÑ‚ÑŒ Windows > Ğ—Ğ°Ñ‰Ğ¸Ñ‚Ğ° Ğ¾Ñ‚ Ğ²Ğ¸Ñ€ÑƒÑĞ¾Ğ² Ğ¸ ÑƒĞ³Ñ€Ğ¾Ğ· > Ğ–ÑƒÑ€Ğ½Ğ°Ğ» Ğ·Ğ°Ñ‰Ğ¸Ñ‚Ñ‹.
+2) ĞĞ°Ğ¹Ğ´Ğ¸Ñ‚Ğµ ÑĞ¾Ğ±Ñ‹Ñ‚Ğ¸Ğµ Ğ´Ğ»Ñ ÑÑ‚Ğ¾Ğ³Ğ¾ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ñ‰Ğ¸ĞºĞ°/Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ñ Ğ¸ Ğ²Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ’Ğ¾ÑÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ¸Ñ‚ÑŒ / Ğ Ğ°Ğ·Ñ€ĞµÑˆĞ¸Ñ‚ÑŒ Ğ½Ğ° ÑƒÑÑ‚Ñ€Ğ¾Ğ¹ÑÑ‚Ğ²Ğµ.
+3) ĞŸÑ€Ğ¸ Ğ½ĞµĞ¾Ğ±Ñ…Ğ¾Ğ´Ğ¸Ğ¼Ğ¾ÑÑ‚Ğ¸ Ğ´Ğ¾Ğ±Ğ°Ğ²ÑŒÑ‚Ğµ Ğ¸ÑĞºĞ»ÑÑ‡ĞµĞ½Ğ¸Ğµ Ğ´Ğ»Ñ Ñ„Ğ°Ğ¹Ğ»Ğ° ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ñ‰Ğ¸ĞºĞ° Ğ¸ Ğ¿Ğ°Ğ¿ĞºĞ¸ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²ĞºĞ¸.
+4) Ğ¡ĞºĞ°Ñ‡Ğ°Ğ¹Ñ‚Ğµ ÑĞ½Ğ¾Ğ²Ğ° Ğ¸Ğ· Ğ¾Ñ„Ğ¸Ñ†Ğ¸Ğ°Ğ»ÑŒĞ½Ğ¾Ğ³Ğ¾ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸ĞºĞ° Ğ¸ Ğ¿Ğ¾Ğ²Ñ‚Ğ¾Ñ€Ğ¸Ñ‚Ğµ Ğ·Ğ°Ğ¿ÑƒÑĞº.
+1) Ğ¡ĞºĞ°Ñ‡Ğ°Ğ¹Ñ‚Ğµ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ñ‰Ğ¸Ğº Ğ¸Ğ· Ğ¾Ñ„Ğ¸Ñ†Ğ¸Ğ°Ğ»ÑŒĞ½Ğ¾Ğ³Ğ¾ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸ĞºĞ°.
+2) Ğ•ÑĞ»Ğ¸ Ğ¿Ğ¾ÑĞ²Ğ¸Ñ‚ÑÑ SmartScreen: Ğ”Ğ¾Ğ¿Ğ¾Ğ»Ğ½Ğ¸Ñ‚ĞµĞ»ÑŒĞ½Ğ¾ > Ğ’Ñ‹Ğ¿Ğ¾Ğ»Ğ½Ğ¸Ñ‚ÑŒ Ğ² Ğ»ÑĞ±Ğ¾Ğ¼ ÑĞ»ÑƒÑ‡Ğ°Ğµ.
+3) ĞĞ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Ğ¿Ñ€Ğ°Ğ²Ğ¾Ğ¹ ĞºĞ½Ğ¾Ğ¿ĞºĞ¾Ğ¹ Ğ¿Ğ¾ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ñ‰Ğ¸ĞºÑƒ > Ğ—Ğ°Ğ¿ÑƒÑĞº Ğ¾Ñ‚ Ğ¸Ğ¼ĞµĞ½Ğ¸ Ğ°Ğ´Ğ¼Ğ¸Ğ½Ğ¸ÑÑ‚Ñ€Ğ°Ñ‚Ğ¾Ñ€Ğ°.
+4) Ğ—Ğ°Ğ²ĞµÑ€ÑˆĞ¸Ñ‚Ğµ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²ĞºÑƒ Ğ¸ Ğ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ğµ.
 
 EL:
-Γιατί μπορεί να εμφανιστεί προειδοποίηση από antivirus:
-Μη υπογεγραμμένοι εγκαταστάτες/εφαρμογές μπορεί να φαίνονται ύποπτοι σε ευρετικούς ελέγχους, ειδικά μετά από νέα έκδοση, με χαμηλή φήμη, πακεταρισμένα/obfuscated αρχεία ή αλλαγμένα binaries. Αυτό δεν σημαίνει πάντα κακόβουλο λογισμικό.
-Αν το antivirus μπλοκάρει ή βάλει σε καραντίνα:
-1) Άνοιξε Windows Security > Virus & threat protection > Protection history.
-2) Βρες το συμβάν για αυτόν τον installer/app και επίλεξε Restore / Allow on device.
-3) Πρόσθεσε εξαίρεση για το αρχείο installer και τον φάκελο εγκατάστασης αν χρειάζεται.
-4) Κατέβασε ξανά από την επίσημη πηγή και ξανατρέξε την εγκατάσταση.
-1) Κατεβάστε το πρόγραμμα εγκατάστασης από επίσημη πηγή.
-2) Αν εμφανιστεί SmartScreen: Περισσότερες πληροφορίες > Εκτέλεση ούτως ή άλλως.
-3) Δεξί κλικ στο αρχείο εγκατάστασης > Εκτέλεση ως διαχειριστής.
-4) Ολοκληρώστε την εγκατάσταση και ανοίξτε την εφαρμογή.
+Î“Î¹Î±Ï„Î¯ Î¼Ï€Î¿ÏÎµÎ¯ Î½Î± ÎµÎ¼Ï†Î±Î½Î¹ÏƒÏ„ÎµÎ¯ Ï€ÏÎ¿ÎµÎ¹Î´Î¿Ï€Î¿Î¯Î·ÏƒÎ· Î±Ï€ÏŒ antivirus:
+ÎœÎ· Ï…Ï€Î¿Î³ÎµÎ³ÏÎ±Î¼Î¼Î­Î½Î¿Î¹ ÎµÎ³ÎºÎ±Ï„Î±ÏƒÏ„Î¬Ï„ÎµÏ‚/ÎµÏ†Î±ÏÎ¼Î¿Î³Î­Ï‚ Î¼Ï€Î¿ÏÎµÎ¯ Î½Î± Ï†Î±Î¯Î½Î¿Î½Ï„Î±Î¹ ÏÏ€Î¿Ï€Ï„Î¿Î¹ ÏƒÎµ ÎµÏ…ÏÎµÏ„Î¹ÎºÎ¿ÏÏ‚ ÎµÎ»Î­Î³Ï‡Î¿Ï…Ï‚, ÎµÎ¹Î´Î¹ÎºÎ¬ Î¼ÎµÏ„Î¬ Î±Ï€ÏŒ Î½Î­Î± Î­ÎºÎ´Î¿ÏƒÎ·, Î¼Îµ Ï‡Î±Î¼Î·Î»Î® Ï†Î®Î¼Î·, Ï€Î±ÎºÎµÏ„Î±ÏÎ¹ÏƒÎ¼Î­Î½Î±/obfuscated Î±ÏÏ‡ÎµÎ¯Î± Î® Î±Î»Î»Î±Î³Î¼Î­Î½Î± binaries. Î‘Ï…Ï„ÏŒ Î´ÎµÎ½ ÏƒÎ·Î¼Î±Î¯Î½ÎµÎ¹ Ï€Î¬Î½Ï„Î± ÎºÎ±ÎºÏŒÎ²Î¿Ï…Î»Î¿ Î»Î¿Î³Î¹ÏƒÎ¼Î¹ÎºÏŒ.
+Î‘Î½ Ï„Î¿ antivirus Î¼Ï€Î»Î¿ÎºÎ¬ÏÎµÎ¹ Î® Î²Î¬Î»ÎµÎ¹ ÏƒÎµ ÎºÎ±ÏÎ±Î½Ï„Î¯Î½Î±:
+1) Î†Î½Î¿Î¹Î¾Îµ Windows Security > Virus & threat protection > Protection history.
+2) Î’ÏÎµÏ‚ Ï„Î¿ ÏƒÏ…Î¼Î²Î¬Î½ Î³Î¹Î± Î±Ï…Ï„ÏŒÎ½ Ï„Î¿Î½ installer/app ÎºÎ±Î¹ ÎµÏ€Î¯Î»ÎµÎ¾Îµ Restore / Allow on device.
+3) Î ÏÏŒÏƒÎ¸ÎµÏƒÎµ ÎµÎ¾Î±Î¯ÏÎµÏƒÎ· Î³Î¹Î± Ï„Î¿ Î±ÏÏ‡ÎµÎ¯Î¿ installer ÎºÎ±Î¹ Ï„Î¿Î½ Ï†Î¬ÎºÎµÎ»Î¿ ÎµÎ³ÎºÎ±Ï„Î¬ÏƒÏ„Î±ÏƒÎ·Ï‚ Î±Î½ Ï‡ÏÎµÎ¹Î¬Î¶ÎµÏ„Î±Î¹.
+4) ÎšÎ±Ï„Î­Î²Î±ÏƒÎµ Î¾Î±Î½Î¬ Î±Ï€ÏŒ Ï„Î·Î½ ÎµÏ€Î¯ÏƒÎ·Î¼Î· Ï€Î·Î³Î® ÎºÎ±Î¹ Î¾Î±Î½Î±Ï„ÏÎ­Î¾Îµ Ï„Î·Î½ ÎµÎ³ÎºÎ±Ï„Î¬ÏƒÏ„Î±ÏƒÎ·.
+1) ÎšÎ±Ï„ÎµÎ²Î¬ÏƒÏ„Îµ Ï„Î¿ Ï€ÏÏŒÎ³ÏÎ±Î¼Î¼Î± ÎµÎ³ÎºÎ±Ï„Î¬ÏƒÏ„Î±ÏƒÎ·Ï‚ Î±Ï€ÏŒ ÎµÏ€Î¯ÏƒÎ·Î¼Î· Ï€Î·Î³Î®.
+2) Î‘Î½ ÎµÎ¼Ï†Î±Î½Î¹ÏƒÏ„ÎµÎ¯ SmartScreen: Î ÎµÏÎ¹ÏƒÏƒÏŒÏ„ÎµÏÎµÏ‚ Ï€Î»Î·ÏÎ¿Ï†Î¿ÏÎ¯ÎµÏ‚ > Î•ÎºÏ„Î­Î»ÎµÏƒÎ· Î¿ÏÏ„Ï‰Ï‚ Î® Î¬Î»Î»Ï‰Ï‚.
+3) Î”ÎµÎ¾Î¯ ÎºÎ»Î¹Îº ÏƒÏ„Î¿ Î±ÏÏ‡ÎµÎ¯Î¿ ÎµÎ³ÎºÎ±Ï„Î¬ÏƒÏ„Î±ÏƒÎ·Ï‚ > Î•ÎºÏ„Î­Î»ÎµÏƒÎ· Ï‰Ï‚ Î´Î¹Î±Ï‡ÎµÎ¹ÏÎ¹ÏƒÏ„Î®Ï‚.
+4) ÎŸÎ»Î¿ÎºÎ»Î·ÏÏÏƒÏ„Îµ Ï„Î·Î½ ÎµÎ³ÎºÎ±Ï„Î¬ÏƒÏ„Î±ÏƒÎ· ÎºÎ±Î¹ Î±Î½Î¿Î¯Î¾Ï„Îµ Ï„Î·Î½ ÎµÏ†Î±ÏÎ¼Î¿Î³Î®.
 
 AR:
-لماذا قد يظهر تحذير من مضاد الفيروسات:
-قد تبدو أدوات التثبيت/التطبيقات غير الموقعة مشبوهة للفحص السلوكي، خاصة بعد إصدار جديد أو عند انخفاض السمعة أو عند وجود ضغط/إخفاء للكود أو تغيّر الملفات الثنائية. هذا لا يعني دائماً وجود برمجية خبيثة.
-إذا قام مضاد الفيروسات بالحظر أو الحجر:
-1) افتح Windows Security > Virus & threat protection > Protection history.
-2) ابحث عن حدث هذا المُثبّت/التطبيق واختر Restore / Allow on device.
-3) أضف استثناءً لملف المُثبّت ومجلد التثبيت عند الحاجة.
-4) أعد التنزيل من المصدر الرسمي ثم شغّل التثبيت مرة أخرى.
-1) قم بتنزيل المثبّت من المصدر الرسمي.
-2) إذا ظهرت SmartScreen اختر مزيد من المعلومات ثم تشغيل على أي حال.
-3) اضغط بزر الفأرة الأيمن على المثبّت واختر تشغيل كمسؤول.
-4) أكمل التثبيت ثم شغّل التطبيق.
+Ù„Ù…Ø§Ø°Ø§ Ù‚Ø¯ ÙŠØ¸Ù‡Ø± ØªØ­Ø°ÙŠØ± Ù…Ù† Ù…Ø¶Ø§Ø¯ Ø§Ù„ÙÙŠØ±ÙˆØ³Ø§Øª:
+Ù‚Ø¯ ØªØ¨Ø¯Ùˆ Ø£Ø¯ÙˆØ§Øª Ø§Ù„ØªØ«Ø¨ÙŠØª/Ø§Ù„ØªØ·Ø¨ÙŠÙ‚Ø§Øª ØºÙŠØ± Ø§Ù„Ù…ÙˆÙ‚Ø¹Ø© Ù…Ø´Ø¨ÙˆÙ‡Ø© Ù„Ù„ÙØ­Øµ Ø§Ù„Ø³Ù„ÙˆÙƒÙŠØŒ Ø®Ø§ØµØ© Ø¨Ø¹Ø¯ Ø¥ØµØ¯Ø§Ø± Ø¬Ø¯ÙŠØ¯ Ø£Ùˆ Ø¹Ù†Ø¯ Ø§Ù†Ø®ÙØ§Ø¶ Ø§Ù„Ø³Ù…Ø¹Ø© Ø£Ùˆ Ø¹Ù†Ø¯ ÙˆØ¬ÙˆØ¯ Ø¶ØºØ·/Ø¥Ø®ÙØ§Ø¡ Ù„Ù„ÙƒÙˆØ¯ Ø£Ùˆ ØªØºÙŠÙ‘Ø± Ø§Ù„Ù…Ù„ÙØ§Øª Ø§Ù„Ø«Ù†Ø§Ø¦ÙŠØ©. Ù‡Ø°Ø§ Ù„Ø§ ÙŠØ¹Ù†ÙŠ Ø¯Ø§Ø¦Ù…Ø§Ù‹ ÙˆØ¬ÙˆØ¯ Ø¨Ø±Ù…Ø¬ÙŠØ© Ø®Ø¨ÙŠØ«Ø©.
+Ø¥Ø°Ø§ Ù‚Ø§Ù… Ù…Ø¶Ø§Ø¯ Ø§Ù„ÙÙŠØ±ÙˆØ³Ø§Øª Ø¨Ø§Ù„Ø­Ø¸Ø± Ø£Ùˆ Ø§Ù„Ø­Ø¬Ø±:
+1) Ø§ÙØªØ­ Windows Security > Virus & threat protection > Protection history.
+2) Ø§Ø¨Ø­Ø« Ø¹Ù† Ø­Ø¯Ø« Ù‡Ø°Ø§ Ø§Ù„Ù…ÙØ«Ø¨Ù‘Øª/Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ ÙˆØ§Ø®ØªØ± Restore / Allow on device.
+3) Ø£Ø¶Ù Ø§Ø³ØªØ«Ù†Ø§Ø¡Ù‹ Ù„Ù…Ù„Ù Ø§Ù„Ù…ÙØ«Ø¨Ù‘Øª ÙˆÙ…Ø¬Ù„Ø¯ Ø§Ù„ØªØ«Ø¨ÙŠØª Ø¹Ù†Ø¯ Ø§Ù„Ø­Ø§Ø¬Ø©.
+4) Ø£Ø¹Ø¯ Ø§Ù„ØªÙ†Ø²ÙŠÙ„ Ù…Ù† Ø§Ù„Ù…ØµØ¯Ø± Ø§Ù„Ø±Ø³Ù…ÙŠ Ø«Ù… Ø´ØºÙ‘Ù„ Ø§Ù„ØªØ«Ø¨ÙŠØª Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.
+1) Ù‚Ù… Ø¨ØªÙ†Ø²ÙŠÙ„ Ø§Ù„Ù…Ø«Ø¨Ù‘Øª Ù…Ù† Ø§Ù„Ù…ØµØ¯Ø± Ø§Ù„Ø±Ø³Ù…ÙŠ.
+2) Ø¥Ø°Ø§ Ø¸Ù‡Ø±Øª SmartScreen Ø§Ø®ØªØ± Ù…Ø²ÙŠØ¯ Ù…Ù† Ø§Ù„Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø«Ù… ØªØ´ØºÙŠÙ„ Ø¹Ù„Ù‰ Ø£ÙŠ Ø­Ø§Ù„.
+3) Ø§Ø¶ØºØ· Ø¨Ø²Ø± Ø§Ù„ÙØ£Ø±Ø© Ø§Ù„Ø£ÙŠÙ…Ù† Ø¹Ù„Ù‰ Ø§Ù„Ù…Ø«Ø¨Ù‘Øª ÙˆØ§Ø®ØªØ± ØªØ´ØºÙŠÙ„ ÙƒÙ…Ø³Ø¤ÙˆÙ„.
+4) Ø£ÙƒÙ…Ù„ Ø§Ù„ØªØ«Ø¨ÙŠØª Ø«Ù… Ø´ØºÙ‘Ù„ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚.
 
 IN:
-एंटीवायरस चेतावनी क्यों दिखा सकता है:
-अनसाइन किए गए इंस्टॉलर/ऐप heuristic स्कैन में संदिग्ध लग सकते हैं, खासकर नई रिलीज़ के बाद, कम प्रतिष्ठा, पैक/obfuscate फाइलें या बदले हुए बाइनरी होने पर। इसका मतलब हमेशा malware नहीं होता।
-अगर एंटीवायरस ब्लॉक/क्वारंटीन करे:
-1) Windows Security > Virus & threat protection > Protection history खोलें।
-2) इस इंस्टॉलर/ऐप की एंट्री ढूंढें और Restore / Allow on device चुनें।
-3) ज़रूरत हो तो इंस्टॉलर फ़ाइल और इंस्टॉल फ़ोल्डर के लिए exclusion जोड़ें।
-4) आधिकारिक स्रोत से फिर डाउनलोड करके दोबारा चलाएँ।
-1) इंस्टॉलर आधिकारिक स्रोत से डाउनलोड करें।
-2) यदि SmartScreen दिखे तो More info > Run anyway चुनें।
-3) इंस्टॉलर पर राइट-क्लिक करके Run as administrator चुनें।
-4) इंस्टॉलेशन पूरा करें और ऐप खोलें।
+à¤à¤‚à¤Ÿà¥€à¤µà¤¾à¤¯à¤°à¤¸ à¤šà¥‡à¤¤à¤¾à¤µà¤¨à¥€ à¤•à¥à¤¯à¥‹à¤‚ à¤¦à¤¿à¤–à¤¾ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆ:
+à¤…à¤¨à¤¸à¤¾à¤‡à¤¨ à¤•à¤¿à¤ à¤—à¤ à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¤°/à¤à¤ª heuristic à¤¸à¥à¤•à¥ˆà¤¨ à¤®à¥‡à¤‚ à¤¸à¤‚à¤¦à¤¿à¤—à¥à¤§ à¤²à¤— à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚, à¤–à¤¾à¤¸à¤•à¤° à¤¨à¤ˆ à¤°à¤¿à¤²à¥€à¤œà¤¼ à¤•à¥‡ à¤¬à¤¾à¤¦, à¤•à¤® à¤ªà¥à¤°à¤¤à¤¿à¤·à¥à¤ à¤¾, à¤ªà¥ˆà¤•/obfuscate à¤«à¤¾à¤‡à¤²à¥‡à¤‚ à¤¯à¤¾ à¤¬à¤¦à¤²à¥‡ à¤¹à¥à¤ à¤¬à¤¾à¤‡à¤¨à¤°à¥€ à¤¹à¥‹à¤¨à¥‡ à¤ªà¤°à¥¤ à¤‡à¤¸à¤•à¤¾ à¤®à¤¤à¤²à¤¬ à¤¹à¤®à¥‡à¤¶à¤¾ malware à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤¤à¤¾à¥¤
+à¤…à¤—à¤° à¤à¤‚à¤Ÿà¥€à¤µà¤¾à¤¯à¤°à¤¸ à¤¬à¥à¤²à¥‰à¤•/à¤•à¥à¤µà¤¾à¤°à¤‚à¤Ÿà¥€à¤¨ à¤•à¤°à¥‡:
+1) Windows Security > Virus & threat protection > Protection history à¤–à¥‹à¤²à¥‡à¤‚à¥¤
+2) à¤‡à¤¸ à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¤°/à¤à¤ª à¤•à¥€ à¤à¤‚à¤Ÿà¥à¤°à¥€ à¤¢à¥‚à¤‚à¤¢à¥‡à¤‚ à¤”à¤° Restore / Allow on device à¤šà¥à¤¨à¥‡à¤‚à¥¤
+3) à¤œà¤¼à¤°à¥‚à¤°à¤¤ à¤¹à¥‹ à¤¤à¥‹ à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¤° à¤«à¤¼à¤¾à¤‡à¤² à¤”à¤° à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤² à¤«à¤¼à¥‹à¤²à¥à¤¡à¤° à¤•à¥‡ à¤²à¤¿à¤ exclusion à¤œà¥‹à¤¡à¤¼à¥‡à¤‚à¥¤
+4) à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¸à¥à¤°à¥‹à¤¤ à¤¸à¥‡ à¤«à¤¿à¤° à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤°à¤•à¥‡ à¤¦à¥‹à¤¬à¤¾à¤°à¤¾ à¤šà¤²à¤¾à¤à¤à¥¤
+1) à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¤° à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¸à¥à¤°à¥‹à¤¤ à¤¸à¥‡ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤°à¥‡à¤‚à¥¤
+2) à¤¯à¤¦à¤¿ SmartScreen à¤¦à¤¿à¤–à¥‡ à¤¤à¥‹ More info > Run anyway à¤šà¥à¤¨à¥‡à¤‚à¥¤
+3) à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¤° à¤ªà¤° à¤°à¤¾à¤‡à¤Ÿ-à¤•à¥à¤²à¤¿à¤• à¤•à¤°à¤•à¥‡ Run as administrator à¤šà¥à¤¨à¥‡à¤‚à¥¤
+4) à¤‡à¤‚à¤¸à¥à¤Ÿà¥‰à¤²à¥‡à¤¶à¤¨ à¤ªà¥‚à¤°à¤¾ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤à¤ª à¤–à¥‹à¤²à¥‡à¤‚à¥¤
 
 ID:
 Mengapa antivirus bisa memberi peringatan:
@@ -157,40 +157,40 @@ Jika antivirus memblokir atau mengarantina:
 4) Selesaikan instalasi dan jalankan aplikasi.
 
 CN:
-为什么杀毒软件会报警：
-未签名的安装包/应用在启发式扫描中可能被判定为可疑，尤其是新版本刚发布、信誉尚低、文件经过打包/混淆或二进制发生变化时。这并不一定代表恶意软件。
-如果被杀毒软件拦截或隔离：
-1) 打开 Windows 安全中心 > 病毒和威胁防护 > 保护历史记录。
-2) 找到该安装包/应用的记录，并选择 恢复 / 允许在设备上。
-3) 必要时为安装包文件和安装目录添加排除项。
-4) 从官方来源重新下载后再次运行安装。
-1) 请从官方来源下载安装程序。
-2) 若出现 SmartScreen，请点击 更多信息 > 仍要运行。
-3) 右键安装程序并选择 以管理员身份运行。
-4) 完成安装并启动应用。
+ä¸ºä»€ä¹ˆæ€æ¯’è½¯ä»¶ä¼šæŠ¥è­¦ï¼š
+æœªç­¾åçš„å®‰è£…åŒ…/åº”ç”¨åœ¨å¯å‘å¼æ‰«æä¸­å¯èƒ½è¢«åˆ¤å®šä¸ºå¯ç–‘ï¼Œå°¤å…¶æ˜¯æ–°ç‰ˆæœ¬åˆšå‘å¸ƒã€ä¿¡èª‰å°šä½ã€æ–‡ä»¶ç»è¿‡æ‰“åŒ…/æ··æ·†æˆ–äºŒè¿›åˆ¶å‘ç”Ÿå˜åŒ–æ—¶ã€‚è¿™å¹¶ä¸ä¸€å®šä»£è¡¨æ¶æ„è½¯ä»¶ã€‚
+å¦‚æœè¢«æ€æ¯’è½¯ä»¶æ‹¦æˆªæˆ–éš”ç¦»ï¼š
+1) æ‰“å¼€ Windows å®‰å…¨ä¸­å¿ƒ > ç—…æ¯’å’Œå¨èƒé˜²æŠ¤ > ä¿æŠ¤å†å²è®°å½•ã€‚
+2) æ‰¾åˆ°è¯¥å®‰è£…åŒ…/åº”ç”¨çš„è®°å½•ï¼Œå¹¶é€‰æ‹© æ¢å¤ / å…è®¸åœ¨è®¾å¤‡ä¸Šã€‚
+3) å¿…è¦æ—¶ä¸ºå®‰è£…åŒ…æ–‡ä»¶å’Œå®‰è£…ç›®å½•æ·»åŠ æ’é™¤é¡¹ã€‚
+4) ä»å®˜æ–¹æ¥æºé‡æ–°ä¸‹è½½åå†æ¬¡è¿è¡Œå®‰è£…ã€‚
+1) è¯·ä»å®˜æ–¹æ¥æºä¸‹è½½å®‰è£…ç¨‹åºã€‚
+2) è‹¥å‡ºç° SmartScreenï¼Œè¯·ç‚¹å‡» æ›´å¤šä¿¡æ¯ > ä»è¦è¿è¡Œã€‚
+3) å³é”®å®‰è£…ç¨‹åºå¹¶é€‰æ‹© ä»¥ç®¡ç†å‘˜èº«ä»½è¿è¡Œã€‚
+4) å®Œæˆå®‰è£…å¹¶å¯åŠ¨åº”ç”¨ã€‚
 
 JA:
-ウイルス対策ソフトが警告する理由：
-未署名のインストーラー/アプリは、特に新規リリース直後で評価が低い場合、ファイルのパック/難読化、バイナリ変更がある場合に、ヒューリスティック検出で疑わしいと判定されることがあります。必ずしもマルウェアを意味しません。
-ウイルス対策ソフトによりブロック/隔離された場合：
-1) Windows セキュリティ > ウイルスと脅威の防止 > 保護の履歴 を開きます。
-2) このインストーラー/アプリの項目を見つけ、復元 / デバイスで許可 を選びます。
-3) 必要に応じてインストーラーファイルとインストール先フォルダを除外に追加します。
-4) 公式配布元から再ダウンロードして再実行します。
-1) 公式配布元からインストーラーをダウンロードしてください。
-2) SmartScreen が表示されたら「詳細情報」>「実行」を選択します。
-3) インストーラーを右クリックして「管理者として実行」を選択します。
-4) インストール完了後、アプリを起動します。
+ã‚¦ã‚¤ãƒ«ã‚¹å¯¾ç­–ã‚½ãƒ•ãƒˆãŒè­¦å‘Šã™ã‚‹ç†ç”±ï¼š
+æœªç½²åã®ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼/ã‚¢ãƒ—ãƒªã¯ã€ç‰¹ã«æ–°è¦ãƒªãƒªãƒ¼ã‚¹ç›´å¾Œã§è©•ä¾¡ãŒä½ã„å ´åˆã€ãƒ•ã‚¡ã‚¤ãƒ«ã®ãƒ‘ãƒƒã‚¯/é›£èª­åŒ–ã€ãƒã‚¤ãƒŠãƒªå¤‰æ›´ãŒã‚ã‚‹å ´åˆã«ã€ãƒ’ãƒ¥ãƒ¼ãƒªã‚¹ãƒ†ã‚£ãƒƒã‚¯æ¤œå‡ºã§ç–‘ã‚ã—ã„ã¨åˆ¤å®šã•ã‚Œã‚‹ã“ã¨ãŒã‚ã‚Šã¾ã™ã€‚å¿…ãšã—ã‚‚ãƒãƒ«ã‚¦ã‚§ã‚¢ã‚’æ„å‘³ã—ã¾ã›ã‚“ã€‚
+ã‚¦ã‚¤ãƒ«ã‚¹å¯¾ç­–ã‚½ãƒ•ãƒˆã«ã‚ˆã‚Šãƒ–ãƒ­ãƒƒã‚¯/éš”é›¢ã•ã‚ŒãŸå ´åˆï¼š
+1) Windows ã‚»ã‚­ãƒ¥ãƒªãƒ†ã‚£ > ã‚¦ã‚¤ãƒ«ã‚¹ã¨è„…å¨ã®é˜²æ­¢ > ä¿è­·ã®å±¥æ­´ ã‚’é–‹ãã¾ã™ã€‚
+2) ã“ã®ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼/ã‚¢ãƒ—ãƒªã®é …ç›®ã‚’è¦‹ã¤ã‘ã€å¾©å…ƒ / ãƒ‡ãƒã‚¤ã‚¹ã§è¨±å¯ ã‚’é¸ã³ã¾ã™ã€‚
+3) å¿…è¦ã«å¿œã˜ã¦ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼ãƒ•ã‚¡ã‚¤ãƒ«ã¨ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«å…ˆãƒ•ã‚©ãƒ«ãƒ€ã‚’é™¤å¤–ã«è¿½åŠ ã—ã¾ã™ã€‚
+4) å…¬å¼é…å¸ƒå…ƒã‹ã‚‰å†ãƒ€ã‚¦ãƒ³ãƒ­ãƒ¼ãƒ‰ã—ã¦å†å®Ÿè¡Œã—ã¾ã™ã€‚
+1) å…¬å¼é…å¸ƒå…ƒã‹ã‚‰ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼ã‚’ãƒ€ã‚¦ãƒ³ãƒ­ãƒ¼ãƒ‰ã—ã¦ãã ã•ã„ã€‚
+2) SmartScreen ãŒè¡¨ç¤ºã•ã‚ŒãŸã‚‰ã€Œè©³ç´°æƒ…å ±ã€>ã€Œå®Ÿè¡Œã€ã‚’é¸æŠã—ã¾ã™ã€‚
+3) ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ©ãƒ¼ã‚’å³ã‚¯ãƒªãƒƒã‚¯ã—ã¦ã€Œç®¡ç†è€…ã¨ã—ã¦å®Ÿè¡Œã€ã‚’é¸æŠã—ã¾ã™ã€‚
+4) ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«å®Œäº†å¾Œã€ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã™ã€‚
 
 KO:
-백신 경고가 뜨는 이유:
-서명되지 않은 설치 프로그램/앱은 휴리스틱 검사에서 의심 대상으로 보일 수 있습니다. 특히 신규 배포 직후 평판이 낮거나, 파일이 패키징/난독화되어 있거나, 바이너리가 변경된 경우에 더 자주 발생합니다. 항상 악성코드를 의미하는 것은 아닙니다.
-백신이 차단하거나 격리한 경우:
-1) Windows 보안 > 바이러스 및 위협 방지 > 보호 기록을 엽니다.
-2) 해당 설치 프로그램/앱 항목을 찾아 복원 / 장치에서 허용을 선택합니다.
-3) 필요하면 설치 파일과 설치 폴더를 예외로 추가합니다.
-4) 공식 배포처에서 다시 다운로드 후 재실행합니다.
-1) 공식 배포처에서 설치 파일을 다운로드하세요.
-2) SmartScreen 경고가 나오면 추가 정보 > 실행을 선택하세요.
-3) 설치 파일을 마우스 오른쪽 클릭 후 관리자 권한으로 실행하세요.
-4) 설치를 완료하고 앱을 실행하세요.
+ë°±ì‹  ê²½ê³ ê°€ ëœ¨ëŠ” ì´ìœ :
+ì„œëª…ë˜ì§€ ì•Šì€ ì„¤ì¹˜ í”„ë¡œê·¸ë¨/ì•±ì€ íœ´ë¦¬ìŠ¤í‹± ê²€ì‚¬ì—ì„œ ì˜ì‹¬ ëŒ€ìƒìœ¼ë¡œ ë³´ì¼ ìˆ˜ ìˆìŠµë‹ˆë‹¤. íŠ¹íˆ ì‹ ê·œ ë°°í¬ ì§í›„ í‰íŒì´ ë‚®ê±°ë‚˜, íŒŒì¼ì´ íŒ¨í‚¤ì§•/ë‚œë…í™”ë˜ì–´ ìˆê±°ë‚˜, ë°”ì´ë„ˆë¦¬ê°€ ë³€ê²½ëœ ê²½ìš°ì— ë” ìì£¼ ë°œìƒí•©ë‹ˆë‹¤. í•­ìƒ ì•…ì„±ì½”ë“œë¥¼ ì˜ë¯¸í•˜ëŠ” ê²ƒì€ ì•„ë‹™ë‹ˆë‹¤.
+ë°±ì‹ ì´ ì°¨ë‹¨í•˜ê±°ë‚˜ ê²©ë¦¬í•œ ê²½ìš°:
+1) Windows ë³´ì•ˆ > ë°”ì´ëŸ¬ìŠ¤ ë° ìœ„í˜‘ ë°©ì§€ > ë³´í˜¸ ê¸°ë¡ì„ ì—½ë‹ˆë‹¤.
+2) í•´ë‹¹ ì„¤ì¹˜ í”„ë¡œê·¸ë¨/ì•± í•­ëª©ì„ ì°¾ì•„ ë³µì› / ì¥ì¹˜ì—ì„œ í—ˆìš©ì„ ì„ íƒí•©ë‹ˆë‹¤.
+3) í•„ìš”í•˜ë©´ ì„¤ì¹˜ íŒŒì¼ê³¼ ì„¤ì¹˜ í´ë”ë¥¼ ì˜ˆì™¸ë¡œ ì¶”ê°€í•©ë‹ˆë‹¤.
+4) ê³µì‹ ë°°í¬ì²˜ì—ì„œ ë‹¤ì‹œ ë‹¤ìš´ë¡œë“œ í›„ ì¬ì‹¤í–‰í•©ë‹ˆë‹¤.
+1) ê³µì‹ ë°°í¬ì²˜ì—ì„œ ì„¤ì¹˜ íŒŒì¼ì„ ë‹¤ìš´ë¡œë“œí•˜ì„¸ìš”.
+2) SmartScreen ê²½ê³ ê°€ ë‚˜ì˜¤ë©´ ì¶”ê°€ ì •ë³´ > ì‹¤í–‰ì„ ì„ íƒí•˜ì„¸ìš”.
+3) ì„¤ì¹˜ íŒŒì¼ì„ ë§ˆìš°ìŠ¤ ì˜¤ë¥¸ìª½ í´ë¦­ í›„ ê´€ë¦¬ì ê¶Œí•œìœ¼ë¡œ ì‹¤í–‰í•˜ì„¸ìš”.
+4) ì„¤ì¹˜ë¥¼ ì™„ë£Œí•˜ê³  ì•±ì„ ì‹¤í–‰í•˜ì„¸ìš”.

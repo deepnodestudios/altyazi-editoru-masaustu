@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 import {
+    shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
     shouldUseV163AdRewardRules,
     shouldUseV169DeviceAdRewardRules,
@@ -47,6 +48,8 @@ type PredictCreditUsageArgs = {
     deviceCredits: number;
     isModernClient: boolean;
     preferFreeCreditsFirst?: boolean;
+    platform?: string | null;
+    appVersion?: string | null;
 };
 
 type CreditSummaryArgs = {
@@ -102,6 +105,8 @@ export function predictCreditUsage({
     deviceCredits,
     isModernClient,
     preferFreeCreditsFirst,
+    platform,
+    appVersion,
 }: PredictCreditUsageArgs): CreditUsagePlan {
     let remaining = clampNonNegativeInt(amount);
     let fromPurchased = 0;
@@ -121,6 +126,18 @@ export function predictCreditUsage({
     }
 
     const safePurchasedCredits = clampNonNegativeInt(purchasedCredits);
+
+    // Desktop paid-only spend from v1.7.4+ (older desktop builds keep legacy behavior).
+    if (shouldEnforceDesktopPaidCreditsOnly({ platform, appVersion })) {
+        fromPurchased = Math.min(safePurchasedCredits, remaining);
+        return {
+            fromPurchased,
+            fromAdReward: 0,
+            fromFree: 0,
+            fromGoogleLogin: 0,
+            fromDevice: 0,
+        };
+    }
     const safeAdRewardCredits = clampNonNegativeInt(adRewardCredits);
     const safeFreeCredits = clampNonNegativeInt(freeCredits);
     const safeGoogleLoginCredits = clampNonNegativeInt(googleLoginCredits);
@@ -291,13 +308,23 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
     const effectiveFreeCredits = isModernClient ? freeCredits : 0;
     const effectiveGoogleLoginCredits = isModernClient ? googleLoginCredits : 0;
     const effectiveAdRewardCredits = isAdRewardClient ? adRewardCredits : 0;
+    const paidCreditsOnly = shouldEnforceDesktopPaidCreditsOnly({
+        appVersion,
+        platform: normalizedPlatform,
+    });
+    const effectiveDeviceCredits = paidCreditsOnly ? 0 : deviceCredits;
+    const spendableFreeCredits = paidCreditsOnly ? 0 : effectiveFreeCredits;
+    const spendableGoogleLoginCredits = paidCreditsOnly ? 0 : effectiveGoogleLoginCredits;
+    const spendableAdRewardCredits = paidCreditsOnly ? 0 : effectiveAdRewardCredits;
     return {
-        deviceCredits,
+        deviceCredits: effectiveDeviceCredits,
         purchasedCredits,
-        adRewardCredits: effectiveAdRewardCredits,
-        freeCredits: effectiveFreeCredits,
-        googleLoginCredits: effectiveGoogleLoginCredits,
-        totalCredits: deviceCredits + purchasedCredits + effectiveAdRewardCredits + effectiveFreeCredits + effectiveGoogleLoginCredits,
+        adRewardCredits: spendableAdRewardCredits,
+        freeCredits: spendableFreeCredits,
+        googleLoginCredits: spendableGoogleLoginCredits,
+        totalCredits: paidCreditsOnly
+            ? purchasedCredits
+            : effectiveDeviceCredits + purchasedCredits + spendableAdRewardCredits + spendableFreeCredits + spendableGoogleLoginCredits,
         accessActive,
         isPaidUser,
         hasPaidCredits: isPaidUser || purchasedCredits > 0,
@@ -332,6 +359,10 @@ export async function consumeCreditInternal({
     const fileNameText = (fileName ?? '').trim();
     const targetLanguageText = (targetLanguage ?? '').trim();
     const platformText = normalizePlatform(platform);
+    const paidCreditsOnly = shouldEnforceDesktopPaidCreditsOnly({
+        appVersion,
+        platform: platformText,
+    });
     const isModernClient = shouldUseV160ClientRules({
         appVersion,
         platform: platformText,
@@ -483,7 +514,9 @@ export async function consumeCreditInternal({
             }
         }
 
-        const currentTotal = deviceCredits + purchasedCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0);
+        const currentTotal = paidCreditsOnly
+            ? purchasedCredits
+            : deviceCredits + purchasedCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0);
         if (currentTotal < amount) {
             throw new HttpsError(
                 'failed-precondition',
@@ -499,7 +532,9 @@ export async function consumeCreditInternal({
             googleLoginCredits,
             deviceCredits,
             isModernClient,
-            preferFreeCreditsFirst,
+            preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
+            platform: platformText,
+            appVersion,
         });
         const {
             fromPurchased,
