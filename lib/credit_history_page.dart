@@ -26,88 +26,143 @@ class CreditHistoryPage extends StatelessWidget {
             : null,
         title: AdaptiveText(title, maxLines: 1),
       ),
-      body: const _CreditHistoryBody(),
+      body: const CreditHistoryBody(),
     );
   }
 }
 
-class _CreditHistoryBody extends StatelessWidget {
-  const _CreditHistoryBody();
+class CreditHistoryBody extends StatelessWidget {
+  const CreditHistoryBody({super.key});
 
   String _formatTimestamp(BuildContext context, DateTime? ts) {
     if (ts == null) return '';
     final local = ts.toLocal();
-    final loc = MaterialLocalizations.of(context);
-    final date = loc.formatFullDate(local);
-    final time = loc.formatTimeOfDay(
-      TimeOfDay.fromDateTime(local),
-      alwaysUse24HourFormat: true,
-    );
-    return '$date • $time';
+    final day = _two(local.day);
+    final month = _two(local.month);
+    final year = local.year.toString();
+    final hour = _two(local.hour);
+    final minute = _two(local.minute);
+    return '$day.$month.$year $hour:$minute';
+  }
+
+  String _two(int value) {
+    return value < 10 ? '0$value' : '$value';
   }
 
   String _formatAmount(BuildContext context, CreditHistoryEntry entry) {
     final sign = entry.type == CreditHistoryEntryType.add ? '+' : '-';
-    return '$sign${entry.amount}';
+    return '$sign${entry.amount.abs()}';
+  }
+
+  String? _addSourceLabel(BuildContext context, CreditHistoryEntry entry) {
+    final trans = context.read<ThemeManager>().trans;
+    final source = entry.source?.trim().toLowerCase();
+
+    if (entry.reason?.trim().toLowerCase() == 'monthly_google_bonus') {
+      return trans['credit_source_monthly_bonus'] ?? 'Monthly Bonus';
+    }
+    if (source == 'login_bonus') {
+      return trans['credit_source_login_bonus'] ?? 'Google Login Bonus';
+    }
+    if (source == 'purchase_history' || (source?.contains('purchase') ?? false)) {
+      return trans['credit_source_purchase'] ?? 'Purchase';
+    }
+    if (source?.contains('website') ?? false) {
+      return trans['credit_source_website'] ?? 'Website';
+    }
+
+    return source;
   }
 
   String _titleFor(BuildContext context, CreditHistoryEntry entry) {
     final trans = context.read<ThemeManager>().trans;
 
     if (entry.type == CreditHistoryEntryType.add) {
-      final base = trans['credit_history_added'] ?? 'Kredi eklendi';
-      return base;
+      return trans['credit_history_add'] ?? trans['credit_history_added'] ?? 'Credit added';
     }
 
-    final base = trans['credit_history_spent'] ?? 'Kredi harcandı';
-    return base;
+    return trans['credit_history_spend'] ?? 'Credit spent';
+  }
+
+  String _buildSpendDetail(BuildContext context, CreditHistoryEntry entry) {
+    final detailParts = <String>[];
+
+    final displayFileName = entry.displayFileName;
+    if (displayFileName != null && displayFileName.isNotEmpty) {
+      detailParts.add(displayFileName);
+    } else {
+      final reason = entry.reason?.trim();
+      if (reason == 'cache_hit') {
+        final trans = context.read<ThemeManager>().trans;
+        detailParts.add(trans['credit_history_cache'] ?? trans['credit_history_cache_hit'] ?? 'Cache');
+      } else if (reason != null && reason.isNotEmpty) {
+        const hiddenReasons = {'first_chunk', 'usage', 'unknown'};
+        if (!hiddenReasons.contains(reason)) {
+          detailParts.add(reason);
+        }
+      }
+    }
+
+    final platform = entry.platform?.trim();
+    if (platform != null && platform.isNotEmpty) {
+      detailParts.add(platform);
+    }
+
+    var targetLanguage = entry.targetLanguage?.trim();
+    if (targetLanguage == null || targetLanguage.isEmpty) {
+      targetLanguage = _inferTargetLanguageFromChargeKey(entry.chargeKey);
+    }
+    if (targetLanguage != null && targetLanguage.isNotEmpty) {
+      detailParts.add(targetLanguage.length <= 3
+          ? targetLanguage.toUpperCase()
+          : targetLanguage);
+    }
+
+    return detailParts.join(' • ');
+  }
+
+  String? _inferTargetLanguageFromChargeKey(String? chargeKey) {
+    final key = chargeKey?.trim();
+    if (key == null || key.isEmpty) return null;
+    final m = RegExp(r'^run_\d+_[a-fA-F0-9]{32}_(.+)$').firstMatch(key);
+    if (m == null) return null;
+    final value = (m.group(1) ?? '').trim();
+    if (value.isEmpty) return null;
+    return value;
   }
 
   String? _subtitleFor(BuildContext context, CreditHistoryEntry entry) {
-    final pieces = <String>[];
+    final subtitleParts = <String>[];
+    final trans = context.read<ThemeManager>().trans;
 
-    final ts = _formatTimestamp(context, entry.timestamp);
-    if (ts.isNotEmpty) pieces.add(ts);
+    final dateText = _formatTimestamp(context, entry.timestamp);
+    if (dateText.isNotEmpty) {
+      subtitleParts.add(dateText);
+    }
 
     if (entry.type == CreditHistoryEntryType.spend) {
-      final file = entry.displayFileName;
-      if (file != null && file.isNotEmpty) {
-        pieces.add(file);
-      }
-
-      final platform = entry.platform;
-      if (platform != null && platform.isNotEmpty) {
-        pieces.add(platform);
-      }
-
-      final lang = entry.targetLanguage;
-      if (lang != null && lang.isNotEmpty) {
-        pieces.add(lang);
-      }
-
-      final reason = entry.reason;
-      final hasFile = file != null && file.isNotEmpty;
-      if (!hasFile && reason != null && reason.isNotEmpty) {
-        if (reason.trim().toLowerCase() == 'cache_hit') {
-          final trans = context.read<ThemeManager>().trans;
-          pieces.add(trans['credit_history_cache_hit'] ?? 'Önbellek');
-        } else {
-          pieces.add(reason);
-        }
+      final spendDetails = _buildSpendDetail(context, entry);
+      if (spendDetails.isNotEmpty) {
+        subtitleParts.add(spendDetails);
       }
     } else {
-      final source = entry.source;
-      if (source != null && source.isNotEmpty) {
-        pieces.add(source);
+      final sourceLabel = _addSourceLabel(context, entry);
+      if (sourceLabel != null && sourceLabel.isNotEmpty) {
+        subtitleParts.add(sourceLabel);
       }
-      final productId = entry.productId;
+
+      var productId = entry.productId?.trim().toLowerCase();
       if (productId != null && productId.isNotEmpty) {
-        pieces.add(productId);
+        if (productId.startsWith('credits_')) {
+          subtitleParts.add(trans['credits_pack_generic'] ?? 'Credit Pack');
+        } else {
+          subtitleParts.add(productId);
+        }
       }
     }
 
-    if (pieces.isEmpty) return null;
-    return pieces.join(' • ');
+    if (subtitleParts.isEmpty) return null;
+    return subtitleParts.join('\n');
   }
 
   @override
@@ -186,35 +241,21 @@ class _CreditHistoryBody extends StatelessWidget {
                     isAdd ? Icons.add_circle_outline : Icons.remove_circle_outline,
                     color: amountColor,
                   ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: AdaptiveText(
-                          _titleFor(context, entry),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _formatAmount(context, entry),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: amountColor,
-                        ),
-                      ),
-                    ],
+                  title: Text(
+                    _titleFor(context, entry),
                   ),
                   subtitle: () {
                     final subtitle = _subtitleFor(context, entry);
                     if (subtitle == null || subtitle.isEmpty) return null;
-                    return AdaptiveText(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      minFontSize: 10,
-                    );
+                    return Text(subtitle);
                   }(),
+                  trailing: Text(
+                    _formatAmount(context, entry),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: amountColor,
+                    ),
+                  ),
                 );
               },
             );

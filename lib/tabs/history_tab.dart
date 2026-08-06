@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../app_settings.dart';
+import '../credit_history_page.dart';
 import '../managers/project_manager.dart';
 import '../models/subtitle_block.dart';
 import '../services/subtitle_builder.dart';
@@ -21,9 +22,6 @@ import '../services/subtitle_parser.dart';
 import '../controllers/translation_controller.dart';
 import '../utils/string_utils.dart';
 import '../widgets/cloud_source_sheet.dart';
-import '../widgets/gdrive_picker_sheet.dart';
-import '../widgets/dropbox_picker_sheet.dart';
-import '../widgets/yandex_picker_sheet.dart';
 import '../widgets/batch_file_detail_dialog.dart';
 
 enum SortOption { date, name }
@@ -106,12 +104,15 @@ class HistoryTab extends StatefulWidget {
   State<HistoryTab> createState() => _HistoryTabState();
 }
 
-class _HistoryTabState extends State<HistoryTab> {
+class _HistoryTabState extends State<HistoryTab>
+    with SingleTickerProviderStateMixin {
   static const double _marqueeDragThreshold = 6;
 
   SortOption _sortOption = SortOption.date;
   bool _ascending = false; // Default: Date Descending (Newest first)
   FilterOption _filterOption = FilterOption.all;
+  late final TabController _tabController;
+  int _activeTabIndex = 0;
 
   static String _platformDisplayName(String platform) {
     switch (platform.toLowerCase()) {
@@ -189,6 +190,19 @@ class _HistoryTabState extends State<HistoryTab> {
     return false;
   }
 
+  TranslationProject? _projectAtPoint(
+    Offset globalPoint,
+    List<TranslationProject> visibleProjects,
+  ) {
+    for (final project in visibleProjects) {
+      final rect = _globalRectForKey(_cardKeyForProject(project.id));
+      if (rect != null && rect.contains(globalPoint)) {
+        return project;
+      }
+    }
+    return null;
+  }
+
   Set<String> _projectIdsIntersectingRect(
     Rect selectionRect,
     List<TranslationProject> visibleProjects,
@@ -213,6 +227,15 @@ class _HistoryTabState extends State<HistoryTab> {
     final startedOnCard = _isPointOnAnyProjectCard(event.position, visibleProjects);
     if (startedOnCard && !_isSelectionMode) {
       return;
+    }
+
+    // Seçim modundayken zaten seçili bir karta basılırsa marquee armalanmamalı.
+    // O hareket drag-export gesture'ıdır; marquee devreye girirse seçim bozulur.
+    if (startedOnCard && _isSelectionMode) {
+      final tapped = _projectAtPoint(event.position, visibleProjects);
+      if (tapped != null && _selectedProjectIds.contains(tapped.id)) {
+        return;
+      }
     }
 
     setState(() {
@@ -350,6 +373,8 @@ class _HistoryTabState extends State<HistoryTab> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this)
+      ..addListener(_handleTabChanged);
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -357,8 +382,24 @@ class _HistoryTabState extends State<HistoryTab> {
     });
   }
 
+  void _handleTabChanged() {
+    final nextIndex = _tabController.index;
+    if (_activeTabIndex == nextIndex) return;
+    setState(() {
+      _activeTabIndex = nextIndex;
+      if (_activeTabIndex != 0) {
+        _isSelectionMode = false;
+        _selectedProjectIds.clear();
+        _lastSelectedProjectId = null;
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _tabController
+      ..removeListener(_handleTabChanged)
+      ..dispose();
     _historyListFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
@@ -436,10 +477,45 @@ class _HistoryTabState extends State<HistoryTab> {
         return;
       }
 
+      // Farklı platformdan gelen projelerin bloklarını önceden lazy-load et
+      if (!mounted) return;
+      final settings = context.read<AppSettings>();
+      final needLoad = selectedProjects.where((p) => p.processedBlocks.isEmpty && p.id.isNotEmpty).toList();
+      if (needLoad.isNotEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Text(trans['loading'] ?? 'Yükleniyor...'),
+              ],
+            ),
+            duration: const Duration(seconds: 30),
+          ),
+        );
+        for (final p in needLoad) {
+          await settings.loadProjectBlocksIfNeeded(p.id);
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+
+      // Bloklar yüklendikten sonra güncel proje listesini kullan
+      final resolvedProjects = selectedProjects.map((p) {
+        if (p.processedBlocks.isNotEmpty) return p;
+        return settings.projects.firstWhere((sp) => sp.id == p.id, orElse: () => p);
+      }).toList(growable: false);
+
       final usedNames = <String>{};
       var savedCount = 0;
 
-      for (final project in selectedProjects) {
+      for (final project in resolvedProjects) {
         if (project.processedBlocks.isEmpty) {
           continue;
         }
@@ -516,6 +592,37 @@ class _HistoryTabState extends State<HistoryTab> {
 
   void _shareProject(TranslationProject project) async {
     try {
+      // Farklı platformda tamamlanan projelerin blokları lazy-load ile gelir
+      if (project.processedBlocks.isEmpty && project.id.isNotEmpty) {
+        if (!mounted) return;
+        final settings = context.read<AppSettings>();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Text(settings.trans['loading'] ?? 'Yükleniyor...'),
+              ],
+            ),
+            duration: const Duration(seconds: 15),
+          ),
+        );
+        await settings.loadProjectBlocksIfNeeded(project.id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        final updated = settings.projects.firstWhere(
+          (p) => p.id == project.id,
+          orElse: () => project,
+        );
+        if (updated.processedBlocks.isEmpty) return;
+        project = updated;
+      }
+
       final srtContent = SubtitleBuilder.buildSrt(project.processedBlocks);
       final tempDir = await getTemporaryDirectory();
       final fileName = _buildProjectExportFileName(project);
@@ -544,28 +651,36 @@ class _HistoryTabState extends State<HistoryTab> {
     AppSettings settings,
     TranslationProject project,
   ) async {
-    // Bloklar henüz yüklenmemişse (Firestore'dan geldi, lazy-load mimarisi)
-    // önce içeriği indirip gösteriyoruz.
-    if (!project.blocksLoaded) {
+    // Partial kayıtlar için her açılışta cloud resume payload'ını tercih et.
+    if (project.id.isNotEmpty &&
+        (project.isPartial ||
+            project.processedBlocks.isEmpty ||
+            project.sourceBlocks.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(settings.trans['loading'] ?? 'Yükleniyor...'),
           duration: const Duration(seconds: 5),
         ),
       );
-      await settings.loadProjectBlocksIfNeeded(project.id);
+      await settings.loadProjectBlocksIfNeeded(
+        project.id,
+        forceCloudRefresh: project.isPartial,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).clearSnackBars();
-      // Güncel proje nesnesini al (bloklar artık yüklü)
       final updated = settings.projects.firstWhere(
         (p) => p.id == project.id,
         orElse: () => project,
       );
-      if (updated.processedBlocks.isEmpty) return; // yükleme başarısız
+      if (updated.processedBlocks.isEmpty && updated.sourceBlocks.isEmpty) {
+        return;
+      }
       project = updated;
     }
 
-    final translatedContent = SubtitleBuilder.buildSrt(project.processedBlocks);
+    final translatedContent = project.processedBlocks.isNotEmpty
+        ? SubtitleBuilder.buildSrt(project.processedBlocks)
+        : '';
     // SDH temizleme: clearSdh aktifse kaynak bloklarını temizle
     List<SubtitleBlock>? sourceBlocks;
     if (project.sourceBlocks.isNotEmpty) {
@@ -637,6 +752,18 @@ class _HistoryTabState extends State<HistoryTab> {
   }
 
   Future<DragItem?> _buildDragItemForProject(TranslationProject project) async {
+    // Farklı platformda tamamlanan projelerin blokları lazy-load ile gelir
+    if (project.processedBlocks.isEmpty && project.id.isNotEmpty) {
+      if (!mounted) return null;
+      final settings = context.read<AppSettings>();
+      await settings.loadProjectBlocksIfNeeded(project.id);
+      if (!mounted) return null;
+      final updated = settings.projects.firstWhere(
+        (p) => p.id == project.id,
+        orElse: () => project,
+      );
+      project = updated;
+    }
     if (project.processedBlocks.isEmpty) return null;
 
     final fileName = _buildProjectExportFileName(project);
@@ -656,108 +783,64 @@ class _HistoryTabState extends State<HistoryTab> {
     TranslationProject project,
   ) async {
     final trans = settings.trans;
-    final source = await showCloudSourceSheet(
-      context: context,
-      trans: trans,
-      isSave: true,
-    );
-    if (source == null || !context.mounted) return;
+
+    // Farklı platformda tamamlanan projelerin blokları lazy-load ile gelir
+    if (project.processedBlocks.isEmpty && project.id.isNotEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Text(trans['loading'] ?? 'Yükleniyor...'),
+            ],
+          ),
+          duration: const Duration(seconds: 15),
+        ),
+      );
+      await settings.loadProjectBlocksIfNeeded(project.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      final updated = settings.projects.firstWhere(
+        (p) => p.id == project.id,
+        orElse: () => project,
+      );
+      if (updated.processedBlocks.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(trans['error_loading_project'] ?? 'Proje yüklenemedi veya içerik boş.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      project = updated;
+    }
 
     final content = SubtitleBuilder.buildSrt(project.processedBlocks);
     final fileName = _buildProjectExportFileName(project);
 
-    if (source == CloudSource.device) {
-      final bytes = Uint8List.fromList(utf8.encode(content));
-      final isAndroidIos = Platform.isAndroid || Platform.isIOS;
-      final dialogTitle = cloudSourceDialogTitle(source, trans, isSave: true);
-      final savedPath = await FilePicker.platform.saveFile(
-        dialogTitle: dialogTitle,
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'vtt'],
-        bytes: isAndroidIos ? bytes : null,
-      );
-      if (savedPath != null && !isAndroidIos) {
-        await File(savedPath).writeAsBytes(bytes, flush: true);
-      }
-      if (savedPath != null) {
-        settings.addLog('log_saved', isAndroidIos ? fileName : savedPath);
-      }
-      return;
+    final bytes = Uint8List.fromList(utf8.encode(content));
+    final isAndroidIos = Platform.isAndroid || Platform.isIOS;
+    final dialogTitle =
+        cloudSourceDialogTitle(CloudSource.device, trans, isSave: true);
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: dialogTitle,
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['srt', 'vtt'],
+      bytes: isAndroidIos ? bytes : null,
+    );
+    if (savedPath != null && !isAndroidIos) {
+      await File(savedPath).writeAsBytes(bytes, flush: true);
     }
-
-    if (source == CloudSource.googleDrive) {
-      final folderId = await showGoogleDriveFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderId == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToGDrive(
-        fileName: fileName,
-        content: content,
-        folderId: folderId,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_drive'] ?? 'Google Drive',
-            'name': fileName,
-          },
-        ),
-      );
-      return;
-    }
-
-    if (source == CloudSource.dropbox) {
-      final folderPath = await showDropboxFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderPath == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToDropbox(
-        fileName: fileName,
-        content: content,
-        folderPath: folderPath,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_dropbox'] ?? 'Dropbox',
-            'name': fileName,
-          },
-        ),
-      );
-      return;
-    }
-
-    if (source == CloudSource.yandexDisk) {
-      final folderPath = await showYandexDiskFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderPath == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToYandexDisk(
-        fileName: fileName,
-        content: content,
-        folderPath: folderPath,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_yandex'] ?? 'Yandex Disk',
-            'name': fileName,
-          },
-        ),
-      );
+    if (savedPath != null) {
+      settings.addLog('log_saved', isAndroidIos ? fileName : savedPath);
     }
   }
 
@@ -877,7 +960,7 @@ class _HistoryTabState extends State<HistoryTab> {
       await controller.prepareResumeFromBlocks(
         file: file!,
         alreadyTranslatedBlocks: project.processedBlocks,
-        clearSdh: settings.sdhClear,
+        clearSdh: clearSdhForRun,
         targetLanguage: project.targetLanguage,
         expectedSourceBlockCount: project.sourceBlocks.length,
       );
@@ -1012,7 +1095,7 @@ class _HistoryTabState extends State<HistoryTab> {
             const SizedBox(height: 12),
             Text(
               trans['delete_permanent_warning'] ??
-                  'DİKKAT: Dosya diskten kalıcı olarak silinecek ve bu işlem geri alınamaz!',
+                  'Bu işlem geri alınamaz!',
               style: TextStyle(
                 color: colorScheme.error,
                 fontWeight: FontWeight.bold,
@@ -1090,7 +1173,7 @@ class _HistoryTabState extends State<HistoryTab> {
             const SizedBox(height: 12),
             Text(
               trans['delete_permanent_warning'] ??
-                  'DİKKAT: Dosya diskten kalıcı olarak silinecek ve bu işlem geri alınamaz!',
+                  'Bu işlem geri alınamaz!',
               style: TextStyle(
                 color: colorScheme.error,
                 fontWeight: FontWeight.bold,
@@ -1161,7 +1244,7 @@ class _HistoryTabState extends State<HistoryTab> {
               ],
             ),
           ),
-        if (project.isCompleted && !hasMultiSelection)
+        if (!hasMultiSelection)
           PopupMenuItem<_HistoryProjectMenuAction>(
             value: _HistoryProjectMenuAction.compareWithSource,
             child: Row(
@@ -1377,679 +1460,982 @@ class _HistoryTabState extends State<HistoryTab> {
 
     return Scaffold(
       appBar: _buildAppBar(settings, trans, allProjects, filteredProjects),
-      body: Stack(
-        key: _bodyStackKey,
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: trans['search_history_hint'] ?? 'Geçmişte ara...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest,
-                    contentPadding: EdgeInsets.zero,
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchQuery.isNotEmpty)
-                          IconButton(icon: const Icon(Icons.clear), onPressed: () => _searchController.clear()),
-                        PopupMenuButton<FilterOption>(
-                          icon: Icon(
-                            _filterOption == FilterOption.all ? Icons.filter_list : Icons.filter_alt,
-                            color: _filterOption == FilterOption.all ? colorScheme.onSurfaceVariant : colorScheme.primary,
-                          ),
-                          tooltip: _localizedOrSafeFallback(
-                            settings: settings,
-                            trans: trans,
-                            key: 'filter_tooltip',
-                            trFallback: 'Filtrele',
-                            englishValue: 'Filter',
-                          ),
-                          onSelected: (FilterOption result) {
-                            setState(() {
-                              _filterOption = result;
-                            });
-                          },
-                          itemBuilder: (BuildContext context) => <PopupMenuEntry<FilterOption>>[
-                            PopupMenuItem<FilterOption>(
-                              value: FilterOption.all,
-                              child: Text(
-                                _localizedOrSafeFallback(
-                                  settings: settings,
-                                  trans: trans,
-                                  key: 'filter_all',
-                                  trFallback: 'Tümü',
-                                  englishValue: 'All',
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem<FilterOption>(
-                              value: FilterOption.completed,
-                              child: Text(
-                                _localizedOrSafeFallback(
-                                  settings: settings,
-                                  trans: trans,
-                                  key: 'filter_completed',
-                                  trFallback: 'Tamamlananlar',
-                                  englishValue: 'Completed',
-                                ),
-                              ),
-                            ),
-                            PopupMenuItem<FilterOption>(
-                              value: FilterOption.partial,
-                              child: Text(
-                                _localizedOrSafeFallback(
-                                  settings: settings,
-                                  trans: trans,
-                                  key: 'filter_partial',
-                                  trFallback: 'Yarım Kalanlar',
-                                  englishValue: 'Partial',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Shortcuts(
-                  shortcuts: const <ShortcutActivator, Intent>{
-                    SingleActivator(LogicalKeyboardKey.keyA, control: true):
-                        _SelectAllVisibleIntent(),
-                    SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-                        _SelectAllVisibleIntent(),
-                    SingleActivator(LogicalKeyboardKey.delete):
-                        _DeleteSelectedIntent(),
-                  },
-                  child: Actions(
-                    actions: <Type, Action<Intent>>{
-                      _SelectAllVisibleIntent:
-                          CallbackAction<_SelectAllVisibleIntent>(
-                        onInvoke: (intent) {
-                          _toggleSelectAllVisible(filteredProjects);
-                          return null;
-                        },
-                      ),
-                      _DeleteSelectedIntent:
-                          CallbackAction<_DeleteSelectedIntent>(
-                        onInvoke: (intent) {
-                          if (_selectedProjectIds.isEmpty) {
-                            return null;
-                          }
-
-                          final selectedProjects = settings.projects
-                              .where((p) => _selectedProjectIds.contains(p.id))
-                              .toList(growable: false);
-                          if (selectedProjects.isEmpty) {
-                            return null;
-                          }
-
-                          unawaited(() async {
-                            if (selectedProjects.length == 1) {
-                              await _deleteProjectFromHistory(
-                                settings,
-                                selectedProjects.first,
-                                colorScheme,
-                              );
-                              return;
-                            }
-
-                            await _deleteProjectsFromHistory(
-                              settings,
-                              selectedProjects,
-                              colorScheme,
-                            );
-                          }());
-
-                          return null;
-                        },
-                      ),
-                    },
-                    child: Focus(
-                      focusNode: _historyListFocusNode,
-                      autofocus: true,
-                      child: Listener(
-                  behavior: HitTestBehavior.translucent,
-                  onPointerDown: (event) {
-                    _historyListFocusNode.requestFocus();
-                    final isPrimaryPressed =
-                        (event.buttons & kPrimaryMouseButton) != 0;
-                    if (isPrimaryPressed) {
-                      _lastPrimaryDownGlobal = event.position;
-                    }
-                    _startMarqueeSelection(event, filteredProjects);
-                  },
-                  onPointerMove: (event) {
-                    _updateMarqueeSelection(event, filteredProjects);
-                  },
-                  onPointerUp: (_) {
-                    _lastPrimaryDownGlobal = null;
-                    _finishMarqueeSelection();
-                  },
-                  onPointerCancel: (_) {
-                    _lastPrimaryDownGlobal = null;
-                    _finishMarqueeSelection();
-                  },
-                  child: filteredProjects.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.search_off, size: 64, color: colorScheme.onSurface.withAlpha(50)),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? (trans['history_no_results'] ?? 'Arama sonucu bulunamadı.')
-                                  : (trans['history_no_projects'] ?? 'Henüz kayıtlı proje yok.'),
-                              style: TextStyle(color: colorScheme.onSurface.withAlpha(150)),
-                            ),
-                          ],
-                        ),
-                      )
-                      : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        itemCount: filteredProjects.length,
-                        itemBuilder: (context, index) {
-                          final project = filteredProjects[index];
-                          final dragItemKey = _dragKeyForProject(project.id);
-                        final cardKey = _cardKeyForProject(project.id);
-                          final displayFileName = _displayFileName(project.fileName);
-                          int derivedTranslated = project.translatedLines;
-                          int derivedTotal = project.totalLines;
-
-                          final resume = project.resumeStateJson;
-                          if (!project.isCompleted && resume != null) {
-                            if (derivedTranslated <= 0) {
-                              final blocksRaw = resume['translatedBlocks'];
-                              if (blocksRaw is List) {
-                                derivedTranslated = blocksRaw.length;
-                              }
-                            }
-                            if (derivedTotal <= 0) {
-                              final totalBlocksRaw = resume['totalBlocks'];
-                              if (totalBlocksRaw is num) {
-                                derivedTotal = totalBlocksRaw.toInt();
-                              }
-                              if (derivedTotal <= 0) {
-                                final sourceContent = (resume['sourceContent'] as String?) ?? '';
-                                if (sourceContent.trim().isNotEmpty) {
-                                  derivedTotal = SubtitleParser.parseSrt(sourceContent).length;
-                                }
-                              }
-                              if (derivedTotal <= 0) {
-                                // Legacy fallback only.
-                                final totalRaw = resume['totalLines'];
-                                if (totalRaw is num) {
-                                  derivedTotal = totalRaw.toInt();
-                                }
-                              }
-                            }
-                          }
-
-                          final percent = project.isCompleted
-                              ? 100
-                              : (derivedTotal > 0
-                                  ? ((derivedTranslated / derivedTotal) * 100).toInt()
-                                  : 0);
-                            final progressValue = (project.isCompleted || derivedTotal <= 0)
-                              ? 1.0
-                              : (derivedTranslated / derivedTotal).clamp(0.0, 1.0);
-                          final isSelected = _selectedProjectIds.contains(project.id);
-                          final isHovered = _supportsDesktopDragOut &&
-                              _hoveredProjectId == project.id;
-                          
-                          final card = MouseRegion(
-                            onEnter: (_) {
-                              if (!_supportsDesktopDragOut) return;
-                              if (_hoveredProjectId == project.id) return;
-                              setState(() => _hoveredProjectId = project.id);
-                            },
-                            onExit: (_) {
-                              if (!_supportsDesktopDragOut) return;
-                              if (_hoveredProjectId != project.id) return;
-                              setState(() => _hoveredProjectId = null);
-                            },
-                            child: Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              elevation: isHovered ? 2.0 : 1.0,
-                              color: isSelected
-                                  ? colorScheme.primaryContainer.withAlpha(100)
-                                  : (isHovered
-                                      ? colorScheme.surfaceContainerHigh
-                                          .withAlpha(180)
-                                      : null),
-                              clipBehavior: Clip.antiAlias,
-                              child: InkWell(
-                                hoverColor: _supportsDesktopDragOut
-                                    ? colorScheme.primary.withValues(alpha: 0.06)
-                                    : null,
-                              onLongPress: () {
-                                final startPoint = _lastPrimaryDownGlobal;
-                                if (startPoint == null) {
-                                  setState(() {
-                                    _isSelectionMode = true;
-                                    _selectedProjectIds.add(project.id);
-                                    _lastSelectedProjectId = project.id;
-                                  });
-                                  return;
-                                }
-
-                                _armMarqueeFromLongPress(
-                                  globalPosition: startPoint,
-                                  projectId: project.id,
-                                );
-                              },
-                              onSecondaryTapDown: (details) {
-                                if (!_supportsDesktopDragOut) return;
-                                unawaited(
-                                  _showProjectContextMenu(
-                                    globalPosition: details.globalPosition,
-                                    settings: settings,
-                                    controller: controller,
-                                    project: project,
-                                    colorScheme: colorScheme,
-                                  ),
-                                );
-                              },
-                              onTap: () {
-                                final isCtrlOrCmdPressed =
-                                    HardwareKeyboard.instance.isControlPressed ||
-                                    HardwareKeyboard.instance.isMetaPressed;
-                                final isShiftPressed =
-                                    HardwareKeyboard.instance.isShiftPressed;
-
-                                if (isShiftPressed && _lastSelectedProjectId != null) {
-                                  final anchorIndex = filteredProjects.indexWhere(
-                                    (p) => p.id == _lastSelectedProjectId,
-                                  );
-                                  if (anchorIndex != -1) {
-                                    final start = anchorIndex < index
-                                        ? anchorIndex
-                                        : index;
-                                    final end = anchorIndex > index
-                                        ? anchorIndex
-                                        : index;
-
-                                    setState(() {
-                                      if (!isCtrlOrCmdPressed) {
-                                        _selectedProjectIds.clear();
-                                      }
-                                      for (var i = start; i <= end; i++) {
-                                        _selectedProjectIds.add(
-                                          filteredProjects[i].id,
-                                        );
-                                      }
-                                      _isSelectionMode = true;
-                                      _lastSelectedProjectId = project.id;
-                                    });
-                                    return;
-                                  }
-                                }
-
-                                if (isCtrlOrCmdPressed) {
-                                  setState(() {
-                                    _isSelectionMode = true;
-                                    if (isSelected) {
-                                      _selectedProjectIds.remove(project.id);
-                                      if (_selectedProjectIds.isEmpty) {
-                                        _isSelectionMode = false;
-                                        _lastSelectedProjectId = null;
-                                      }
-                                    } else {
-                                      _selectedProjectIds.add(project.id);
-                                    }
-                                    _lastSelectedProjectId = project.id;
-                                  });
-                                  return;
-                                }
-
-                                if (_isSelectionMode) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedProjectIds.remove(project.id);
-                                      if (_selectedProjectIds.isEmpty) {
-                                        _isSelectionMode = false;
-                                        _lastSelectedProjectId = null;
-                                      }
-                                    } else {
-                                      _selectedProjectIds.add(project.id);
-                                    }
-                                    _lastSelectedProjectId = project.id;
-                                  });
-                                } else {
-                                  _lastSelectedProjectId = project.id;
-                                  unawaited(_showProjectDetailDialog(settings, project));
-                                }
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Başlık satırı: Dosya adı + Seçim checkbox
-                                    Row(
-                                      children: [
-                                        AnimatedContainer(
-                                          duration: const Duration(milliseconds: 140),
-                                          curve: Curves.easeOut,
-                                          width: _isSelectionMode ? 34 : 0,
-                                          height: 24,
-                                          child: _isSelectionMode
-                                              ? Checkbox(
-                                                  value: isSelected,
-                                                  visualDensity: VisualDensity.compact,
-                                                  materialTapTargetSize:
-                                                      MaterialTapTargetSize.shrinkWrap,
-                                                  onChanged: (bool? value) {
-                                                    setState(() {
-                                                      if (value == true) {
-                                                        _selectedProjectIds.add(project.id);
-                                                        _lastSelectedProjectId = project.id;
-                                                      } else {
-                                                        _selectedProjectIds.remove(project.id);
-                                                        if (_selectedProjectIds.isEmpty) {
-                                                          _isSelectionMode = false;
-                                                          _lastSelectedProjectId = null;
-                                                        }
-                                                      }
-                                                    });
-                                                  },
-                                                )
-                                              : null,
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            displayFileName,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                            overflow: TextOverflow.fade,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    // Bilgi satırı: Dil, yüzde, "Yarım", Düğmeler
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  "${trans['language_title']}: ${project.targetLanguage}  •  %$percent",
-                                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              if (project.isPartial) ...[
-                                                const SizedBox(width: 6),
-                                                Tooltip(
-                                                  message: trans['partial_drag_not_supported_hint'] ??
-                                                      'Yarım çeviriler sürüklenemez.',
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.orange.withAlpha(50),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(color: Colors.orange, width: 1),
-                                                    ),
-                                                    child: Text(
-                                                      trans['partial'] ?? 'Yarım',
-                                                      style: const TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        if (!_isSelectionMode) ...[
-                                          const SizedBox(width: 8),
-                                          if (project.isCompleted)
-                                            TextButton.icon(
-                                              onPressed: () => _openInEditor(settings, project),
-                                              icon: const Icon(Icons.edit_document, color: Colors.blue, size: 18),
-                                              label: Text(trans['btn_open_in_editor'] ?? 'Editörde Aç'),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor: Colors.blue,
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                              ),
-                                            ),
-                                          if (project.isCompleted)
-                                            TextButton.icon(
-                                              onPressed: () => _shareProject(project),
-                                              icon: const Icon(Icons.share, color: Colors.green, size: 18),
-                                              label: Text(trans['share'] ?? 'Paylaş'),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor: Colors.green,
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                              ),
-                                            ),
-                                          if (project.isCompleted)
-                                            TextButton.icon(
-                                              onPressed: () => _saveProjectWithCloudChoice(context, settings, project),
-                                              icon: const Icon(Icons.save, color: Colors.teal, size: 18),
-                                              label: Text(trans['save'] ?? trans['btn_save'] ?? 'Kaydet'),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor: Colors.teal,
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                              ),
-                                            )
-                                          else ...[
-                                            Tooltip(
-                                              message: trans['btn_resume'] ?? 'Devam Et',
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.play_circle_fill,
-                                                  color: Colors.orange,
-                                                  size: 22,
-                                                ),
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.all(2),
-                                                constraints: const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 28,
-                                                ),
-                                                onPressed: () =>
-                                                    _resumeProject(settings, controller, project),
-                                              ),
-                                            ),
-                                            Tooltip(
-                                              message: trans['delete'] ?? 'Sil',
-                                              child: IconButton(
-                                                icon: const Icon(
-                                                  Icons.delete,
-                                                  color: Colors.redAccent,
-                                                  size: 20,
-                                                ),
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.all(2),
-                                                constraints: const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 28,
-                                                ),
-                                                onPressed: () =>
-                                                    _deleteProjectFromHistory(
-                                                      settings,
-                                                      project,
-                                                      colorScheme,
-                                                    ),
-                                              ),
-                                            ),
-                                          ],
-                                          if (project.isCompleted)
-                                            TextButton.icon(
-                                              onPressed: () =>
-                                                  _deleteProjectFromHistory(
-                                                    settings,
-                                                    project,
-                                                    colorScheme,
-                                                  ),
-                                              icon: const Icon(
-                                                Icons.delete,
-                                                color: Colors.redAccent,
-                                                size: 18,
-                                              ),
-                                              label: Text(trans['delete'] ?? 'Sil'),
-                                              style: TextButton.styleFrom(
-                                                foregroundColor: Colors.redAccent,
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                              ),
-                                            )
-                                        ],
-                                      ],
-                                    ),
-                                    if (project.isPartial) ...[
-                                      const SizedBox(height: 6),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(2),
-                                        child: LinearProgressIndicator(
-                                          value: progressValue,
-                                          minHeight: 3,
-                                          backgroundColor:
-                                              colorScheme.onSurfaceVariant.withAlpha(45),
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            project.lastUpdated.split('.')[0],
-                                            style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant.withAlpha(150)),
-                                          ),
-                                        ),
-                                        if (project.completedPlatform != null && project.completedPlatform!.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 4),
-                                            child: Text(
-                                              _platformDisplayName(project.completedPlatform!),
-                                              style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant.withAlpha(150)),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            ),
-                          );
-
-                          final keyedCard = KeyedSubtree(
-                            key: cardKey,
-                            child: card,
-                          );
-
-                          if (project.isCompleted && _supportsDesktopDragOut) {
-                            return DragItemWidget(
-                              key: dragItemKey,
-                              allowedOperations: () => [DropOperation.copy],
-                              dragItemProvider: (request) async {
-                                return _buildDragItemForProject(project);
-                              },
-                              child: DraggableWidget(
-                                dragItemsProvider: (context) {
-                                  if (!isSelected || !_isSelectionMode || _selectedProjectIds.length <= 1) {
-                                    final current = dragItemKey.currentState;
-                                    return current != null
-                                        ? [current]
-                                        : const <DragItemWidgetState>[];
-                                  }
-
-                                  final states = <DragItemWidgetState>[];
-                                  for (final projectId in _selectedProjectIds) {
-                                    final state = _dragItemKeys[projectId]?.currentState;
-                                    if (state != null) {
-                                      states.add(state);
-                                    }
-                                  }
-
-                                  if (states.isEmpty) {
-                                    final current = dragItemKey.currentState;
-                                    return current != null
-                                        ? [current]
-                                        : const <DragItemWidgetState>[];
-                                  }
-
-                                  return states;
-                                },
-                                child: keyedCard,
-                              ),
-                            );
-                          }
-
-                          return keyedCard;
-                        },
-                      ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          _buildTranslationHistoryBody(
+            settings,
+            controller,
+            trans,
+            colorScheme,
+            allProjects,
+            filteredProjects,
           ),
-          if (_isMarqueeSelecting &&
-              _marqueeStartGlobal != null &&
-              _marqueeCurrentGlobal != null)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _SelectionMarqueePainter(
-                    startGlobal: _marqueeStartGlobal!,
-                    currentGlobal: _marqueeCurrentGlobal!,
-                    referenceKey: _bodyStackKey,
-                    colorScheme: colorScheme,
-                  ),
-                ),
-              ),
-            ),
-          if (_isSaving)
-            Container(
-              color: Colors.black54,
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(trans['saving_files_progress'] ?? 'Dosyalar hazırlanıyor...'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          const CreditHistoryBody(),
         ],
       ),
     );
   }
 
+  Widget _buildTranslationHistoryBody(
+    AppSettings settings,
+    TranslationController controller,
+    Map<String, String> trans,
+    ColorScheme colorScheme,
+    List<TranslationProject> allProjects,
+    List<TranslationProject> filteredProjects,
+  ) {
+    return Stack(
+      key: _bodyStackKey,
+      children: [
+        Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: trans['search_history_hint'] ?? 'Geçmişte ara...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  contentPadding: EdgeInsets.zero,
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchQuery.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => _searchController.clear(),
+                        ),
+                      PopupMenuButton<FilterOption>(
+                        icon: Icon(
+                          _filterOption == FilterOption.all
+                              ? Icons.filter_list
+                              : Icons.filter_alt,
+                          color: _filterOption == FilterOption.all
+                              ? colorScheme.onSurfaceVariant
+                              : colorScheme.primary,
+                        ),
+                        tooltip: _localizedOrSafeFallback(
+                          settings: settings,
+                          trans: trans,
+                          key: 'filter_tooltip',
+                          trFallback: 'Filtrele',
+                          englishValue: 'Filter',
+                        ),
+                        onSelected: (FilterOption result) {
+                          setState(() {
+                            _filterOption = result;
+                          });
+                        },
+                        itemBuilder: (BuildContext context) =>
+                            <PopupMenuEntry<FilterOption>>[
+                          PopupMenuItem<FilterOption>(
+                            value: FilterOption.all,
+                            child: Text(
+                              _localizedOrSafeFallback(
+                                settings: settings,
+                                trans: trans,
+                                key: 'filter_all',
+                                trFallback: 'Tümü',
+                                englishValue: 'All',
+                              ),
+                            ),
+                          ),
+                          PopupMenuItem<FilterOption>(
+                            value: FilterOption.completed,
+                            child: Text(
+                              _localizedOrSafeFallback(
+                                settings: settings,
+                                trans: trans,
+                                key: 'filter_completed',
+                                trFallback: 'Tamamlananlar',
+                                englishValue: 'Completed',
+                              ),
+                            ),
+                          ),
+                          PopupMenuItem<FilterOption>(
+                            value: FilterOption.partial,
+                            child: Text(
+                              _localizedOrSafeFallback(
+                                settings: settings,
+                                trans: trans,
+                                key: 'filter_partial',
+                                trFallback: 'Yarım Kalanlar',
+                                englishValue: 'Partial',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Shortcuts(
+                shortcuts: const <ShortcutActivator, Intent>{
+                  SingleActivator(
+                    LogicalKeyboardKey.keyA,
+                    control: true,
+                  ): _SelectAllVisibleIntent(),
+                  SingleActivator(
+                    LogicalKeyboardKey.keyA,
+                    meta: true,
+                  ): _SelectAllVisibleIntent(),
+                  SingleActivator(
+                    LogicalKeyboardKey.delete,
+                  ): _DeleteSelectedIntent(),
+                },
+                child: Actions(
+                  actions: <Type, Action<Intent>>{
+                    _SelectAllVisibleIntent:
+                        CallbackAction<_SelectAllVisibleIntent>(
+                      onInvoke: (intent) {
+                        _toggleSelectAllVisible(filteredProjects);
+                        return null;
+                      },
+                    ),
+                    _DeleteSelectedIntent:
+                        CallbackAction<_DeleteSelectedIntent>(
+                      onInvoke: (intent) {
+                        if (_selectedProjectIds.isEmpty) {
+                          return null;
+                        }
+
+                        final selectedProjects = settings.projects
+                            .where((p) => _selectedProjectIds.contains(p.id))
+                            .toList(growable: false);
+                        if (selectedProjects.isEmpty) {
+                          return null;
+                        }
+
+                        unawaited(() async {
+                          if (selectedProjects.length == 1) {
+                            await _deleteProjectFromHistory(
+                              settings,
+                              selectedProjects.first,
+                              colorScheme,
+                            );
+                            return;
+                          }
+
+                          await _deleteProjectsFromHistory(
+                            settings,
+                            selectedProjects,
+                            colorScheme,
+                          );
+                        }());
+
+                        return null;
+                      },
+                    ),
+                  },
+                  child: Focus(
+                    focusNode: _historyListFocusNode,
+                    autofocus: true,
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (event) {
+                        _historyListFocusNode.requestFocus();
+                        final isPrimaryPressed =
+                            (event.buttons & kPrimaryMouseButton) != 0;
+                        if (isPrimaryPressed) {
+                          _lastPrimaryDownGlobal = event.position;
+                        }
+                        _startMarqueeSelection(event, filteredProjects);
+                      },
+                      onPointerMove: (event) {
+                        _updateMarqueeSelection(event, filteredProjects);
+                      },
+                      onPointerUp: (_) {
+                        _lastPrimaryDownGlobal = null;
+                        _finishMarqueeSelection();
+                      },
+                      onPointerCancel: (_) {
+                        _lastPrimaryDownGlobal = null;
+                        _finishMarqueeSelection();
+                      },
+                      child: filteredProjects.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 64,
+                                    color: colorScheme.onSurface.withAlpha(50),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchQuery.isNotEmpty
+                                        ? (trans['history_no_results'] ??
+                                            'Arama sonucu bulunamadı.')
+                                        : (trans['history_no_projects'] ??
+                                            'Henüz kayıtlı proje yok.'),
+                                    style: TextStyle(
+                                      color: colorScheme.onSurface.withAlpha(
+                                        150,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                              itemCount: filteredProjects.length,
+                              itemBuilder: (context, index) {
+                                final project = filteredProjects[index];
+                                final dragItemKey =
+                                    _dragKeyForProject(project.id);
+                                final cardKey = _cardKeyForProject(project.id);
+                                final displayFileName =
+                                    _displayFileName(project.fileName);
+                                int derivedTranslated =
+                                    project.translatedLines;
+                                int derivedTotal = project.totalLines;
+
+                                final resume = project.resumeStateJson;
+                                if (!project.isCompleted && resume != null) {
+                                  if (derivedTranslated <= 0) {
+                                    final blocksRaw =
+                                        resume['translatedBlocks'];
+                                    if (blocksRaw is List) {
+                                      derivedTranslated = blocksRaw.length;
+                                    }
+                                  }
+                                  if (derivedTotal <= 0) {
+                                    final totalBlocksRaw = resume['totalBlocks'];
+                                    if (totalBlocksRaw is num) {
+                                      derivedTotal = totalBlocksRaw.toInt();
+                                    }
+                                    if (derivedTotal <= 0) {
+                                      final sourceContent =
+                                          (resume['sourceContent'] as String?) ??
+                                              '';
+                                      if (sourceContent.trim().isNotEmpty) {
+                                        derivedTotal = SubtitleParser.parseSrt(
+                                          sourceContent,
+                                        ).length;
+                                      }
+                                    }
+                                    if (derivedTotal <= 0) {
+                                      final totalRaw = resume['totalLines'];
+                                      if (totalRaw is num) {
+                                        derivedTotal = totalRaw.toInt();
+                                      }
+                                    }
+                                  }
+                                }
+
+                                final percent = project.isCompleted
+                                    ? 100
+                                    : (derivedTotal > 0
+                                        ? ((derivedTranslated / derivedTotal) *
+                                                100)
+                                            .toInt()
+                                        : 0);
+                                final progressValue =
+                                    (project.isCompleted || derivedTotal <= 0)
+                                        ? 1.0
+                                        : (derivedTranslated / derivedTotal)
+                                            .clamp(0.0, 1.0);
+                                final isSelected =
+                                    _selectedProjectIds.contains(project.id);
+                                final isHovered = _supportsDesktopDragOut &&
+                                    _hoveredProjectId == project.id;
+
+                                final card = MouseRegion(
+                                  onEnter: (_) {
+                                    if (!_supportsDesktopDragOut) return;
+                                    if (_hoveredProjectId == project.id) return;
+                                    setState(
+                                      () => _hoveredProjectId = project.id,
+                                    );
+                                  },
+                                  onExit: (_) {
+                                    if (!_supportsDesktopDragOut) return;
+                                    if (_hoveredProjectId != project.id) return;
+                                    setState(() => _hoveredProjectId = null);
+                                  },
+                                  child: Card(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    elevation: isHovered ? 2.0 : 1.0,
+                                    color: isSelected
+                                        ? colorScheme.primaryContainer
+                                            .withAlpha(100)
+                                        : (isHovered
+                                            ? colorScheme.surfaceContainerHigh
+                                                .withAlpha(180)
+                                            : null),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      hoverColor: _supportsDesktopDragOut
+                                          ? colorScheme.primary
+                                              .withValues(alpha: 0.06)
+                                          : null,
+                                      onLongPress: () {
+                                        final startPoint =
+                                            _lastPrimaryDownGlobal;
+                                        if (startPoint == null) {
+                                          setState(() {
+                                            _isSelectionMode = true;
+                                            _selectedProjectIds.add(project.id);
+                                            _lastSelectedProjectId = project.id;
+                                          });
+                                          return;
+                                        }
+
+                                        _armMarqueeFromLongPress(
+                                          globalPosition: startPoint,
+                                          projectId: project.id,
+                                        );
+                                      },
+                                      onSecondaryTapDown: (details) {
+                                        if (!_supportsDesktopDragOut) return;
+                                        unawaited(
+                                          _showProjectContextMenu(
+                                            globalPosition:
+                                                details.globalPosition,
+                                            settings: settings,
+                                            controller: controller,
+                                            project: project,
+                                            colorScheme: colorScheme,
+                                          ),
+                                        );
+                                      },
+                                      onTap: () {
+                                        final isCtrlOrCmdPressed =
+                                            HardwareKeyboard
+                                                    .instance.isControlPressed ||
+                                                HardwareKeyboard
+                                                    .instance.isMetaPressed;
+                                        final isShiftPressed = HardwareKeyboard
+                                            .instance.isShiftPressed;
+
+                                        if (isShiftPressed &&
+                                            _lastSelectedProjectId != null) {
+                                          final anchorIndex = filteredProjects
+                                              .indexWhere(
+                                            (p) =>
+                                                p.id == _lastSelectedProjectId,
+                                          );
+                                          if (anchorIndex != -1) {
+                                            final start = anchorIndex < index
+                                                ? anchorIndex
+                                                : index;
+                                            final end = anchorIndex > index
+                                                ? anchorIndex
+                                                : index;
+
+                                            setState(() {
+                                              if (!isCtrlOrCmdPressed) {
+                                                _selectedProjectIds.clear();
+                                              }
+                                              for (var i = start;
+                                                  i <= end;
+                                                  i++) {
+                                                _selectedProjectIds.add(
+                                                  filteredProjects[i].id,
+                                                );
+                                              }
+                                              _isSelectionMode = true;
+                                              _lastSelectedProjectId =
+                                                  project.id;
+                                            });
+                                            return;
+                                          }
+                                        }
+
+                                        if (isCtrlOrCmdPressed) {
+                                          setState(() {
+                                            _isSelectionMode = true;
+                                            if (isSelected) {
+                                              _selectedProjectIds.remove(
+                                                project.id,
+                                              );
+                                              if (_selectedProjectIds.isEmpty) {
+                                                _isSelectionMode = false;
+                                                _lastSelectedProjectId = null;
+                                              }
+                                            } else {
+                                              _selectedProjectIds.add(project.id);
+                                            }
+                                            _lastSelectedProjectId = project.id;
+                                          });
+                                          return;
+                                        }
+
+                                        if (_isSelectionMode) {
+                                          setState(() {
+                                            if (isSelected) {
+                                              _selectedProjectIds.remove(
+                                                project.id,
+                                              );
+                                              if (_selectedProjectIds.isEmpty) {
+                                                _isSelectionMode = false;
+                                                _lastSelectedProjectId = null;
+                                              }
+                                            } else {
+                                              _selectedProjectIds.add(project.id);
+                                            }
+                                            _lastSelectedProjectId = project.id;
+                                          });
+                                        } else {
+                                          _lastSelectedProjectId = project.id;
+                                          unawaited(
+                                            _showProjectDetailDialog(
+                                              settings,
+                                              project,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 140,
+                                                  ),
+                                                  curve: Curves.easeOut,
+                                                  width: _isSelectionMode
+                                                      ? 34
+                                                      : 0,
+                                                  height: 24,
+                                                  child: _isSelectionMode
+                                                      ? Checkbox(
+                                                          value: isSelected,
+                                                          visualDensity:
+                                                              VisualDensity
+                                                                  .compact,
+                                                          materialTapTargetSize:
+                                                              MaterialTapTargetSize
+                                                                  .shrinkWrap,
+                                                          onChanged:
+                                                              (bool? value) {
+                                                            setState(() {
+                                                              if (value ==
+                                                                  true) {
+                                                                _selectedProjectIds
+                                                                    .add(
+                                                                  project.id,
+                                                                );
+                                                                _lastSelectedProjectId =
+                                                                    project.id;
+                                                              } else {
+                                                                _selectedProjectIds
+                                                                    .remove(
+                                                                  project.id,
+                                                                );
+                                                                if (_selectedProjectIds
+                                                                    .isEmpty) {
+                                                                  _isSelectionMode =
+                                                                      false;
+                                                                  _lastSelectedProjectId =
+                                                                      null;
+                                                                }
+                                                              }
+                                                            });
+                                                          },
+                                                        )
+                                                      : null,
+                                                ),
+                                                Expanded(
+                                                  child: Text(
+                                                    displayFileName,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                    overflow: TextOverflow.fade,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          "${trans['language_title']}: ${project.targetLanguage}  •  %$percent",
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: colorScheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                      if (project.isPartial) ...[
+                                                        const SizedBox(width: 6),
+                                                        Tooltip(
+                                                          message: trans[
+                                                                  'partial_drag_not_supported_hint'] ??
+                                                              'Yarım çeviriler sürüklenemez.',
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: Colors.orange
+                                                                  .withAlpha(50),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                4,
+                                                              ),
+                                                              border: Border.all(
+                                                                color: Colors.orange,
+                                                                width: 1,
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              trans['partial'] ??
+                                                                  'Yarım',
+                                                              style:
+                                                                  const TextStyle(
+                                                                fontSize: 10,
+                                                                color: Colors.orange,
+                                                                fontWeight:
+                                                                    FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (!_isSelectionMode) ...[
+                                                  const SizedBox(width: 8),
+                                                  if (project.isCompleted)
+                                                    TextButton.icon(
+                                                      onPressed: () =>
+                                                          _openInEditor(
+                                                        settings,
+                                                        project,
+                                                      ),
+                                                      icon: const Icon(
+                                                        Icons.edit_document,
+                                                        color: Colors.blue,
+                                                        size: 18,
+                                                      ),
+                                                      label: Text(
+                                                        trans['btn_open_in_editor'] ??
+                                                            'Editörde Aç',
+                                                      ),
+                                                      style: TextButton.styleFrom(
+                                                        foregroundColor:
+                                                            Colors.blue,
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                    ),
+                                                  if (project.isCompleted)
+                                                    TextButton.icon(
+                                                      onPressed: () =>
+                                                          _shareProject(project),
+                                                      icon: const Icon(
+                                                        Icons.share,
+                                                        color: Colors.green,
+                                                        size: 18,
+                                                      ),
+                                                      label: Text(
+                                                        trans['share'] ??
+                                                            'Paylaş',
+                                                      ),
+                                                      style: TextButton.styleFrom(
+                                                        foregroundColor:
+                                                            Colors.green,
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                    ),
+                                                  if (project.isCompleted)
+                                                    TextButton.icon(
+                                                      onPressed: () =>
+                                                          _saveProjectWithCloudChoice(
+                                                        context,
+                                                        settings,
+                                                        project,
+                                                      ),
+                                                      icon: const Icon(
+                                                        Icons.save,
+                                                        color: Colors.teal,
+                                                        size: 18,
+                                                      ),
+                                                      label: Text(
+                                                        trans['save'] ??
+                                                            trans['btn_save'] ??
+                                                            'Kaydet',
+                                                      ),
+                                                      style: TextButton.styleFrom(
+                                                        foregroundColor:
+                                                            Colors.teal,
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                    )
+                                                  else ...[
+                                                    Tooltip(
+                                                      message:
+                                                          trans['btn_resume'] ??
+                                                              'Devam Et',
+                                                      child: IconButton(
+                                                        icon: const Icon(
+                                                          Icons.play_circle_fill,
+                                                          color: Colors.orange,
+                                                          size: 22,
+                                                        ),
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                          2,
+                                                        ),
+                                                        constraints:
+                                                            const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 28,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _resumeProject(
+                                                          settings,
+                                                          controller,
+                                                          project,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Tooltip(
+                                                      message:
+                                                          trans['delete'] ??
+                                                              'Sil',
+                                                      child: IconButton(
+                                                        icon: const Icon(
+                                                          Icons.delete,
+                                                          color: Colors.redAccent,
+                                                          size: 20,
+                                                        ),
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                          2,
+                                                        ),
+                                                        constraints:
+                                                            const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 28,
+                                                        ),
+                                                        onPressed: () =>
+                                                            _deleteProjectFromHistory(
+                                                          settings,
+                                                          project,
+                                                          colorScheme,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  if (project.isCompleted)
+                                                    TextButton.icon(
+                                                      onPressed: () =>
+                                                          _deleteProjectFromHistory(
+                                                        settings,
+                                                        project,
+                                                        colorScheme,
+                                                      ),
+                                                      icon: const Icon(
+                                                        Icons.delete,
+                                                        color: Colors.redAccent,
+                                                        size: 18,
+                                                      ),
+                                                      label: Text(
+                                                        trans['delete'] ?? 'Sil',
+                                                      ),
+                                                      style: TextButton.styleFrom(
+                                                        foregroundColor:
+                                                            Colors.redAccent,
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
+                                                        ),
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ],
+                                            ),
+                                            if (project.isPartial) ...[
+                                              const SizedBox(height: 6),
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
+                                                child: LinearProgressIndicator(
+                                                  value: progressValue,
+                                                  minHeight: 3,
+                                                  backgroundColor: colorScheme
+                                                      .onSurfaceVariant
+                                                      .withAlpha(45),
+                                                ),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    project.lastUpdated
+                                                        .split('.')
+                                                        .first,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: colorScheme
+                                                          .onSurfaceVariant
+                                                          .withAlpha(150),
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (project.completedPlatform !=
+                                                        null &&
+                                                    project.completedPlatform!
+                                                        .isNotEmpty)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      left: 4,
+                                                    ),
+                                                    child: Text(
+                                                      _platformDisplayName(
+                                                        project
+                                                            .completedPlatform!,
+                                                      ),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: colorScheme
+                                                            .onSurfaceVariant
+                                                            .withAlpha(150),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+
+                                final keyedCard = KeyedSubtree(
+                                  key: cardKey,
+                                  child: card,
+                                );
+
+                                if (project.isCompleted &&
+                                    _supportsDesktopDragOut) {
+                                  return DragItemWidget(
+                                    key: dragItemKey,
+                                    allowedOperations: () =>
+                                        [DropOperation.copy],
+                                    dragItemProvider: (request) async {
+                                      return _buildDragItemForProject(project);
+                                    },
+                                    dragBuilder: (ctx, _) {
+                                      final cs = Theme.of(ctx).colorScheme;
+                                      return Material(
+                                        elevation: 6,
+                                        borderRadius: BorderRadius.circular(8),
+                                        color: cs.surfaceContainerHigh,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.subtitles_outlined,
+                                                size: 18,
+                                                color: cs.primary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                  maxWidth: 260,
+                                                ),
+                                                child: Text(
+                                                  displayFileName,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: cs.onSurface,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: DraggableWidget(
+                                      dragItemsProvider: (context) {
+                                        if (!isSelected ||
+                                            !_isSelectionMode ||
+                                            _selectedProjectIds.length <= 1) {
+                                          final current =
+                                              dragItemKey.currentState;
+                                          return current != null
+                                              ? [current]
+                                              : const <DragItemWidgetState>[];
+                                        }
+
+                                        final states =
+                                            <DragItemWidgetState>[];
+                                        for (final projectId
+                                            in _selectedProjectIds) {
+                                          final state = _dragItemKeys[projectId]
+                                              ?.currentState;
+                                          if (state != null) {
+                                            states.add(state);
+                                          }
+                                        }
+
+                                        if (states.isEmpty) {
+                                          final current =
+                                              dragItemKey.currentState;
+                                          return current != null
+                                              ? [current]
+                                              : const <DragItemWidgetState>[];
+                                        }
+
+                                        return states;
+                                      },
+                                      child: keyedCard,
+                                    ),
+                                  );
+                                }
+
+                                return keyedCard;
+                              },
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_isMarqueeSelecting &&
+            _marqueeStartGlobal != null &&
+            _marqueeCurrentGlobal != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SelectionMarqueePainter(
+                  startGlobal: _marqueeStartGlobal!,
+                  currentGlobal: _marqueeCurrentGlobal!,
+                  referenceKey: _bodyStackKey,
+                  colorScheme: colorScheme,
+                ),
+              ),
+            ),
+          ),
+        if (_isSaving)
+          Container(
+            color: Colors.black54,
+            child: Center(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(
+                        trans['saving_files_progress'] ??
+                            'Dosyalar hazırlanıyor...',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<bool> _confirmReplaceDirtyEditorIfNeeded(AppSettings settings) async {
-    final hasUnsavedWork = settings.isEditorDirty || settings.canUndo;
+    final hasUnsavedWork = settings.isEditorDirty;
     if (!hasUnsavedWork) {
       return true;
     }
@@ -2114,29 +2500,60 @@ class _HistoryTabState extends State<HistoryTab> {
     final canReplace = await _confirmReplaceDirtyEditorIfNeeded(settings);
     if (!canReplace || !mounted) return;
 
-    // Bloklar henüz yüklenmemişse (Firestore lazy-load) önce indir
-    if (!project.blocksLoaded) {
+    // Cloud'dan gelen projede bloklar henüz yüklenmemişse veya eksikse önce çek
+    // (processedBlocks boşsa ve ID geçerliyse)
+    if (project.processedBlocks.isEmpty && project.id.isNotEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(settings.trans['loading'] ?? 'Yükleniyor...'),
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Text(settings.trans['loading'] ?? 'Yükleniyor...'),
+            ],
+          ),
           duration: const Duration(seconds: 10),
         ),
       );
+
+      // Blokları yükle (yerel cache yoksa Cloud'dan çeker)
       await settings.loadProjectBlocksIfNeeded(project.id);
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      // Yükleme sonrası güncel proje nesnesini al
       final updated = settings.projects.firstWhere(
         (p) => p.id == project.id,
         orElse: () => project,
       );
-      if (updated.processedBlocks.isEmpty) return;
+
+      // Bloklar hala boşsa (hata veya veri yok), kullanıcıya bildir
+      if (updated.processedBlocks.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(settings.trans['error_loading_project'] ?? 'Proje yüklenemedi veya içerik boş.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // Güncellenmiş proje ile devam et
       project = updated;
     }
 
     await settings.openProjectInEditorAsync(project);
     if (mounted) {
       settings.requestTabSwitch(1);
-      Navigator.pop(context);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -2187,7 +2604,31 @@ class _HistoryTabState extends State<HistoryTab> {
     List<TranslationProject> allProjects,
     List<TranslationProject> visibleProjects,
   ) {
-    if (_isSelectionMode) {
+    final labelStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+        );
+    final unselectedLabelStyle =
+        Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            );
+    final tabs = TabBar(
+      controller: _tabController,
+      isScrollable: false,
+      indicatorSize: TabBarIndicatorSize.tab,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+      labelStyle: labelStyle,
+      unselectedLabelStyle: unselectedLabelStyle,
+      tabs: [
+        _buildHistoryTabLabel(trans['history_title'] ?? 'Çeviri Geçmişi'),
+        _buildHistoryTabLabel(
+          trans['credit_history_title'] ?? 'Kredi Geçmişi',
+        ),
+      ],
+    );
+
+    if (_isSelectionMode && _activeTabIndex == 0) {
       final visibleIds = visibleProjects.map((p) => p.id).toSet();
       final canToggleSelectAll = visibleIds.isNotEmpty;
       final allVisibleSelected =
@@ -2214,6 +2655,7 @@ class _HistoryTabState extends State<HistoryTab> {
               .replaceAll('{n}', _selectedProjectIds.length.toString())
               .replaceAll('{count}', _selectedProjectIds.length.toString()),
         ),
+        bottom: tabs,
         actions: [
           IconButton(
             icon: Icon(allVisibleSelected ? Icons.deselect : Icons.select_all),
@@ -2271,159 +2713,208 @@ class _HistoryTabState extends State<HistoryTab> {
           ),
           onPressed: () => Navigator.maybePop(context),
         ),
-        title: Text(trans['history_title'] ?? 'Çeviri Geçmişi'),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.sort),
-            tooltip: _localizedOrSafeFallback(
-              settings: settings,
-              trans: trans,
-              key: 'sort_tooltip',
-              trFallback: 'Sırala',
-              englishValue: 'Sort',
-            ),
-            onSelected: (val) {
-              setState(() {
-                if (val == 'date_desc') {
-                  _sortOption = SortOption.date;
-                  _ascending = false;
-                } else if (val == 'date_asc') {
-                  _sortOption = SortOption.date;
-                  _ascending = true;
-                } else if (val == 'name_asc') {
-                  _sortOption = SortOption.name;
-                  _ascending = true;
-                } else if (val == 'name_desc') {
-                  _sortOption = SortOption.name;
-                  _ascending = false;
-                }
-              });
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'date_desc',
-                child: Text(
-                  _localizedOrSafeFallback(
+        title: Text(trans['history'] ?? 'Geçmiş'),
+        bottom: tabs,
+        actions: _activeTabIndex == 0
+            ? [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: _localizedOrSafeFallback(
                     settings: settings,
                     trans: trans,
-                    key: 'sort_date_desc',
-                    trFallback: 'Tarih (Yeni > Eski)',
-                    englishValue: 'Date (New > Old)',
+                    key: 'sort_tooltip',
+                    trFallback: 'Sırala',
+                    englishValue: 'Sort',
                   ),
+                  onSelected: (val) {
+                    setState(() {
+                      if (val == 'date_desc') {
+                        _sortOption = SortOption.date;
+                        _ascending = false;
+                      } else if (val == 'date_asc') {
+                        _sortOption = SortOption.date;
+                        _ascending = true;
+                      } else if (val == 'name_asc') {
+                        _sortOption = SortOption.name;
+                        _ascending = true;
+                      } else if (val == 'name_desc') {
+                        _sortOption = SortOption.name;
+                        _ascending = false;
+                      }
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'date_desc',
+                      child: Text(
+                        _localizedOrSafeFallback(
+                          settings: settings,
+                          trans: trans,
+                          key: 'sort_date_desc',
+                          trFallback: 'Tarih (Yeni > Eski)',
+                          englishValue: 'Date (New > Old)',
+                        ),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'date_asc',
+                      child: Text(
+                        _localizedOrSafeFallback(
+                          settings: settings,
+                          trans: trans,
+                          key: 'sort_date_asc',
+                          trFallback: 'Tarih (Eski > Yeni)',
+                          englishValue: 'Date (Old > New)',
+                        ),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'name_asc',
+                      child: Text(
+                        _localizedOrSafeFallback(
+                          settings: settings,
+                          trans: trans,
+                          key: 'sort_name_asc',
+                          trFallback: 'İsim (A > Z)',
+                          englishValue: 'Name (A > Z)',
+                        ),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'name_desc',
+                      child: Text(
+                        _localizedOrSafeFallback(
+                          settings: settings,
+                          trans: trans,
+                          key: 'sort_name_desc',
+                          trFallback: 'İsim (Z > A)',
+                          englishValue: 'Name (Z > A)',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              PopupMenuItem(
-                value: 'date_asc',
-                child: Text(
-                  _localizedOrSafeFallback(
-                    settings: settings,
-                    trans: trans,
-                    key: 'sort_date_asc',
-                    trFallback: 'Tarih (Eski > Yeni)',
-                    englishValue: 'Date (Old > New)',
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'name_asc',
-                child: Text(
-                  _localizedOrSafeFallback(
-                    settings: settings,
-                    trans: trans,
-                    key: 'sort_name_asc',
-                    trFallback: 'İsim (A > Z)',
-                    englishValue: 'Name (A > Z)',
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'name_desc',
-                child: Text(
-                  _localizedOrSafeFallback(
-                    settings: settings,
-                    trans: trans,
-                    key: 'sort_name_desc',
-                    trFallback: 'İsim (Z > A)',
-                    englishValue: 'Name (Z > A)',
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (settings.projects.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_sweep),
-              tooltip: trans['clear_history_title'] ?? 'Geçmişi Temizle',
-              onPressed: () async {
-                if (!settings.confirmDeletes) {
-                  final projectsToDelete = List<TranslationProject>.from(settings.projects);
-                  for (final p in projectsToDelete) {
-                    await _deleteProjectFile(p);
-                  }
-                  settings.clearAllProjects();
-                  return;
-                }
+                if (settings.projects.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.delete_sweep),
+                    tooltip: trans['clear_history_title'] ?? 'Geçmişi Temizle',
+                    onPressed: () async {
+                      if (!settings.confirmDeletes) {
+                        final projectsToDelete =
+                            List<TranslationProject>.from(settings.projects);
+                        for (final p in projectsToDelete) {
+                          await _deleteProjectFile(p);
+                        }
+                        settings.clearAllProjects();
+                        return;
+                      }
 
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(trans['clear_history_title'] ?? 'Geçmişi Temizle'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(trans['clear_history_confirm'] ?? 'Tüm geçmiş silinecek.'),
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.errorContainer.withAlpha(40),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Theme.of(context).colorScheme.error.withAlpha(80)),
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: Text(
+                            trans['clear_history_title'] ?? 'Geçmişi Temizle',
                           ),
-                          child: Row(
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.warning_rounded, color: Theme.of(context).colorScheme.error),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  trans['delete_all_permanent_warning'] ?? 'Tüm dosyalar diskten kalıcı olarak silinecek ve geri getirilemeyecek!',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.error,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                              Text(
+                                trans['clear_history_confirm'] ??
+                                    'Tüm geçmiş silinecek.',
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .errorContainer
+                                      .withAlpha(40),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .error
+                                        .withAlpha(80),
                                   ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.warning_rounded,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        trans['delete_all_permanent_warning'] ??
+                                            'Tüm dosyalar diskten kalıcı olarak silinecek ve geri getirilemeyecek!',
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: Text(trans['btn_cancel'] ?? 'İptal'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                final projectsToDelete =
+                                    List<TranslationProject>.from(
+                                  settings.projects,
+                                );
+                                for (final p in projectsToDelete) {
+                                  await _deleteProjectFile(p);
+                                }
+                                settings.clearAllProjects();
+                                if (context.mounted) Navigator.pop(ctx);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                              ),
+                              child: Text(trans['yes_delete_all'] ?? 'Evet, Sil'),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: Text(trans['btn_cancel'] ?? 'İptal')),
-                      ElevatedButton(
-                        onPressed: () async {
-                          // Önce dosyaları diskten temizle
-                          final projectsToDelete = List<TranslationProject>.from(settings.projects);
-                          for (final p in projectsToDelete) {
-                            await _deleteProjectFile(p);
-                          }
-                          settings.clearAllProjects();
-                          if (context.mounted) Navigator.pop(ctx);
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        child: Text(trans['yes_delete_all'] ?? 'Evet, Sil'),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
-            ),
-        ],
+              ]
+            : null,
       );
     }
-   }
+
+  }
+
+  Tab _buildHistoryTabLabel(String text) {
+    return Tab(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SelectionMarqueePainter extends CustomPainter {

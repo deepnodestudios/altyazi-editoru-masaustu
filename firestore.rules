@@ -23,6 +23,17 @@ service cloud.firestore {
             && request.resource.data.encodingDetected in ['UTF-8', 'UTF-16LE', 'UTF-16BE', 'UTF-16']));
     }
 
+    function hasRequiredCacheIdentity() {
+      return ('creatorDeviceId' in request.resource.data)
+        && request.resource.data.creatorDeviceId is string
+        && request.resource.data.creatorDeviceId.size() > 0
+        && (!('completedPlatform' in request.resource.data)
+          || request.resource.data.completedPlatform != 'web'
+          || (('creatorEmail' in request.resource.data)
+            && request.resource.data.creatorEmail is string
+            && request.resource.data.creatorEmail.size() > 0));
+    }
+
     // Global translations (shared cache)
     match /global_translations/{translationId} {
       allow read: if isSignedIn();
@@ -32,13 +43,12 @@ service cloud.firestore {
         && encodingAllowed()
         && ('translatedContent' in request.resource.data)
         && ('targetLanguage' in request.resource.data)
-        && ('sourceHash' in request.resource.data);
+        && ('sourceHash' in request.resource.data)
+        && hasRequiredCacheIdentity();
 
       // Allow only lightweight usage tracking updates; prevent overwriting translation content.
       allow update: if isSignedIn()
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['usageCount', 'lastUsedAt'])
-        && (!('usageCount' in request.resource.data) || request.resource.data.usageCount is int);
-
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['usageCount', 'lastUsedAt', 'platforms', 'completedPlatform', 'deviceIds', 'lastDeviceId', 'lastUserEmail']);
       allow delete: if false;
     }
 
@@ -57,7 +67,10 @@ service cloud.firestore {
           'email',
           'displayName',
           'photoUrl',
-          'lastSignIn'
+          'lastSignIn',
+          'lastAppOpen',
+          'platforms',
+          'lastPlatform'
         ]);
 
       allow delete: if false;
@@ -105,6 +118,16 @@ service cloud.firestore {
 
     match /device_bonuses/{deviceId} {
       allow read, write: if false;
+    }
+
+    match /google_users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && !('credits' in request.resource.data) 
+        && !('purchasedCredits' in request.resource.data);
+      allow update: if isOwner(userId) 
+        && (!('credits' in request.resource.data) || request.resource.data.credits == resource.data.credits)
+        && (!('purchasedCredits' in request.resource.data) || request.resource.data.purchasedCredits == resource.data.purchasedCredits);
     }
 
     // Default deny

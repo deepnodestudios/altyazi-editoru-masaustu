@@ -19,7 +19,10 @@ class AiPanelLanguageSelectorSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDarkMode = theme.brightness == Brightness.dark;
+    
     final safeDisplayText = displayText.trim().isEmpty ? 'Language' : displayText;
     final containerPadding = balancedTopBand
       ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4)
@@ -40,9 +43,15 @@ class AiPanelLanguageSelectorSection extends StatelessWidget {
           key: selectorTapKey,
           padding: containerPadding,
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withAlpha(80),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: colorScheme.outline.withAlpha(60)),
+            color: isDarkMode 
+                ? colorScheme.surfaceContainerHighest.withAlpha(80)
+                : colorScheme.surface,
+            borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
+            border: Border.all(
+              color: isDarkMode
+                  ? colorScheme.outline.withAlpha(60)
+                  : colorScheme.outlineVariant,
+            ),
           ),
           child: Row(
             children: [
@@ -54,7 +63,7 @@ class AiPanelLanguageSelectorSection extends StatelessWidget {
               const SizedBox(width: kAiPanelInlineGap),
               Expanded(
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
                   onTap: onTap,
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: selectorVerticalPadding),

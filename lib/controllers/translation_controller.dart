@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/ai_language_options.dart';
 import '../utils/string_utils.dart';
 import '../services/file_service.dart';
 import '../services/gemini_service.dart';
@@ -23,7 +24,6 @@ import '../models/subtitle_block.dart';
 import '../app_settings.dart';
 import '../managers/project_manager.dart';
 
-
 enum TranslationStatus { idle, running, paused, completed, error }
 
 /// Çeviri işi için veri modeli
@@ -32,7 +32,7 @@ class TranslationJob {
   final String targetLanguage;
   final bool clearSdh;
   final String? displayFileName;
-  
+
   TranslationJob({
     required this.file,
     required this.targetLanguage,
@@ -85,35 +85,41 @@ class TranslationController extends ChangeNotifier {
   final SubtitleRepository _subtitleRepository = SubtitleRepository();
   late final TranslationEngine _engine;
   late final GeminiService _geminiService;
-  
+
   FirebaseAuth get _auth => FirebaseAuth.instance;
-  
+
   // --- UI State ---
   File? _selectedFile;
   File? get selectedFile => _selectedFile;
-  
+
   String? currentFileName;
   String? generatedFilePath;
-  
+
   List<SubtitleBlock> sourceBlocks = [];
   List<SubtitleBlock> translatedBlocks = [];
 
   TranslationStatus status = TranslationStatus.idle;
-  bool get isLoading => status == TranslationStatus.running || status == TranslationStatus.paused;
+  bool get isLoading =>
+      status == TranslationStatus.running || status == TranslationStatus.paused;
 
   bool _stopRequested = false;
   bool get isStopped => _stopRequested;
-  
+
+  // Desktop/batch UX: On manual stop, only remove the current file from the
+  // batch translation list if the first-chunk credit was actually consumed
+  // for this run (or we're resuming a previously-paid job).
+  bool _stopShouldRemoveFromBatchList = false;
+
   bool isTranslationComplete = false;
   bool isCached = false;
-  
+
   // Progress
   double progress = 0.0;
   String elapsedTime = "00:00";
   String remainingTime = "00:00";
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _progressTimer;
-  
+
   // Resume State
   TranslationResumeState? _resumeState;
   bool get hasResumeState => _resumeState != null;
@@ -132,25 +138,75 @@ class TranslationController extends ChangeNotifier {
   // --- Queue / Batch State ---
   final List<TranslationJob> _jobQueue = [];
   TranslationJob? _currentJob;
-  
+
   // Batch Results
   final Map<String, String> batchResults = {};
+  final List<String> activeBatchFilePaths = [];
   final List<BatchError> _batchErrors = [];
   final List<String> _batchCompletedPaths = [];
-  
+
+  // Best-effort cached source content for the currently running job.
+  // Prevents completion from failing if the source copy is missing later.
+  String? _currentJobSourceContent;
+
+  static String _canonicalizeSubtitleContentForHash(String content) {
+    var s = content;
+    if (s.isNotEmpty && s.codeUnitAt(0) == 0xFEFF) {
+      s = s.substring(1);
+    }
+    s = s.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    s = s.replaceAll(RegExp(r'[ \t]+\n'), '\n');
+    s = s.trimRight();
+    return s;
+  }
+
+  String _stableSubtitleHash(String content) {
+    return _fileService.calculateMd5FromString(
+      _canonicalizeSubtitleContentForHash(content),
+    );
+  }
+
+  TranslationResumeState _rebuildResumeWith({
+    required TranslationResumeState resume,
+    required String hash,
+    required String filePath,
+  }) {
+    return TranslationResumeState(
+      hash: hash,
+      filePath: filePath,
+      targetLanguage: resume.targetLanguage,
+      clearSdh: resume.clearSdh,
+      sourceContent: resume.sourceContent,
+      sourceEncoding: resume.sourceEncoding,
+      chunks: resume.chunks,
+      nextChunkIndex: resume.nextChunkIndex,
+      translatedText: resume.translatedText,
+      translatedBlocks: resume.translatedBlocks,
+      processedLines: resume.processedLines,
+      totalLines: resume.totalLines,
+      totalBlocks: resume.totalBlocks,
+      chargeKey: resume.chargeKey,
+    );
+  }
+
   bool _isBatchMode = false;
-  bool get isBatchProcessing => _isBatchMode;
-  
+  bool _isCloudBatchMode = false;
+  bool get isCloudBatchMode => _isCloudBatchMode;
+  bool get isBatchProcessing => _isBatchMode || _isCloudBatchMode;
+
   int _batchSuccessCount = 0;
   int get batchSuccessCount => _batchSuccessCount;
   int get batchErrorCount => _batchErrors.length;
   int _totalBatchJobs = 0;
   int get batchQueueLength => _totalBatchJobs;
   List<BatchError> get batchErrors => List.unmodifiable(_batchErrors);
-  List<String> get batchCompletedPaths => List.unmodifiable(_batchCompletedPaths);
-  
-  final _batchCompleteController = StreamController<Map<String, String>>.broadcast();
-  Stream<Map<String, String>> get batchCompleteStream => _batchCompleteController.stream;
+  List<String> get batchCompletedPaths =>
+      List.unmodifiable(_batchCompletedPaths);
+
+  final _batchCompleteController =
+      StreamController<Map<String, String>>.broadcast();
+  Stream<Map<String, String>> get batchCompleteStream =>
+      _batchCompleteController.stream;
 
   static String _normalizePathForCompare(String pathStr) {
     final normalized = pathStr.replaceAll('/', Platform.pathSeparator);
@@ -159,6 +215,12 @@ class TranslationController extends ChangeNotifier {
 
   void attachSettings(AppSettings settings) {
     _settings = settings;
+
+    // Bind Google Sign In Success to grant login bonus
+    _settings?.onGoogleSignInSuccess = (String uid) async {
+      await billingService.checkAndGiveStarterCredits(silent: false);
+    };
+
     // Keep background progress notifications working even when the AI panel UI
     // isn't mounted (e.g., user backgrounds the app or is on another tab).
     onProgress ??= settings.showProgressNotification;
@@ -183,11 +245,12 @@ class TranslationController extends ChangeNotifier {
     }
 
     final fileName = path.basename(sourceFile.path);
-    final extension = path.extension(fileName);
-    final baseName = path.basenameWithoutExtension(fileName);
-    
-    // Hash ile benzersiz dosya adı oluştur
-    final permanentFileName = '$baseName' '_$hash$extension';
+    var extension = path.extension(fileName);
+    if (extension.isEmpty) extension = '.srt';
+
+    // Short + stable filename to avoid overly long names (resume_*, etc.).
+    // Still matches orphan-cleanup pattern: _<md5>.(srt|vtt)
+    final permanentFileName = 'src_$hash$extension';
     final permanentFile = File(path.join(subtitlesDir.path, permanentFileName));
 
     // Dosya zaten varsa kopyalamaya gerek yok
@@ -235,11 +298,56 @@ class TranslationController extends ChangeNotifier {
     if (turkishCharHits >= 2) return false;
 
     const stopwords = <String>{
-      'the', 'and', 'to', 'of', 'in', 'is', 'it', 'you', 'i', 'that', 'for', 'on',
-      'with', 'as', 'this', 'be', 'are', 'was', 'were', 'have', 'has', 'had',
-      'not', 'at', 'but', 'we', 'they', 'he', 'she', 'my', 'your', 'me', 'do',
-      'does', 'did', 'so', 'if', 'what', 'there', 'their', 'them', 'can',
-      'will', 'just', 'one', 'all', 'no', 'yes', 'okay', 'yeah',
+      'the',
+      'and',
+      'to',
+      'of',
+      'in',
+      'is',
+      'it',
+      'you',
+      'i',
+      'that',
+      'for',
+      'on',
+      'with',
+      'as',
+      'this',
+      'be',
+      'are',
+      'was',
+      'were',
+      'have',
+      'has',
+      'had',
+      'not',
+      'at',
+      'but',
+      'we',
+      'they',
+      'he',
+      'she',
+      'my',
+      'your',
+      'me',
+      'do',
+      'does',
+      'did',
+      'so',
+      'if',
+      'what',
+      'there',
+      'their',
+      'them',
+      'can',
+      'will',
+      'just',
+      'one',
+      'all',
+      'no',
+      'yes',
+      'okay',
+      'yeah',
     };
 
     var stopHits = 0;
@@ -269,7 +377,8 @@ class TranslationController extends ChangeNotifier {
 
   Future<bool> _shouldUseFirebaseForFile(File file) async {
     try {
-      final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+      final readResult =
+          await _subtitleRepository.readFileWithEncoding(file.path);
       var content = readResult.content;
       final clearSdh = _settings?.sdhClear ?? false;
       if (clearSdh) {
@@ -280,7 +389,7 @@ class TranslationController extends ChangeNotifier {
       return false;
     }
   }
-  
+
   // Callbacks
   Function(String key, [String? param])? _onLog;
   set onLog(Function? callback) {
@@ -301,35 +410,37 @@ class TranslationController extends ChangeNotifier {
     billingService.onLog = _onLog;
   }
 
-  Function(int current, int total, {bool isComplete, String? fileName})? onProgress;
+  Function(int current, int total, {bool isComplete, String? fileName})?
+      onProgress;
   Function(String title, String message)? onError;
   Function(bool enabled)? onWakelock;
 
   // Proxy getters for UI (Delegation pattern)
   int get userCredits => billingService.userCredits;
   List<CreditPackage> get packages => billingService.packages;
-  Stream<void> get purchaseSuccessStream => billingService.purchaseSuccessStream;
-  
+  Stream<void> get purchaseSuccessStream =>
+      billingService.purchaseSuccessStream;
+
   bool get isPurchasing => billingService.isPurchasing;
   bool get isStoreLoading => billingService.isStoreLoading;
   String? get storeError => billingService.storeError;
 
   TranslationController() {
-    _geminiService = GeminiService(); 
-    _engine = TranslationEngine(_geminiService); 
-    
+    _geminiService = GeminiService();
+    _engine = TranslationEngine(_geminiService);
+
     // Engine Logging & Listeners
     _engine.onLog = (key, [param]) => _onLog?.call(key, param);
     _engine.onProgress = _updateProgress;
     _engine.onTranslatedBlocksUpdate = _updateTranslatedBlocks;
-    
+
     // Billing Listeners
     billingService.addListener(_onBillingUpdate);
     // Avoid spamming the system log on app startup; user-initiated actions
     // (opening purchase dialog / retry) still log as before.
     billingService.checkAndGiveStarterCredits(silent: true);
     billingService.fetchPackages(silent: true);
-    
+
     // Cache'den resume state'i yükle
     _loadResumeStateFromCache();
 
@@ -366,15 +477,15 @@ class TranslationController extends ChangeNotifier {
       );
     }
   }
-  
+
   void _onBillingUpdate() {
     notifyListeners();
   }
-  
+
   // Proxy Methods
   Future<void> fetchPackages() => billingService.fetchPackages();
   Future<void> buyCredit(CreditPackage p) => billingService.buyCredit(p);
-  
+
   /// Çoklu çeviri işlemini başlatır
   Future<BatchSummary> startBatchTranslationQueue({
     required List<BatchFile> files,
@@ -387,8 +498,7 @@ class TranslationController extends ChangeNotifier {
       // silently ignore new starts.
       // Important: having a non-empty queue while status is idle is NOT a sign
       // of a healthy running state; it usually indicates we got stuck.
-      final isActuallyRunning =
-          status == TranslationStatus.running ||
+      final isActuallyRunning = status == TranslationStatus.running ||
           status == TranslationStatus.paused ||
           _currentJob != null;
 
@@ -403,7 +513,8 @@ class TranslationController extends ChangeNotifier {
         return BatchSummary(
           successCount: _batchSuccessCount,
           errors: List.unmodifiable(_batchErrors),
-          completedPaths: List.unmodifiable(_batchCompletedPaths), // completedPaths
+          completedPaths:
+              List.unmodifiable(_batchCompletedPaths), // completedPaths
           stopped: false,
           outOfCredits: false,
         );
@@ -426,9 +537,10 @@ class TranslationController extends ChangeNotifier {
     _batchCompletedPaths.clear();
     batchResults.clear();
     _batchSuccessCount = 0;
-    
+
     _stopRequested = false;
     _isBatchMode = true;
+    _isCloudBatchMode = false;
 
     // If a previous run left the controller in paused state, starting a new queue
     // would hang in the pause loop before the first job.
@@ -475,7 +587,9 @@ class TranslationController extends ChangeNotifier {
 
     // De-duplicate by path across current + queued.
     final existing = <String>{};
-    if (_currentJob != null) existing.add(_normalizePathForCompare(_currentJob!.file.path));
+    if (_currentJob != null) {
+      existing.add(_normalizePathForCompare(_currentJob!.file.path));
+    }
     for (final j in _jobQueue) {
       existing.add(_normalizePathForCompare(j.file.path));
     }
@@ -517,7 +631,7 @@ class TranslationController extends ChangeNotifier {
     bool playCompletionSound = true,
   }) async {
     if (_selectedFile == null) return;
-    
+
     // Tekli işlem için kuyruğu hazırla
     _jobQueue.clear();
     _jobQueue.add(TranslationJob(
@@ -526,10 +640,11 @@ class TranslationController extends ChangeNotifier {
       clearSdh: clearSdh,
       displayFileName: currentFileName,
     ));
-    
+
     _stopRequested = false;
     _isBatchMode = false; // Tekli mod
-    
+    _isCloudBatchMode = false;
+
     await _processQueue(playCompletionSound: playCompletionSound);
   }
 
@@ -552,12 +667,14 @@ class TranslationController extends ChangeNotifier {
       // Don't crash/stall; surface an error and move on.
       if (!job.file.existsSync()) {
         if (_isBatchMode) {
-          _batchErrors.add(BatchError(fileName: job.effectiveFileName, message: job.file.path));
+          _batchErrors.add(BatchError(
+              fileName: job.effectiveFileName, message: job.file.path));
           _batchCompletedPaths.add(job.file.path);
 
           final settings = _settings;
           if (settings != null) {
-            unawaited(settings.removeFilesFromBatchTranslation([job.file.path]));
+            unawaited(
+                settings.removeFilesFromBatchTranslation([job.file.path]));
           }
           _onLog?.call(
             'log_batch_error',
@@ -576,33 +693,49 @@ class TranslationController extends ChangeNotifier {
       // Kredi kontrolü
       // Resume durumunda kredi düşülmeyeceği için burada katı kontrol yapmıyoruz,
       // _processJob içinde kontrol edilecek.
-      
+
       try {
         await _processJob(job);
-        
+
         // Başarılı işlem sonrası
         if (status == TranslationStatus.completed) {
           if (_isBatchMode) {
-             _batchSuccessCount++;
-             _batchCompletedPaths.add(job.file.path);
+            _batchSuccessCount++;
+            _batchCompletedPaths.add(job.file.path);
 
-              // Keep persisted AI Panel list in sync even if the batch was started
-              // from outside the AI panel (e.g. History resume).
-              final settings = _settings;
-              if (settings != null) {
-                unawaited(settings.removeFilesFromBatchTranslation([job.file.path]));
+            // Keep persisted AI Panel list in sync even if the batch was started
+            // from outside the AI panel (e.g. History resume).
+            final settings = _settings;
+            if (settings != null) {
+              unawaited(
+                  settings.removeFilesFromBatchTranslation([job.file.path]));
+            }
+
+            // Batch sonuçlarını topla
+            if (generatedFilePath != null) {
+              try {
+                final content = await File(generatedFilePath!).readAsString();
+                batchResults[job.effectiveFileName] = content;
+              } catch (e) {
+                _batchErrors.add(
+                  BatchError(
+                    fileName: job.effectiveFileName,
+                    message: 'OUTPUT_READ_FAILED: ${e.toString()}',
+                  ),
+                );
+                _onLog?.call(
+                  'log_batch_error',
+                  jsonEncode(
+                      {'file': job.effectiveFileName, 'error': e.toString()}),
+                );
               }
-             
-             // Batch sonuçlarını topla
-             if (generatedFilePath != null) {
-               final content = await File(generatedFilePath!).readAsString();
-               batchResults[job.effectiveFileName] = content;
-             }
+            }
           }
         }
       } catch (e) {
         if (_isBatchMode) {
-          _batchErrors.add(BatchError(fileName: job.effectiveFileName, message: e.toString()));
+          _batchErrors.add(BatchError(
+              fileName: job.effectiveFileName, message: e.toString()));
           status = TranslationStatus.error;
           _onLog?.call(
             'log_batch_error',
@@ -617,7 +750,8 @@ class TranslationController extends ChangeNotifier {
         } else {
           // Tekli modda hatayı UI'a yansıt
           status = TranslationStatus.error;
-          _onLog?.call('log_error_generic', jsonEncode({'error': e.toString()}));
+          _onLog?.call(
+              'log_error_generic', jsonEncode({'error': e.toString()}));
           onError?.call("Hata", "$e");
         }
       }
@@ -628,7 +762,7 @@ class TranslationController extends ChangeNotifier {
       _batchCompleteController.add(batchResults);
       if (playCompletionSound) SystemSound.play(SystemSoundType.alert);
     }
-    
+
     _currentJob = null;
   }
 
@@ -661,7 +795,7 @@ class TranslationController extends ChangeNotifier {
       final prep = await _prepareFileAndHash(job);
       final workingFile = prep.file;
       final initialHash = prep.hash;
-      
+
       // Resume Kontrolü + Hash Double-check (Single + Batch)
       final resolved = await _resolveResumeAndHash(
         file: workingFile,
@@ -670,26 +804,33 @@ class TranslationController extends ChangeNotifier {
       );
       final hash = resolved.hash;
       final resume = resolved.resume;
-      final resumedChargeKey = resume?.chargeKey?.trim();
-      final creditChargeKey = (resumedChargeKey != null && resumedChargeKey.isNotEmpty)
-          ? resumedChargeKey
-          : _buildCreditChargeKey(
-              filePath: workingFile.path,
-              targetLanguage: job.targetLanguage,
-            );
+        final resumedChargeKey = resume?.chargeKey?.trim();
+        final cachedChargeKey = (_activeTranslationChargeKey ?? '').trim();
+        final creditChargeKey =
+          (resumedChargeKey != null && resumedChargeKey.isNotEmpty)
+            ? resumedChargeKey
+            : (cachedChargeKey.isNotEmpty
+              ? cachedChargeKey
+              : _buildCreditChargeKey(
+                filePath: workingFile.path,
+                targetLanguage: job.targetLanguage,
+              ));
       _activeTranslationChargeKey = creditChargeKey;
-      _geminiService.setTranslationChargeContext(
-        chargeKey: creditChargeKey,
-        approveCharge: true,
-      );
+      _geminiService.setDeviceId(billingService.deviceId);
       final isResuming = resume != null;
       final hasTranslatedProgressOnResume =
           isResuming && resume.translatedBlocks.isNotEmpty;
 
+      // Per-job stop behavior.
+      // - New run: keep in batch list until credit is successfully consumed.
+      // - Resume with progress: credit was already consumed earlier.
+      _stopShouldRemoveFromBatchList = hasTranslatedProgressOnResume;
+
       // Blokları Hazırla
       await _prepareBlocksForUI(workingFile, job.clearSdh, isResuming, resume);
-      
-      generatedFilePath = SubtitleParser.generateOutputFilePath(workingFile.path, job.targetLanguage);
+
+      generatedFilePath = SubtitleParser.generateOutputFilePath(
+          workingFile.path, job.targetLanguage);
       final allowGlobalCache = await _shouldUseFirebaseForFile(workingFile);
       final u = _auth.currentUser;
       final allowUserHistory = u != null && !u.isAnonymous;
@@ -703,6 +844,20 @@ class TranslationController extends ChangeNotifier {
         throw Exception("Yetersiz Bakiye");
       }
 
+      if (needsCreditForThisRun) {
+        await _geminiService.prepareTranslationAccess(
+          chargeKey: creditChargeKey,
+          fileName: job.fileName,
+          targetLanguage: job.targetLanguage,
+          platform: Platform.operatingSystem,
+        );
+      } else {
+        _geminiService.setTranslationChargeContext(
+          chargeKey: creditChargeKey,
+          approveCharge: false,
+        );
+      }
+
       // 3. Cache Kontrolü (Resume değilse)
       if (!isResuming && allowGlobalCache) {
         final cacheHit = await _tryLoadFromGlobalCache(
@@ -714,14 +869,17 @@ class TranslationController extends ChangeNotifier {
         if (cacheHit) return;
       }
 
-        // Resume'da kredi sadece daha önce en az bir başarılı chunk varsa
-        // düşülmüş kabul edilir. (İlk chunk'tan önce hata aldıysa tekrar denemede
-        // kredi ilk başarılı chunk'ta düşmelidir.)
-        // Yeni çeviride kredi, ilk chunk başarıyla geldikten sonra bir kez düşülür.
-          var creditConsumedForRun = hasTranslatedProgressOnResume;
+      // Resume'da kredi sadece daha önce en az bir başarılı chunk varsa
+      // düşülmüş kabul edilir. (İlk chunk'tan önce hata aldıysa tekrar denemede
+      // kredi ilk başarılı chunk'ta düşmelidir.)
+      // Yeni çeviride kredi, ilk chunk başarıyla geldikten sonra bir kez düşülür.
+      var creditConsumedForRun = hasTranslatedProgressOnResume;
 
-          final effectiveClearSdhForRun =
-            isResuming ? resume.clearSdh : job.clearSdh;
+      final effectiveClearSdhForRun =
+          isResuming ? resume.clearSdh : job.clearSdh;
+
+      // Update deviceId for server-side verification
+      _geminiService.setDeviceId(billingService.deviceId);
 
       // 4. Çeviri Motorunu Çalıştır
       _engine.onBeforeChunk = (chunkIndex, totalChunks) async {
@@ -734,14 +892,8 @@ class TranslationController extends ChangeNotifier {
       _engine.onAfterChunkSuccess = (chunkIndex, totalChunks) async {
         if (_stopRequested) return;
         if (!creditConsumedForRun) {
-          await billingService.consumeCredit(
-            1,
-            reason: 'first_chunk_success',
-            chargeKey: creditChargeKey,
-            fileName: job.fileName,
-            targetLanguage: job.targetLanguage,
-          );
           creditConsumedForRun = true;
+          _stopShouldRemoveFromBatchList = true;
         }
       };
 
@@ -866,7 +1018,6 @@ class TranslationController extends ChangeNotifier {
           }
         }
       }
-
     } finally {
       _activeTranslationChargeKey = null;
       _geminiService.clearTranslationChargeContext();
@@ -894,12 +1045,13 @@ class TranslationController extends ChangeNotifier {
       // Small debounce to avoid reacting to transient/partial reads.
       await Future.delayed(const Duration(seconds: 1));
 
-      final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+      final readResult =
+          await _subtitleRepository.readFileWithEncoding(file.path);
       var content = readResult.content;
       if (clearSdh) {
         content = SubtitleParser.clearSdh(content);
       }
-      final canonicalHash = _fileService.calculateMd5FromString(content);
+      final canonicalHash = _stableSubtitleHash(content);
 
       if (canonicalHash != expectedHash) {
         _logResumeDebug(
@@ -908,12 +1060,14 @@ class TranslationController extends ChangeNotifier {
       }
       return canonicalHash;
     } catch (e) {
-      _logResumeDebug('hash double-check failed error=${e.toString()} file=${file.path}');
+      _logResumeDebug(
+          'hash double-check failed error=${e.toString()} file=${file.path}');
       return '';
     }
   }
 
-  Future<({TranslationResumeState? resume, String hash})> _resolveResumeAndHash({
+  Future<({TranslationResumeState? resume, String hash})>
+      _resolveResumeAndHash({
     required File file,
     required String hash,
     required String targetLanguage,
@@ -921,21 +1075,46 @@ class TranslationController extends ChangeNotifier {
     var resume = _resumeState;
     if (resume == null) return (resume: null, hash: hash);
 
-    // If hash doesn't match, double-check before clearing resume state.
+    // If hash doesn't match, try to reconcile using a stable hash computed from
+    // resume.sourceContent (cross-device: Windows vs Android line endings/BOM).
     if (resume.hash != hash) {
-      final stableHash = await _doubleCheckCanonicalHash(
+      final stableFromFile = await _doubleCheckCanonicalHash(
         file: file,
         clearSdh: resume.clearSdh,
         expectedHash: resume.hash,
       );
 
-      if (stableHash == resume.hash) {
-        // False positive mismatch; keep resume and continue with expected hash.
-        _logResumeDebug('hash double-check matched; continuing without restart');
-        if (resume.targetLanguage == targetLanguage) {
-          return (resume: resume, hash: stableHash);
+      final stableFromResume = resume.sourceContent.trim().isNotEmpty
+          ? _stableSubtitleHash(resume.sourceContent)
+          : '';
+
+      final canReconcile = stableFromFile.isNotEmpty &&
+          stableFromResume.isNotEmpty &&
+          stableFromFile == stableFromResume;
+
+      if (canReconcile) {
+        _logResumeDebug('hash reconciled via stable hash; continuing resume');
+        final rebuilt = _rebuildResumeWith(
+          resume: resume,
+          hash: stableFromFile,
+          filePath: file.path,
+        );
+        _resumeState = rebuilt;
+        unawaited(_saveResumeStateToCache());
+        resume = rebuilt;
+        if (aiPanelLanguageCodesEqual(resume.targetLanguage, targetLanguage)) {
+          return (resume: resume, hash: stableFromFile);
         }
-        return (resume: null, hash: stableHash);
+        return (resume: null, hash: stableFromFile);
+      }
+
+      if (stableFromFile == resume.hash) {
+        _logResumeDebug(
+            'hash double-check matched; continuing without restart');
+        if (aiPanelLanguageCodesEqual(resume.targetLanguage, targetLanguage)) {
+          return (resume: resume, hash: stableFromFile);
+        }
+        return (resume: null, hash: stableFromFile);
       }
 
       // Confirmed mismatch: clear resumable state.
@@ -946,7 +1125,7 @@ class TranslationController extends ChangeNotifier {
       return (resume: null, hash: hash);
     }
 
-    if (resume.targetLanguage == targetLanguage) {
+    if (aiPanelLanguageCodesEqual(resume.targetLanguage, targetLanguage)) {
       return (resume: resume, hash: hash);
     }
 
@@ -955,7 +1134,9 @@ class TranslationController extends ChangeNotifier {
 
   bool _isOfflineException(Object e) {
     final s = e.toString().toLowerCase();
-    return s.contains('internet') || s.contains('offline') || s.contains('bağlantı');
+    return s.contains('internet') ||
+        s.contains('offline') ||
+        s.contains('bağlantı');
   }
 
   bool _isAutoResumableError(String errorDetail) {
@@ -1023,7 +1204,9 @@ class TranslationController extends ChangeNotifier {
     }
     if (_auth.currentUser == null) throw Exception('Giriş gerekli.');
     if (Platform.isAndroid) {
-      try { await _settings?.requestNotificationPermission(); } catch (_) {}
+      try {
+        await _settings?.requestNotificationPermission();
+      } catch (_) {}
     }
     if (_settings != null) {
       await _settings!.checkConnectivity();
@@ -1042,70 +1225,117 @@ class TranslationController extends ChangeNotifier {
     _stopwatch.reset();
     _stopwatch.start();
     onWakelock?.call(true);
-    
+
     _progressTimer?.cancel();
     _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!_stopwatch.isRunning) return;
       final elapsed = _stopwatch.elapsed;
-      elapsedTime = '${elapsed.inMinutes.toString().padLeft(2, '0')}:${(elapsed.inSeconds % 60).toString().padLeft(2, '0')}';
+      elapsedTime =
+          '${elapsed.inMinutes.toString().padLeft(2, '0')}:${(elapsed.inSeconds % 60).toString().padLeft(2, '0')}';
       notifyListeners();
     });
   }
 
   void _stopTranslationTimer() {
-      onWakelock?.call(false);
-      _stopwatch.stop();
-      _progressTimer?.cancel();
-      notifyListeners();
+    onWakelock?.call(false);
+    _stopwatch.stop();
+    _progressTimer?.cancel();
+    notifyListeners();
   }
 
-  Future<({File file, String hash})> _prepareFileAndHash(TranslationJob job) async {
+  Future<({File file, String hash})> _prepareFileAndHash(
+      TranslationJob job) async {
     File workingFile = job.file;
     if (_isBatchMode) {
-       final hashTemp = await _fileService.calculateMd5(job.file);
-       final permPath = await _copyFileToAppStorage(job.file, hashTemp);
-       workingFile = File(permPath);
+      final hashTemp = await _fileService.calculateMd5(job.file);
+      final permPath = await _copyFileToAppStorage(job.file, hashTemp);
+      workingFile = File(permPath);
     }
 
-    final readResult = await _subtitleRepository.readFileWithEncoding(workingFile.path);
+    final readResult =
+        await _subtitleRepository.readFileWithEncoding(workingFile.path);
     var content = readResult.content;
     if (job.clearSdh) {
       content = SubtitleParser.clearSdh(content);
     }
-    final hash = _fileService.calculateMd5FromString(content);
+    final hash = _stableSubtitleHash(content);
     return (file: workingFile, hash: hash);
   }
 
   // NOTE: Resume/hash validation is handled asynchronously in _resolveResumeAndHash
   // to allow double-checking against transient I/O/decoding issues.
 
-  Future<void> _prepareBlocksForUI(File file, bool clearSdh, bool isResuming, TranslationResumeState? resume) async {
+  Future<void> _prepareBlocksForUI(File file, bool clearSdh, bool isResuming,
+      TranslationResumeState? resume) async {
     if (!isResuming) {
-      sourceBlocks.clear();
-      translatedBlocks.clear();
-      final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+      sourceBlocks = [];
+      translatedBlocks = [];
+      final readResult =
+          await _subtitleRepository.readFileWithEncoding(file.path);
       var content = readResult.content;
       if (clearSdh) {
         content = SubtitleParser.clearSdh(content);
       }
+      _currentJobSourceContent = content;
       sourceBlocks = SubtitleParser.parseSrt(content);
-      _throwIfTimecodeLimitExceeded(sourceBlocks);
+      _throwIfMultiPackDetected(sourceBlocks);
+        _throwIfTimecodeLimitExceeded(sourceBlocks);
     } else {
       // Resume durumunda hem source hem translated blokları yükle
       // LiveSubtitleViewer sourceBlocks.isNotEmpty kontrolü yapıyor
       if (resume!.sourceContent.isNotEmpty) {
+        _currentJobSourceContent = resume.sourceContent;
         sourceBlocks = SubtitleParser.parseSrt(resume.sourceContent);
+        _throwIfMultiPackDetected(sourceBlocks);
         _throwIfTimecodeLimitExceeded(sourceBlocks);
       } else {
-        final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+        final readResult =
+            await _subtitleRepository.readFileWithEncoding(file.path);
         var content = readResult.content;
         if (clearSdh) {
           content = SubtitleParser.clearSdh(content);
         }
+        _currentJobSourceContent = content;
         sourceBlocks = SubtitleParser.parseSrt(content);
+        _throwIfMultiPackDetected(sourceBlocks);
         _throwIfTimecodeLimitExceeded(sourceBlocks);
       }
       translatedBlocks = List.from(resume.translatedBlocks);
+    }
+  }
+
+  void _throwIfMultiPackDetected(List<SubtitleBlock> blocks) {
+    int maxStartTime = 0;
+
+    for (var i = 0; i < blocks.length; i++) {
+      final timecodeStr = blocks[i].timecode;
+      if (timecodeStr.isEmpty) continue;
+      
+      final parts = timecodeStr.split('-->');
+      if (parts.isEmpty) continue;
+
+      final startStr = parts[0].trim();
+      final startMs = SubtitleParser.parseTimestampToMs(startStr) ?? 0;
+
+      if (startMs > maxStartTime) {
+        maxStartTime = startMs;
+      }
+
+      // Güvenlik mekanizması: Eğer zaman kodu içinde en az 1 dakika (60.000 ms)
+      // ilerlemişsek ve aniden 30 saniyeden (30.000 ms) büyük bir geri dönüş/sıfırlanma 
+      // yaşanıyorsa bu dosyanın birleştirilmiş (multi-pack) olduğunu anlarız.
+      if (maxStartTime > 60000 && (maxStartTime - startMs) > 30000) {
+        final message = _settings?.trans['error_multi_pack_detected'] ?? 'MULTI_PACK_DETECTED';
+        _onLog?.call(
+          'log_error',
+          jsonEncode({
+            'error': message,
+            'maxMs': maxStartTime,
+            'currentMs': startMs
+          }),
+        );
+        throw Exception(message);
+      }
     }
   }
 
@@ -1116,14 +1346,117 @@ class TranslationController extends ChangeNotifier {
     final limitHours = (_maxAllowedTimecodeMs ~/ 3600000);
     final settings = _settings;
     final message = settings?.trans['timecode_limit_exceeded'] ??
-      'Zaman kodu $limitHours saati geçen altyazılar çevrilemiyor.';
+        'Zaman kodu $limitHours saati geçen altyazılar çevrilemiyor.';
 
     _onLog?.call(
       'log_error',
-      jsonEncode({'error': message, 'maxMs': maxMs, 'limitMs': _maxAllowedTimecodeMs}),
+      jsonEncode(
+          {'error': message, 'maxMs': maxMs, 'limitMs': _maxAllowedTimecodeMs}),
     );
 
     throw Exception(message);
+  }
+
+  bool _looksLikeInternalGeneratedFileName(String name) {
+    final leaf = name.trim().split(RegExp(r'[\\/]')).last.trim();
+    if (leaf.isEmpty) return false;
+    final lower = leaf.toLowerCase();
+
+    // Internal permanent storage name: src_<md5>.<ext>
+    if (RegExp(r'^src_[a-f0-9]{32}(\.[^.]+)?$', caseSensitive: false)
+        .hasMatch(lower)) {
+      return true;
+    }
+
+    // Cross-device resume temp name: resume_<timestamp>_<name>.<ext>
+    if (RegExp(r'^resume_\d{10,}_', caseSensitive: false).hasMatch(lower)) {
+      return true;
+    }
+
+    // Known fallback used by History when no name is available.
+    if (lower == 'resume_source.srt' || lower == 'resume_source.vtt') {
+      return true;
+    }
+
+    return false;
+  }
+
+  String? _findFriendlyProjectFileName({
+    required String hash,
+    required String targetLanguage,
+  }) {
+    final settings = _settings;
+    if (settings == null) return null;
+
+    final id = '${hash}_${targetLanguage.toLowerCase()}';
+    for (final p in settings.projects) {
+      if (p.id == id) return p.fileName;
+    }
+
+    for (final p in settings.projects) {
+      if ((p.sourceHash ?? '') == hash && p.targetLanguage == targetLanguage) {
+        return p.fileName;
+      }
+    }
+
+    return null;
+  }
+
+  String _bestFriendlyDisplayNameForHash({
+    required String hash,
+    required String targetLanguage,
+    String? fallbackName,
+    String? fallbackPath,
+  }) {
+    String clean(String s) => StringUtils.normalizeDisplayFileName(s).trim();
+
+    final candidates = <String?>[
+      fallbackName,
+      _findFriendlyProjectFileName(hash: hash, targetLanguage: targetLanguage),
+      fallbackPath,
+    ];
+
+    for (final c in candidates) {
+      final raw = (c ?? '').trim();
+      if (raw.isEmpty) continue;
+      if (_looksLikeInternalGeneratedFileName(raw)) continue;
+      final cleaned = clean(raw);
+      if (cleaned.isEmpty) continue;
+      return cleaned;
+    }
+
+    // Worst-case fallback.
+    final raw = (fallbackName ?? fallbackPath ?? 'subtitle.srt').trim();
+    final cleaned = clean(raw);
+    return cleaned.isNotEmpty ? cleaned : raw;
+  }
+
+  String _bestFriendlyDisplayNameForJob({
+    required TranslationJob job,
+    required String hash,
+  }) {
+    String clean(String s) => StringUtils.normalizeDisplayFileName(s).trim();
+
+    final candidates = <String?>[
+      job.displayFileName,
+      currentFileName,
+      _findFriendlyProjectFileName(
+          hash: hash, targetLanguage: job.targetLanguage),
+      job.effectiveFileName,
+      job.fileName,
+    ];
+
+    for (final c in candidates) {
+      final raw = (c ?? '').trim();
+      if (raw.isEmpty) continue;
+      if (_looksLikeInternalGeneratedFileName(raw)) continue;
+      final cleaned = clean(raw);
+      if (cleaned.isEmpty) continue;
+      return cleaned;
+    }
+
+    final fallback = clean(job.effectiveFileName);
+    return fallback.isEmpty ? job.effectiveFileName : fallback;
   }
 
   Future<bool> _tryLoadFromGlobalCache(
@@ -1136,12 +1469,12 @@ class TranslationController extends ChangeNotifier {
       sourceHash: hash,
       targetLanguage: job.targetLanguage,
     );
-    
+
     if (cachedData != null) {
       isCached = true;
       _resumeState = null;
       await _saveResumeStateToCache();
-      
+
       final translatedContent = cachedData['translatedContent'];
       translatedBlocks = SubtitleParser.parseSrt(translatedContent);
       await File(generatedFilePath!).writeAsString(translatedContent);
@@ -1150,7 +1483,7 @@ class TranslationController extends ChangeNotifier {
         1,
         reason: 'cache_hit',
         chargeKey: chargeKey,
-        fileName: job.fileName,
+        fileName: _bestFriendlyDisplayNameForJob(job: job, hash: hash),
         targetLanguage: job.targetLanguage,
       );
 
@@ -1166,19 +1499,22 @@ class TranslationController extends ChangeNotifier {
       // Best-effort cloud history: don't fail the translation if Firestore is
       // temporarily unavailable.
       try {
+        final displayName =
+            _bestFriendlyDisplayNameForJob(job: job, hash: hash);
         await _repository.addToUserHistory(
           sourceHash: hash,
-          fileName: job.fileName,
+          fileName: displayName,
           targetLanguage: job.targetLanguage,
           encodingDetected: _engine.lastDetectedEncoding,
           clearSdh: job.clearSdh,
         );
       } catch (e) {
-        _onLog?.call('cloud_error_with_details', jsonEncode({'error': e.toString()}));
+        _onLog?.call(
+            'cloud_error_with_details', jsonEncode({'error': e.toString()}));
         unawaited(
           _cloudRetryQueue.enqueueAddToUserHistory(
             sourceHash: hash,
-            fileName: job.fileName,
+            fileName: _bestFriendlyDisplayNameForJob(job: job, hash: hash),
             targetLanguage: job.targetLanguage,
             isPartial: false,
             encodingDetected: _engine.lastDetectedEncoding,
@@ -1196,12 +1532,11 @@ class TranslationController extends ChangeNotifier {
   }
 
   Future<String> _handleTranslationError(
-    TranslationResumeState errorState, 
-    File workingFile, 
-    String hash, 
-    TranslationJob job, 
-    bool allowUserHistory
-  ) async {
+      TranslationResumeState errorState,
+      File workingFile,
+      String hash,
+      TranslationJob job,
+      bool allowUserHistory) async {
     _resumeState = errorState;
     translatedBlocks = errorState.translatedBlocks;
 
@@ -1226,12 +1561,14 @@ class TranslationController extends ChangeNotifier {
       isCompleted: false,
       isActive: true,
     );
-    
+
     if (allowUserHistory) {
       try {
+        final displayName =
+            _bestFriendlyDisplayNameForJob(job: job, hash: hash);
         await _repository.addToUserHistory(
           sourceHash: hash,
-          fileName: job.fileName,
+          fileName: displayName,
           targetLanguage: job.targetLanguage,
           isPartial: true,
           encodingDetected: _engine.lastDetectedEncoding,
@@ -1242,11 +1579,12 @@ class TranslationController extends ChangeNotifier {
           clearSdh: job.clearSdh,
         );
       } catch (e) {
-        _onLog?.call('cloud_error_with_details', jsonEncode({'error': e.toString()}));
+        _onLog?.call(
+            'cloud_error_with_details', jsonEncode({'error': e.toString()}));
         unawaited(
           _cloudRetryQueue.enqueueAddToUserHistory(
             sourceHash: hash,
-            fileName: job.fileName,
+            fileName: _bestFriendlyDisplayNameForJob(job: job, hash: hash),
             targetLanguage: job.targetLanguage,
             isPartial: true,
             encodingDetected: _engine.lastDetectedEncoding,
@@ -1265,94 +1603,137 @@ class TranslationController extends ChangeNotifier {
   }
 
   Future<void> _handleTranslationSuccess(
-    File outFile, 
-    File workingFile, 
-    String hash, 
-    TranslationJob job, 
-    bool allowGlobalCache,
-    bool allowUserHistory
-  ) async {
-     final finalContent = await outFile.readAsString();
-     translatedBlocks = SubtitleParser.parseSrt(finalContent);
+      File outFile,
+      File workingFile,
+      String hash,
+      TranslationJob job,
+      bool allowGlobalCache,
+      bool allowUserHistory) async {
+    final finalContent = await outFile.readAsString();
+    translatedBlocks = SubtitleParser.parseSrt(finalContent);
 
-     final sourceReadResult = await _subtitleRepository.readFileWithEncoding(workingFile.path);
-     final sourceContent = sourceReadResult.content;
-     
-     if (allowGlobalCache) {
-       // Cloud writes are best-effort: translation should still be marked as
-       // completed locally even if Firestore is temporarily unavailable.
-       try {
-         await _repository.saveToGlobalCache(
-           sourceHash: hash,
-           sourceContent: sourceContent,
-           translatedContent: finalContent,
-           originalName: job.fileName,
-           targetLanguage: job.targetLanguage,
-           encodingDetected: _engine.lastDetectedEncoding,
-         );
-       } catch (e) {
-         _onLog?.call('cloud_error_with_details', jsonEncode({'error': e.toString()}));
-         unawaited(
-           _cloudRetryQueue.enqueueSaveToGlobalCache(
-             sourceHash: hash,
-             sourceContent: sourceContent,
-             translatedContent: finalContent,
-             originalName: job.fileName,
-             targetLanguage: job.targetLanguage,
-             encodingDetected: _engine.lastDetectedEncoding,
-           ),
-         );
-       }
-     }
+    final displayName = _bestFriendlyDisplayNameForJob(job: job, hash: hash);
 
-     if (allowUserHistory) {
-       try {
-         await _repository.addToUserHistory(
-           sourceHash: hash,
-           fileName: job.fileName,
-           targetLanguage: job.targetLanguage,
-           isPartial: false,
-           encodingDetected: _engine.lastDetectedEncoding,
-           isActive: false,
-           clearSdh: job.clearSdh,
-         );
-       } catch (e) {
-         _onLog?.call('cloud_error_with_details', jsonEncode({'error': e.toString()}));
-         unawaited(
-           _cloudRetryQueue.enqueueAddToUserHistory(
-             sourceHash: hash,
-             fileName: job.fileName,
-             targetLanguage: job.targetLanguage,
-             isPartial: false,
-             encodingDetected: _engine.lastDetectedEncoding,
-             isActive: false,
-             clearSdh: job.clearSdh,
-           ),
-         );
-       }
-     }
-     
-     _syncProjectToSettings(
-       file: workingFile,
-       sourceHash: hash,
-       targetLanguage: job.targetLanguage,
-       isPartial: false,
-       isCompleted: true,
-       isActive: false,
-     );
+    final originalNameForGlobalCache = StringUtils.ensureHashSuffixInFileName(
+      fileName: displayName,
+      hash: hash,
+    );
 
-     // Resume state ve cache'i temizle
-     _resumeState = null;
-     await _saveResumeStateToCache();
-     
-     _finishSuccess(false);
-     _onLog?.call('log_translation_complete');
-     _onLog?.call('log_saved', generatedFilePath);
+    var sourceContent = (_currentJobSourceContent ?? '').trim();
+    if (sourceContent.isEmpty) {
+      try {
+        final sourceReadResult =
+            await _subtitleRepository.readFileWithEncoding(workingFile.path);
+        sourceContent = sourceReadResult.content;
+      } catch (e) {
+        _onLog?.call(
+          'log_source_read_failed',
+          jsonEncode({'path': workingFile.path, 'error': e.toString()}),
+        );
+        sourceContent = '';
+      }
+    }
+
+    if (allowGlobalCache && sourceContent.trim().isNotEmpty) {
+      // Gerçek AI maliyeti: yalnızca bu çevrilen dosyaya, global_translations
+      // dokümanının içine düz alan olarak yazılır (cache-hit'te AI çağrısı yoktur).
+      final usage = _engine.usageSnapshot;
+      final cost = <String, dynamic>{
+        'inputTokens': usage['inputTokens'],
+        'outputTokens': usage['outputTokens'],
+        'calls': usage['apiCalls'],
+        'retries': usage['apiRetries'],
+        'resendRounds': usage['resendRounds'],
+        'costUsd': (usage['costUsd'] as num).toStringAsFixed(6),
+        'model': (usage['model'] as String?)?.trim().isNotEmpty == true
+            ? usage['model']
+            : 'gemini-2.5-flash-lite',
+        'at': DateTime.now().toUtc().toIso8601String(),
+      };
+      // Cloud writes are best-effort: translation should still be marked as
+      // completed locally even if Firestore is temporarily unavailable.
+      try {
+        await _repository.saveToGlobalCache(
+          sourceHash: hash,
+          sourceContent: sourceContent,
+          translatedContent: finalContent,
+          originalName: originalNameForGlobalCache,
+          targetLanguage: job.targetLanguage,
+          encodingDetected: _engine.lastDetectedEncoding,
+          deviceId: billingService.deviceId,
+          isBatch: _isCloudBatchMode,
+          cost: cost,
+        );
+      } catch (e) {
+        _onLog?.call(
+            'cloud_error_with_details', jsonEncode({'error': e.toString()}));
+        unawaited(
+          _cloudRetryQueue.enqueueSaveToGlobalCache(
+            sourceHash: hash,
+            sourceContent: sourceContent,
+            translatedContent: finalContent,
+            originalName: originalNameForGlobalCache,
+            targetLanguage: job.targetLanguage,
+            encodingDetected: _engine.lastDetectedEncoding,
+            deviceId: billingService.deviceId,
+            isBatch: _isCloudBatchMode,
+            cost: cost,
+          ),
+        );
+      }
+    }
+
+    if (allowUserHistory) {
+      try {
+        await _repository.addToUserHistory(
+          sourceHash: hash,
+          fileName: displayName,
+          targetLanguage: job.targetLanguage,
+          isPartial: false,
+          encodingDetected: _engine.lastDetectedEncoding,
+          isActive: false,
+          clearSdh: job.clearSdh,
+        );
+      } catch (e) {
+        _onLog?.call(
+            'cloud_error_with_details', jsonEncode({'error': e.toString()}));
+        unawaited(
+          _cloudRetryQueue.enqueueAddToUserHistory(
+            sourceHash: hash,
+            fileName: displayName,
+            targetLanguage: job.targetLanguage,
+            isPartial: false,
+            encodingDetected: _engine.lastDetectedEncoding,
+            isActive: false,
+            clearSdh: job.clearSdh,
+          ),
+        );
+      }
+    }
+
+    _syncProjectToSettings(
+      file: workingFile,
+      sourceHash: hash,
+      targetLanguage: job.targetLanguage,
+      isPartial: false,
+      isCompleted: true,
+      isActive: false,
+    );
+
+    // Resume state ve cache'i temizle
+    _resumeState = null;
+    await _saveResumeStateToCache();
+
+    _currentJobSourceContent = null;
+
+    _finishSuccess(false);
+    _onLog?.call('log_translation_complete');
+    _onLog?.call('log_saved', generatedFilePath);
   }
 
   void shareTranslatedFile() {
-      if (generatedFilePath == null) return;
-      unawaited(_shareWithFriendlyName());
+    if (generatedFilePath == null) return;
+    unawaited(_shareWithFriendlyName());
   }
 
   Future<void> _shareWithFriendlyName() async {
@@ -1385,10 +1766,18 @@ class TranslationController extends ChangeNotifier {
         ? path.basename(generatedFilePath!)
         : 'output.srt';
     final baseName = currentFileName ?? fallbackName;
-    final ext = path.extension(baseName).isNotEmpty ? path.extension(baseName) : '.srt';
+    final ext =
+        path.extension(baseName).isNotEmpty ? path.extension(baseName) : '.srt';
     final nameWithoutExt = baseName.replaceAll(RegExp(r'\.[^.]*$'), '');
-    final noHash = nameWithoutExt.replaceFirst(RegExp(r'_[a-f0-9]{32}$', caseSensitive: false), '');
+    final noHash = nameWithoutExt.replaceFirst(
+        RegExp(r'_[a-f0-9]{32}$', caseSensitive: false), '');
     final stripped = StringUtils.stripLanguageSuffix(noHash);
+
+    // Eğer çeviri yapılmamışsa (bloklar boşsa veya ilerleme yoksa) dil ekini ekleme
+    if (translatedBlocks.isEmpty) {
+      return '$stripped$ext';
+    }
+
     final lang = _lastTargetLanguage ?? 'TR';
     return '$stripped' '_$lang$ext';
   }
@@ -1421,33 +1810,35 @@ class TranslationController extends ChangeNotifier {
   }
 
   void _updateProgress(int current, int total, {bool isComplete = false}) {
-     if (total > 0) {
-        progress = (current / total).clamp(0.0, 0.99);
-     }
-     
-     if (isComplete) {
-         progress = 1.0;
-     }
+    if (total > 0) {
+      progress = (current / total).clamp(0.0, 0.99);
+    }
 
-     // Calculate estimated time
-     final elapsedSeconds = _stopwatch.elapsed.inSeconds;
-     if (elapsedSeconds > 0 && current > 0) {
-        final rate = current / elapsedSeconds;
-        final remainingLines = total - current;
-        if (remainingLines > 0) {
-            final remSeconds = (remainingLines / rate).ceil();
-            final remDuration = Duration(seconds: remSeconds);
-            remainingTime = '-${remDuration.inMinutes.toString().padLeft(2, '0')}:${(remDuration.inSeconds % 60).toString().padLeft(2, '0')}';
-        }
-     }
-     
-      // Don't forward engine-level completion. Completion notifications should be
-      // emitted only after post-processing succeeds and the controller is marked
-      // completed (see _finishSuccess).
-      onProgress?.call(current, total, isComplete: false, fileName: currentFileName);
-     notifyListeners();
+    if (isComplete) {
+      progress = 1.0;
+    }
+
+    // Calculate estimated time
+    final elapsedSeconds = _stopwatch.elapsed.inSeconds;
+    if (elapsedSeconds > 0 && current > 0) {
+      final rate = current / elapsedSeconds;
+      final remainingLines = total - current;
+      if (remainingLines > 0) {
+        final remSeconds = (remainingLines / rate).ceil();
+        final remDuration = Duration(seconds: remSeconds);
+        remainingTime =
+            '-${remDuration.inMinutes.toString().padLeft(2, '0')}:${(remDuration.inSeconds % 60).toString().padLeft(2, '0')}';
+      }
+    }
+
+    // Don't forward engine-level completion. Completion notifications should be
+    // emitted only after post-processing succeeds and the controller is marked
+    // completed (see _finishSuccess).
+    onProgress?.call(current, total,
+        isComplete: false, fileName: currentFileName);
+    notifyListeners();
   }
-  
+
   void _updateTranslatedBlocks(List<SubtitleBlock> blocks) {
     translatedBlocks = blocks;
     notifyListeners();
@@ -1463,7 +1854,7 @@ class TranslationController extends ChangeNotifier {
     billingService.dispose();
     super.dispose();
   }
-  
+
   void pauseTranslation() {
     if (status == TranslationStatus.running) {
       status = TranslationStatus.paused;
@@ -1482,6 +1873,472 @@ class TranslationController extends ChangeNotifier {
     }
   }
 
+  Future<void> startBatchTranslationTest({
+    required List<BatchFile> inputSrtFiles,
+    required String targetLanguage,
+    bool clearSdh = false,
+    void Function(File)? onFileCompleted,
+  }) async {
+    if (inputSrtFiles.isEmpty) return;
+
+    if (userCredits <= 0) {
+      _onLog?.call(
+          _settings?.trans['error_prefix'] ?? 'Hata',
+          _settings?.trans['batch_no_credit_log'] ??
+              'Kredi yetersiz. İşlemi başlatabilmek için bakiyeniz bulunmuyor.');
+      onError?.call(
+          _settings?.trans['billing_no_credit'] ?? 'Kredi Yetersiz',
+          _settings?.trans['billing_no_credit_desc'] ??
+              'Bu işlemi başlatmak için bakiyeniz bulunmuyor.');
+      return;
+    }
+
+    List<BatchFile> filesToProcess = inputSrtFiles;
+    if (userCredits < inputSrtFiles.length) {
+      filesToProcess = inputSrtFiles.sublist(0, userCredits);
+      final partialDesc = (_settings?.trans['batch_credit_partial'] ??
+              'Krediniz ({credits}), seçilen dosya sayısından ({total}) az...')
+          .replaceAll('{credits}', userCredits.toString())
+          .replaceAll('{total}', inputSrtFiles.length.toString());
+      _onLog?.call(_settings?.trans['info'] ?? 'Bilgi', partialDesc);
+    }
+
+    _selectedFile = File(filesToProcess.first.path);
+
+    // activeBatchFilePaths.clear(); // We shouldn't clear it so we can run concurrently!
+    for (var f in filesToProcess) {
+      if (!activeBatchFilePaths.contains(f.path)) {
+        activeBatchFilePaths.add(f.path);
+      }
+    }
+
+    _geminiService.setDeviceId(billingService.deviceId);
+
+    // Eski ortak hash hesaplaması iptal edildi, artık her dosya için kendi içeriğinden hash üretilecek.
+
+    if (!_isCloudBatchMode) {
+      batchResults.clear();
+    }
+    _isCloudBatchMode = true;
+    _startBatchTimer();
+    status = TranslationStatus.running;
+    progress = 1.0;
+    isTranslationComplete = false;
+    // _batchErrors.clear(); // Eğer error listesi class düzeyindeyse
+
+    final triggeredDesc = (_settings?.trans['batch_api_triggered'] ??
+            '{count} dosya için Batch API tetiklendi.')
+        .replaceAll('{count}', filesToProcess.length.toString());
+    _onLog?.call(
+        _settings?.trans['batch_starting'] ?? 'Toplu Çeviri Başlatılıyor...',
+        triggeredDesc);
+    notifyListeners();
+
+    String? fcmToken;
+    // Desktop FCM disabled
+
+    List<Map<String, dynamic>> activeJobs = [];
+    try {
+      for (final batchF in filesToProcess) {
+        final file = File(batchF.path);
+        var content = await file.readAsString();
+
+        if (clearSdh) {
+          content = SubtitleParser.clearSdh(content);
+        }
+
+        // Her dosya için kendi hash'i üzerinden chargeKey oluşturuyoruz
+        final fileHash = content.hashCode.toString();
+        final fileChargeKey = _buildSessionChargeKey(fileHash, targetLanguage);
+        _activeTranslationChargeKey = fileChargeKey;
+        _geminiService.setChargeKey(fileChargeKey);
+
+        final blocks = SubtitleParser.parseSrt(content);
+
+        if (file.path == _selectedFile?.path) {
+          sourceBlocks = blocks;
+        }
+
+        List<Map<String, String>> requests = [];
+        int chunkSize = 200;
+        for (int i = 0; i < blocks.length; i += chunkSize) {
+          final end =
+              (i + chunkSize < blocks.length) ? i + chunkSize : blocks.length;
+          final chunkBlocks = blocks.sublist(i, end);
+          final chunkStr =
+              SubtitleBuilder.buildSrt(chunkBlocks, resequence: false);
+          requests.add({
+            'id': 'chunk_$i',
+            'text': chunkStr,
+          });
+        }
+
+        final sourceHash = _stableSubtitleHash(content);
+        final displayName = batchF.name;
+        final originalNameForGlobalCache =
+            StringUtils.ensureHashSuffixInFileName(
+          fileName: displayName,
+          hash: sourceHash,
+        );
+
+        final isMultiFile = filesToProcess.length > 1;
+
+        await _geminiService.prepareTranslationAccess(
+          chargeKey: fileChargeKey,
+          fileName: displayName,
+          targetLanguage: targetLanguage,
+          platform: Platform.operatingSystem,
+        );
+
+        if (isMultiFile && filesToProcess.indexOf(batchF) > 0) {
+            await Future.delayed(const Duration(milliseconds: 3000));
+          }
+          final jobName = await _geminiService.startBatchTranslation(
+          chunks: requests,
+          targetLanguage: targetLanguage,
+          fcmToken: fcmToken,
+          sourceHash: sourceHash,
+          sourceContent: content,
+          originalNameForGlobalCache: originalNameForGlobalCache,
+          fileNameForHistory: displayName,
+          totalLines: blocks.length,
+          canWriteUserHistory: true,
+          completedPlatform: Platform.operatingSystem,
+          isMultiFileBatch: isMultiFile,
+        );
+
+        activeJobs.add({
+          'file': file,
+          'jobName': jobName,
+          'sourceHash': sourceHash,
+          'sourceContent': content,
+          'originalNameForGlobalCache': originalNameForGlobalCache,
+          'displayName': displayName,
+          'totalLines': blocks.length,
+        });
+
+        final sentDesc = (_settings?.trans['batch_file_sent'] ??
+                '{filename} sunucuya gönderildi. Job: {job}')
+            .replaceAll('{filename}', displayName)
+            .replaceAll('{job}', jobName);
+        _onLog?.call(_settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+            sentDesc);
+        notifyListeners();
+      }
+
+      while (activeJobs.isNotEmpty) {
+        await Future.delayed(const Duration(seconds: 15));
+        if (status != TranslationStatus.running) {
+          _onLog?.call(
+              _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+              _settings?.trans['batch_process_canceled'] ??
+                  'İşlem iptal edildi.');
+          notifyListeners();
+          return;
+        }
+
+        final ongoingDesc = (_settings?.trans['batch_process_ongoing'] ??
+                'Devam ediyor (15sn aralıklarla kontrol ediliyor, kalan iş: {count})...')
+            .replaceAll('{count}', activeJobs.length.toString());
+        _onLog?.call(_settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+            ongoingDesc);
+        notifyListeners();
+
+        List<Map<String, dynamic>> completedJobs = [];
+
+        for (final job in activeJobs) {
+          try {
+            final result = await _geminiService.checkBatchTranslationStatus(
+              jobName: job['jobName'],
+              sourceHash: job['sourceHash'],
+              sourceContent: job['sourceContent'],
+              targetLanguage: targetLanguage,
+              originalNameForGlobalCache: job['originalNameForGlobalCache'],
+              fileNameForHistory: job['displayName'],
+              totalLines: job['totalLines'],
+              canWriteUserHistory: true,
+              completedPlatform: Platform.operatingSystem,
+            );
+
+            final state = result['status'];
+            if (state == 'SUCCEEDED') {
+              final String sourceContent = job['sourceContent'] as String;
+              final jobSourceBlocks = SubtitleParser.parseSrt(sourceContent);
+
+              final List<dynamic> translationResults = result['results'];
+              List<SubtitleBlock> alignedBlocks = [];
+              int chunkSize = 200;
+
+              for (int i = 0; i < translationResults.length; i++) {
+                final startIdx = i * chunkSize;
+                final endIdx = (startIdx + chunkSize < jobSourceBlocks.length)
+                    ? startIdx + chunkSize
+                    : jobSourceBlocks.length;
+                if (startIdx >= jobSourceBlocks.length) break;
+
+                final srcChunk = jobSourceBlocks.sublist(startIdx, endIdx);
+                final transStr = "${translationResults[i]}\n\n";
+                final transChunk = SubtitleParser.parseSrt(transStr);
+
+                String normTc(String tc) {
+                  final parts = tc.split('-->');
+                  if (parts.isEmpty) return '';
+                  return parts[0].replaceAll(RegExp(r'[^0-9]'), '');
+                }
+
+                int searchStartIdx = 0;
+
+                for (int srcIdx = 0; srcIdx < srcChunk.length; srcIdx++) {
+                  final src = srcChunk[srcIdx];
+                  final srcStart = normTc(src.timecode);
+
+                  SubtitleBlock? matchedDst;
+
+                  int bestMatch = -1;
+                  for (int look = searchStartIdx; look < searchStartIdx + 8 && look < transChunk.length; look++) {
+                    if (normTc(transChunk[look].timecode) == srcStart) {
+                      bestMatch = look;
+                      break;
+                    }
+                  }
+
+                  if (bestMatch != -1) {
+                    matchedDst = transChunk[bestMatch];
+                    searchStartIdx = bestMatch + 1;
+                  } else if (srcChunk.length == transChunk.length && searchStartIdx < transChunk.length) {
+                    // Fallback to strict index mapping ONLY if lengths match perfectly 
+                    // and we couldn't find a timecode match (AI might have mangled timecode formatting).
+                    matchedDst = transChunk[srcIdx];
+                    searchStartIdx = srcIdx + 1;
+                  }
+
+                  if (matchedDst != null) {
+                    final dst = SubtitleBlock(
+                      index: src.index,
+                      timecode: src.timecode,
+                      text: matchedDst.text,
+                    );
+
+                    // Quotes logic
+                    final srcTrim = src.text.trim();
+                    final dstTrim = dst.text.trim();
+                    final srcHasOuterQuotes =
+                        (srcTrim.startsWith('"') && srcTrim.endsWith('"')) ||
+                            (srcTrim.startsWith('“') && srcTrim.endsWith('”')) ||
+                            (srcTrim.startsWith('«') && srcTrim.endsWith('»'));
+                    final dstHasOuterQuotes =
+                        (dstTrim.startsWith('"') && dstTrim.endsWith('"')) ||
+                            (dstTrim.startsWith('“') && dstTrim.endsWith('”')) ||
+                            (dstTrim.startsWith('«') && dstTrim.endsWith('»'));
+
+                    if (!srcHasOuterQuotes && dstHasOuterQuotes) {
+                      var cleaned = dstTrim;
+                      cleaned = cleaned.replaceFirst(RegExp(r'^("|“|«)\s*'), '');
+                      cleaned =
+                          cleaned.replaceFirst(RegExp(r'\s*("|”|»)\s*$'), '');
+                      dst.text = cleaned.trim();
+                    }
+
+                    // Line count logic
+                    final srcLineCount = src.text
+                        .split('\n')
+                        .where((l) => l.trim().isNotEmpty)
+                        .length;
+                    if (srcLineCount <= 1) {
+                      dst.text =
+                          dst.text.replaceAll(RegExp(r'\n{2,}'), '\n').trim();
+                    } else {
+                      final dstLines = dst.text
+                          .split('\n')
+                          .where((l) => l.trim().isNotEmpty)
+                          .toList();
+                      if (dstLines.length != srcLineCount) {
+                        final flat = dst.text
+                            .replaceAll('\n', ' ')
+                            .replaceAll(RegExp(r'\s+'), ' ')
+                            .trim();
+                        if (flat.isNotEmpty) {
+                          final words = flat.split(' ');
+                          final targetLines = <String>[];
+                          final totalChars = flat.length;
+                          final approxPerLine =
+                              (totalChars / srcLineCount).ceil();
+
+                          var current = StringBuffer();
+                          for (final w in words) {
+                            if (targetLines.length < srcLineCount - 1 &&
+                                current.isNotEmpty &&
+                                (current.length + 1 + w.length) > approxPerLine) {
+                              targetLines.add(current.toString().trim());
+                              current = StringBuffer();
+                            }
+                            if (current.isNotEmpty) current.write(' ');
+                            current.write(w);
+                          }
+                          if (current.isNotEmpty) {
+                            targetLines.add(current.toString().trim());
+                          }
+                          dst.text = targetLines.join('\n');
+                        }
+                      }
+                    }
+                    alignedBlocks.add(dst);
+                  } else {
+                    // AI dropped this block's translation, fallback to source text to prevent desync
+                    alignedBlocks.add(SubtitleBlock(
+                        index: src.index,
+                        timecode: src.timecode,
+                        text: src.text));
+                  }
+                }
+              }
+              final resBlocks = alignedBlocks;
+              final String fullTransSrt =
+                  SubtitleBuilder.buildSrt(alignedBlocks);
+
+              final jobNorm =
+                  job['file'].path.replaceAll('\\', '/').toLowerCase();
+              final selNorm =
+                  _selectedFile?.path.replaceAll('\\', '/').toLowerCase();
+              if (jobNorm == selNorm) {
+                translatedBlocks = resBlocks;
+                generatedFilePath = SubtitleParser.generateOutputFilePath(
+                    job['file'].path, targetLanguage);
+                await File(generatedFilePath!).writeAsString(fullTransSrt);
+              }
+
+              _syncProjectToSettings(
+                file: job['file'],
+                targetLanguage: targetLanguage,
+                isPartial: false,
+                isCompleted: true,
+                sourceHash: job['sourceHash'],
+                customSourceBlocks: jobSourceBlocks,
+                customTranslatedBlocks: resBlocks,
+                customFileName: job['displayName'],
+              );
+
+              final finalName = job['displayName'] ??
+                  StringUtils.hideHashAndMarkersInFileName(
+                      job['file'].path.split(Platform.pathSeparator).last);
+              batchResults[finalName] = fullTransSrt;
+
+              completedJobs.add(job);
+              _batchSuccessCount++;
+              final succDesc = (_settings?.trans['batch_file_success'] ??
+                      '{filename} çevirisi başarıyla tamamlandı.')
+                  .replaceAll('{filename}', job['displayName'] ?? '');
+              _onLog?.call(
+                  _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+                  succDesc);
+
+              // Her dosya tamamlandığında ayrı ayrı bildirim
+              // Cloud Batch'te push bildirimi (FCM) geldiği için,
+              // çift bildirim olmaması adına bu yerel bildirimi kapatıyoruz.
+              // onProgress?.call(1, 1,
+              //     isComplete: true, fileName: job['displayName']);
+
+              onFileCompleted?.call(job['file']);
+              // _checkAndShowRateUs();
+            } else if (state == 'FAILED') {
+              final errDesc = (_settings?.trans['batch_file_error'] ??
+                      '{filename} sunucuda hata ile karşılaştı.')
+                  .replaceAll('{filename}', job['displayName'] ?? '');
+              _onLog?.call(
+                  _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+                  errDesc);
+              _batchErrors.add(BatchError(
+                  fileName: job['displayName'] ?? 'Unknown',
+                  message: 'Failed on server'));
+              completedJobs.add(job);
+            }
+          } catch (e) {
+            if (e.toString().contains('resource-exhausted') ||
+                e.toString().contains('RESOURCE_EXHAUSTED')) {
+              final limitDesc =
+                  (_settings?.trans['batch_file_rate_limit'] ?? '')
+                      .replaceAll('{filename}', job['displayName']);
+              _onLog?.call(
+                  _settings?.trans['error_prefix'] ?? 'Hata', limitDesc);
+              continue; // bu job bir sonraki döngüde kontrol edilecek
+            }
+            // Beklenmeyen hata olursa şimdilik atla, belki db sorunu anlıktır. Çok sık olursa job'ı da the silmek gerekebilir.
+          }
+        }
+
+        for (final done in completedJobs) {
+          activeJobs.remove(done);
+          activeBatchFilePaths.remove(done['file'].path);
+        }
+        progress = 1.0; // Toplu çeviride çubuğun grileşmemesi için 1.0'da tutuyoruz
+        notifyListeners();
+      }
+
+      if (activeBatchFilePaths.isEmpty) {
+        _finishSuccess(
+          true,
+        );
+        _batchCompleteController.add(Map.from(batchResults));
+        _onLog?.call(
+            _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
+            _settings?.trans['batch_all_completed'] ??
+                'Tüm dosyaların çevirisi tamamlandı.');
+      }
+      notifyListeners();
+    } catch (e) {
+      status = TranslationStatus.error;
+      _onLog?.call(
+          _settings?.trans['batch_error_prefix'] ?? 'Batch Çeviri Hatası',
+          e.toString());
+      onError?.call(
+          _settings?.trans['batch_error_prefix'] ?? 'Batch Çeviri Hatası',
+          e.toString());
+      notifyListeners();
+    } finally {
+      // Fonksiyona giren tüm dosyaları temizle. Tamamlananlar zaten silinmişti, hata alanlar veya yarım kalanlar burada silinir.
+      for (final f in filesToProcess) {
+        activeBatchFilePaths.remove(f.path);
+      }
+
+      // Eğer başka hiçbir batch işlemi aktif değilse temizliği yap.
+      if (activeBatchFilePaths.isEmpty) {
+        _stopTranslationTimer();
+        Future.microtask(() {
+          _isCloudBatchMode = false;
+          notifyListeners();
+        });
+      }
+      notifyListeners();
+    }
+  }
+
+  void _startBatchTimer() {
+    _stopwatch.reset();
+    _stopwatch.start();
+    onWakelock?.call(true);
+
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_stopwatch.isRunning) return;
+      final elapsed = _stopwatch.elapsed;
+      elapsedTime =
+          '${elapsed.inMinutes.toString().padLeft(2, '0')}:${(elapsed.inSeconds % 60).toString().padLeft(2, '0')}';
+      notifyListeners();
+    });
+  }
+
+  String _buildSessionChargeKey(String sourceHash, String targetLanguage) {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final canonicalTarget = normalizeAiPanelLanguageCode(targetLanguage);
+    final normalizedTarget = canonicalTarget
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    final safeTarget = normalizedTarget.isEmpty ? 'unknown' : normalizedTarget;
+    return 'run_${now}_${sourceHash}_$safeTarget';
+  }
+
   Future<void> stopTranslation({
     required bool clearSdh,
     required String targetLanguage,
@@ -1490,17 +2347,26 @@ class TranslationController extends ChangeNotifier {
     if (status == TranslationStatus.idle) return;
 
     _stopRequested = true;
+    if (!isBulkProcessing) {
+      _isBatchMode = false;
+      _isCloudBatchMode = false;
+    }
 
     // Prefer resume state's permanent path if available so we always persist to
     // stable app storage.
-    final filePath = _resumeState?.filePath ?? _currentJob?.file.path ?? _selectedFile?.path;
+    final filePath =
+        _resumeState?.filePath ?? _currentJob?.file.path ?? _selectedFile?.path;
     final file = (filePath == null || filePath.isEmpty) ? null : File(filePath);
 
-    // When stopping very early, translatedBlocks may still be empty even if we
-    // already had resume progress. Fall back to resumeState's blocks.
+    // Kullanıcı stop'a bastığında gördüğü ilerlemeyi koru. latestRealBlocks,
+    // animasyonun henüz göstermediği bir sonraki chunk'ı içerebildiği için
+    // önce UI'da görünen translatedBlocks'u esas al.
     final snapshot = translatedBlocks.isNotEmpty
       ? List<SubtitleBlock>.from(translatedBlocks)
-      : List<SubtitleBlock>.from(_resumeState?.translatedBlocks ?? const <SubtitleBlock>[]);
+      : (_engine.latestRealBlocks.isNotEmpty
+        ? List<SubtitleBlock>.from(_engine.latestRealBlocks)
+        : List<SubtitleBlock>.from(
+          _resumeState?.translatedBlocks ?? const <SubtitleBlock>[]));
 
     // Stop any further work first.
     status = TranslationStatus.idle;
@@ -1508,18 +2374,18 @@ class TranslationController extends ChangeNotifier {
     _stopwatch.reset();
     _progressTimer?.cancel();
     _engine.cancel();
-    _engine.onProgress = null;  // Callback'leri devre dışı bırak
+    _engine.onProgress = null; // Callback'leri devre dışı bırak
     onWakelock?.call(false);
     _jobQueue.clear(); // Kuyruğu temizle ki otomatik devam etmesin
-    
+
     // Bildirim çubuğunu temizle
     await _settings?.cancelNotification();
-    
+
     // İlerleme yüzdesini ve zamanları sıfırla
     progress = 0.0;
     elapsedTime = "00:00";
     remainingTime = "00:00";
-    
+
     notifyListeners();
 
     var removeFromBatchList = false;
@@ -1536,9 +2402,10 @@ class TranslationController extends ChangeNotifier {
         );
 
         // Ensure we save the *permanent* path (inside app storage) for resumability.
-        final permanentPath = _resumeState?.filePath ?? _selectedFile?.path ?? file.path;
+        final permanentPath =
+            _resumeState?.filePath ?? _selectedFile?.path ?? file.path;
         final permanentFile = File(permanentPath);
-        
+
         // History'ye kaydet - Hash'i resume state ile tutarlı olacak şekilde hesapla
         // prepareResumeFromBlocks içinde zaten hesaplanmış hash'i kullanalım
         final hash = _resumeState?.hash ?? '';
@@ -1559,7 +2426,7 @@ class TranslationController extends ChangeNotifier {
           isCompleted: false,
           isActive: false,
         );
-        
+
         if (allowUserHistory) {
           try {
             final resume = _resumeState;
@@ -1570,9 +2437,16 @@ class TranslationController extends ChangeNotifier {
                 : (resume?.sourceContent.isNotEmpty == true
                     ? SubtitleParser.parseSrt(resume!.sourceContent).length
                     : null);
+
+            final nameForHistory = _bestFriendlyDisplayNameForHash(
+              hash: hash,
+              targetLanguage: targetLanguage,
+              fallbackName: currentFileName,
+              fallbackPath: permanentPath,
+            );
             await _repository.addToUserHistory(
               sourceHash: hash,
-              fileName: currentFileName ?? "unknown",
+              fileName: nameForHistory,
               targetLanguage: targetLanguage,
               isPartial: true,
               encodingDetected: _engine.lastDetectedEncoding,
@@ -1586,51 +2460,65 @@ class TranslationController extends ChangeNotifier {
             debugPrint('Failed to save partial translation to history: $e');
             final resume = _resumeState;
             final resumeJson = resume?.toJson();
+            final nameForHistory = _bestFriendlyDisplayNameForHash(
+              hash: hash,
+              targetLanguage: targetLanguage,
+              fallbackName: currentFileName,
+              fallbackPath: permanentPath,
+            );
             unawaited(
               _cloudRetryQueue.enqueueAddToUserHistory(
                 sourceHash: hash,
-                fileName: currentFileName ?? "unknown",
+                fileName: nameForHistory,
                 targetLanguage: targetLanguage,
                 isPartial: true,
                 encodingDetected: _engine.lastDetectedEncoding,
                 resumeState: resumeJson,
                 translatedLines: snapshot.length,
-                totalLines: sourceBlocks.isNotEmpty ? sourceBlocks.length : null,
+                totalLines:
+                    sourceBlocks.isNotEmpty ? sourceBlocks.length : null,
                 isActive: false,
                 clearSdh: clearSdh,
               ),
             );
           }
         }
-        
+
         // Tek dosya çevirisinde: UI'yı tamamen temizle (yeni açılmış gibi)
         // Çoklu dosya çevirisinde: Sadece geçmişe kaydet, UI'yı temizleme
         if (!isBulkProcessing) {
           _selectedFile = null;
           currentFileName = null;
-          sourceBlocks.clear();
-          translatedBlocks.clear();
+          sourceBlocks = [];
+          translatedBlocks = [];
           generatedFilePath = null;
           isCached = false;
 
           // Editör ekranındaki listeleri de temizle
           _settings?.clearTranslationFile();
-          
+
           _onLog?.call('log_translation_stopped_saved_history');
         } else {
-          // Çoklu işlemde: dosyayı completed olarak işaretle ki listeden çıkarılsın
-          // Hem kalıcı storage path'ini hem de orijinal path'i ekle
-          if (file.path.isNotEmpty) {
-            _batchCompletedPaths.add(file.path);
+          // Çoklu işlemde: dosya sadece kredi gerçekten kesildiyse listeden
+          // çıkarılmalı. İlk chunk gelmiş olsa bile kredi kesilmediyse (örn.
+          // ödeme hatası/askıda), listede kalsın.
+          if (_stopShouldRemoveFromBatchList) {
+            // Hem kalıcı storage path'ini hem de orijinal path'i ekle
+            if (file.path.isNotEmpty) {
+              _batchCompletedPaths.add(file.path);
+            }
+            // _selectedFile varsa onun path'ini de ekle
+            if (_selectedFile != null && _selectedFile!.path.isNotEmpty) {
+              _batchCompletedPaths.add(_selectedFile!.path);
+            }
+            removeFromBatchList = true;
+            _onLog?.call('log_translation_saved_removed_list');
+          } else {
+            removeFromBatchList = false;
+            _onLog?.call('log_translation_stopped_kept_in_list');
           }
-          // _selectedFile varsa onun path'ini de ekle
-          if (_selectedFile != null && _selectedFile!.path.isNotEmpty) {
-            _batchCompletedPaths.add(_selectedFile!.path);
-          }
-          removeFromBatchList = true;
-          _onLog?.call('log_translation_saved_removed_list');
         }
-        
+
         notifyListeners();
         return;
       } catch (e, stackTrace) {
@@ -1662,10 +2550,12 @@ class TranslationController extends ChangeNotifier {
   /// start over from scratch (as opposed to stopping and resuming later).
   void abandonTranslation({bool keepSelectedFile = true}) {
     _stopRequested = true;
+    _isBatchMode = false;
+    _isCloudBatchMode = false;
     // Stop any ongoing work defensively.
     _progressTimer?.cancel();
     _engine.cancel();
-    _engine.onProgress = null;  // Callback'leri devre dışı bırak
+    _engine.onProgress = null; // Callback'leri devre dışı bırak
     onWakelock?.call(false);
 
     _stopwatch.stop();
@@ -1673,9 +2563,9 @@ class TranslationController extends ChangeNotifier {
 
     _resumeState = null;
     unawaited(_saveResumeStateToCache());
-    translatedBlocks.clear();
+    translatedBlocks = [];
     generatedFilePath = null;
-    
+
     // Bildirim çubuğunu temizle
     unawaited(_settings?.cancelNotification());
 
@@ -1685,20 +2575,20 @@ class TranslationController extends ChangeNotifier {
     if (!keepSelectedFile) {
       _selectedFile = null;
       currentFileName = null;
-      sourceBlocks.clear();
+      sourceBlocks = [];
       isCached = false;
     }
 
     _onLog?.call('log_process_reset_ready');
     notifyListeners();
   }
-  
+
   void reset() {
-     progress = 0.0;
-     elapsedTime = "00:00";
-     remainingTime = "00:00";
-     status = TranslationStatus.idle;
-     isTranslationComplete = false;
+    progress = 0.0;
+    elapsedTime = "00:00";
+    remainingTime = "00:00";
+    status = TranslationStatus.idle;
+    isTranslationComplete = false;
   }
 
   /// Clears single-translation UI state and returns the controller to its
@@ -1712,8 +2602,8 @@ class TranslationController extends ChangeNotifier {
     currentFileName = null;
     generatedFilePath = null;
     isCached = false;
-    sourceBlocks.clear();
-    translatedBlocks.clear();
+    sourceBlocks = [];
+    translatedBlocks = [];
     _settings?.clearTranslationFile();
     reset();
     notifyListeners();
@@ -1739,12 +2629,13 @@ class TranslationController extends ChangeNotifier {
       if (_resumeState != null) {
         try {
           final resume = _resumeState!;
-          final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+          final readResult =
+              await _subtitleRepository.readFileWithEncoding(file.path);
           var content = readResult.content;
           if (resume.clearSdh) {
             content = SubtitleParser.clearSdh(content);
           }
-          final canonicalHash = _fileService.calculateMd5FromString(content);
+          final canonicalHash = _stableSubtitleHash(content);
           if (resume.hash != canonicalHash) {
             final stableHash = await _doubleCheckCanonicalHash(
               file: file,
@@ -1756,7 +2647,8 @@ class TranslationController extends ChangeNotifier {
               _resumeState = null;
               unawaited(_saveResumeStateToCache());
             } else {
-              _logResumeDebug('pickFile hash double-check matched; keeping resume');
+              _logResumeDebug(
+                  'pickFile hash double-check matched; keeping resume');
             }
           }
         } catch (_) {
@@ -1764,19 +2656,19 @@ class TranslationController extends ChangeNotifier {
           // asıl doğrulama çeviri başlarken yapılacak.
         }
       }
-      
+
       // Dosyayı kalıcı depolamaya kopyala
       final permanentPath = await _copyFileToAppStorage(file, hash);
       final permFile = File(permanentPath);
       _selectedFile = permFile;
-      
+
       // If a UI (like batch queue/history) already provided a friendly display name,
       // don't overwrite it with our internal hashed storage filename.
       currentFileName ??= path.basename(file.path);
       generatedFilePath = null;
 
       _onLog?.call('log_subtitle_selected', currentFileName);
-      
+
       // Non-English kaynaklar için Firebase cache/history kullanmıyoruz.
       final allowFirebase = await _shouldUseFirebaseForFile(file);
       if (allowFirebase) {
@@ -1788,7 +2680,6 @@ class TranslationController extends ChangeNotifier {
       } else {
         isCached = false;
       }
-
     } catch (e, stackTrace) {
       _onLog?.call(
         'log_error_with_stack',
@@ -1811,15 +2702,15 @@ class TranslationController extends ChangeNotifier {
   }
 
   void _finishSuccess(bool sound) {
-      status = TranslationStatus.completed;
-      isTranslationComplete = true;
-      progress = 1.0;
-      remainingTime = "-00:00";
-      // Only announce completion once the controller is truly completed
-      // (including post-processing like local persistence).
-      onProgress?.call(1, 1, isComplete: true, fileName: currentFileName);
-      if (sound) SystemSound.play(SystemSoundType.alert);
-      notifyListeners();
+    status = TranslationStatus.completed;
+    isTranslationComplete = true;
+    progress = 1.0;
+    remainingTime = "-00:00";
+    // Only announce completion once the controller is truly completed
+    // (including post-processing like local persistence).
+    onProgress?.call(1, 1, isComplete: true, fileName: currentFileName);
+    if (sound) SystemSound.play(SystemSoundType.alert);
+    notifyListeners();
   }
 
   void _syncProjectToSettings({
@@ -1829,6 +2720,9 @@ class TranslationController extends ChangeNotifier {
     required bool isCompleted,
     String sourceHash = '',
     bool? isActive,
+    List<SubtitleBlock>? customSourceBlocks,
+    List<SubtitleBlock>? customTranslatedBlocks,
+    String? customFileName,
   }) {
     final settings = _settings;
     if (settings == null) return;
@@ -1839,19 +2733,30 @@ class TranslationController extends ChangeNotifier {
         ? '${sourceHash}_${targetLanguage.toLowerCase()}'
         : file.path;
 
-    final existingIndex = settings.projects.indexWhere(
-        (p) => p.id == stableId || p.id == file.path);
-    final existing = existingIndex != -1 ? settings.projects[existingIndex] : null;
+    final existingIndex = settings.projects
+        .indexWhere((p) => p.id == stableId || p.id == file.path);
+    final existing =
+        existingIndex != -1 ? settings.projects[existingIndex] : null;
 
-    final fileName = currentFileName ?? existing?.fileName ?? file.path.split(Platform.pathSeparator).last;
-    final srcBlocks = sourceBlocks.isNotEmpty ? sourceBlocks : (existing?.sourceBlocks ?? <SubtitleBlock>[]);
-    final processed = List<SubtitleBlock>.from(translatedBlocks);
+    final fileName = customFileName ??
+        currentFileName ??
+        existing?.fileName ??
+        file.path.split(Platform.pathSeparator).last;
+    final srcBlocks =
+        customSourceBlocks != null && customSourceBlocks.isNotEmpty
+            ? customSourceBlocks
+            : (sourceBlocks.isNotEmpty
+                ? sourceBlocks
+                : (existing?.sourceBlocks ?? <SubtitleBlock>[]));
+    final processed =
+        List<SubtitleBlock>.from(customTranslatedBlocks ?? translatedBlocks);
 
     final project = TranslationProject(
       id: stableId,
       fileName: fileName,
       filePath: file.path,
-      translationSourceCachePath: existing?.translationSourceCachePath ?? file.path,
+      translationSourceCachePath:
+          existing?.translationSourceCachePath ?? file.path,
       targetLanguage: targetLanguage,
       isCompleted: isCompleted,
       isPartial: isPartial,
@@ -1862,12 +2767,16 @@ class TranslationController extends ChangeNotifier {
       sourceBlocks: List<SubtitleBlock>.from(srcBlocks),
       processedBlocks: processed,
       sourceHash: sourceHash.isNotEmpty ? sourceHash : null,
+      globalRef: existing?.globalRef,
     );
 
     settings.addOrUpdateExternalProject(project);
   }
 
   Future<void> _syncProjectToSettingsAwait({
+    List<SubtitleBlock>? customSourceBlocks,
+    List<SubtitleBlock>? customTranslatedBlocks,
+    String? customFileName,
     required File file,
     required String targetLanguage,
     required bool isPartial,
@@ -1882,19 +2791,30 @@ class TranslationController extends ChangeNotifier {
         ? '${sourceHash}_${targetLanguage.toLowerCase()}'
         : file.path;
 
-    final existingIndex = settings.projects.indexWhere(
-        (p) => p.id == stableId || p.id == file.path);
-    final existing = existingIndex != -1 ? settings.projects[existingIndex] : null;
+    final existingIndex = settings.projects
+        .indexWhere((p) => p.id == stableId || p.id == file.path);
+    final existing =
+        existingIndex != -1 ? settings.projects[existingIndex] : null;
 
-    final fileName = currentFileName ?? existing?.fileName ?? file.path.split(Platform.pathSeparator).last;
-    final srcBlocks = sourceBlocks.isNotEmpty ? sourceBlocks : (existing?.sourceBlocks ?? <SubtitleBlock>[]);
-    final processed = List<SubtitleBlock>.from(translatedBlocks);
+    final fileName = customFileName ??
+        currentFileName ??
+        existing?.fileName ??
+        file.path.split(Platform.pathSeparator).last;
+    final srcBlocks =
+        customSourceBlocks != null && customSourceBlocks.isNotEmpty
+            ? customSourceBlocks
+            : (sourceBlocks.isNotEmpty
+                ? sourceBlocks
+                : (existing?.sourceBlocks ?? <SubtitleBlock>[]));
+    final processed =
+        List<SubtitleBlock>.from(customTranslatedBlocks ?? translatedBlocks);
 
     final project = TranslationProject(
       id: stableId,
       fileName: fileName,
       filePath: file.path,
-      translationSourceCachePath: existing?.translationSourceCachePath ?? file.path,
+      translationSourceCachePath:
+          existing?.translationSourceCachePath ?? file.path,
       targetLanguage: targetLanguage,
       isCompleted: isCompleted,
       isPartial: isPartial,
@@ -1905,11 +2825,12 @@ class TranslationController extends ChangeNotifier {
       sourceBlocks: List<SubtitleBlock>.from(srcBlocks),
       processedBlocks: processed,
       sourceHash: sourceHash.isNotEmpty ? sourceHash : null,
+      globalRef: existing?.globalRef,
     );
 
     await settings.addOrUpdateExternalProject(project);
   }
-  
+
   void clearBatchResults() {
     batchResults.clear();
     notifyListeners();
@@ -1930,7 +2851,8 @@ class TranslationController extends ChangeNotifier {
     // Ensure controller file state is up to date.
     await handlePickedFile(file);
 
-    final readResult = await _subtitleRepository.readFileWithEncoding(file.path);
+    final readResult =
+        await _subtitleRepository.readFileWithEncoding(file.path);
     final rawContent = readResult.content;
     final cleanedContent = SubtitleParser.clearSdh(rawContent);
 
@@ -1947,12 +2869,12 @@ class TranslationController extends ChangeNotifier {
     final sourceContent = effectiveClearSdh ? cleanedContent : rawContent;
 
     // Hash'i temizlenmiş içerikten hesapla (resume consistency için kritik)
-    final hash = _fileService.calculateMd5FromString(sourceContent);
+    final hash = _stableSubtitleHash(sourceContent);
 
     // Populate source blocks for UI using the correctly decoded content.
     sourceBlocks = SubtitleParser.parseSrt(sourceContent);
 
-    final chunks = SubtitleParser.buildSrtChunksAdaptive(sourceContent);
+    final chunks = SubtitleParser.buildSrtChunksAdaptiveDesktop(sourceContent);
 
     // Determine next chunk index by matching cumulative *source* block counts.
     final alreadyCount = alreadyTranslatedBlocks.length;
@@ -1973,16 +2895,16 @@ class TranslationController extends ChangeNotifier {
       'alreadyBlocks=$alreadyCount chunks=${chunks.length} nextChunkIndex=$nextChunkIndex cumulativeBlocks=$cumulativeBlocks clearSdh=$effectiveClearSdh rawBlocks=$rawBlocksCount cleanedBlocks=$cleanedBlocksCount expectedBlocks=${expectedSourceBlockCount ?? -1}',
     );
 
-      // processedLines hesaplaması: İşlenmiş chunk'ların kaynak satır sayısını kullan
-      // Bu, normal çeviri akışındaki hesaplama ile tutarlı olmalı
-      var processedLines = 0;
-      for (var i = 0; i < nextChunkIndex && i < chunks.length; i++) {
-        processedLines += const LineSplitter().convert(chunks[i]).length;
-      }
-    
-      final translatedText = SubtitleBuilder.buildSrt(alreadyTranslatedBlocks);
-      final totalLines = sourceContent.split(RegExp(r'\r?\n')).length;
-      final totalBlocks = sourceBlocks.length;
+    // processedLines hesaplaması: İşlenmiş chunk'ların kaynak satır sayısını kullan
+    // Bu, normal çeviri akışındaki hesaplama ile tutarlı olmalı
+    var processedLines = 0;
+    for (var i = 0; i < nextChunkIndex && i < chunks.length; i++) {
+      processedLines += const LineSplitter().convert(chunks[i]).length;
+    }
+
+    final translatedText = SubtitleBuilder.buildSrt(alreadyTranslatedBlocks);
+    final totalLines = sourceContent.split(RegExp(r'\r?\n')).length;
+    final totalBlocks = sourceBlocks.length;
 
     _resumeState = TranslationResumeState(
       hash: hash,
@@ -2005,9 +2927,10 @@ class TranslationController extends ChangeNotifier {
     if (updateUIBlocks) {
       translatedBlocks = List<SubtitleBlock>.from(alreadyTranslatedBlocks);
     }
-    
+
     // Detaylı log mesajı - kaç block çevrildi, kaç kaldı
-    final remainingBlocks = sourceBlocks.length - alreadyTranslatedBlocks.length;
+    final remainingBlocks =
+        sourceBlocks.length - alreadyTranslatedBlocks.length;
     _onLog?.call(
       'log_resume_progress',
       jsonEncode({
@@ -2018,10 +2941,10 @@ class TranslationController extends ChangeNotifier {
         'chunkTotal': chunks.length,
       }),
     );
-    
+
     // Cache resume state kalıcı olarak sakla
     await _saveResumeStateToCache();
-    
+
     if (updateUIBlocks) {
       notifyListeners();
     }
@@ -2038,10 +2961,21 @@ class TranslationController extends ChangeNotifier {
       final raw = project.resumeStateJson;
       if (raw == null || raw.isEmpty) return (ok: false, clearSdh: false);
 
+      final historyDocId = (project.sourceHash != null && project.sourceHash!.isNotEmpty)
+          ? '${project.sourceHash}_${project.targetLanguage.toLowerCase()}'
+          : project.id;
+      final payload = await _repository.getResumePayload(historyDocId: historyDocId);
+      final payloadSourceContent = (payload?['source'] ?? '').trim();
+      final payloadPartialContent = (payload?['partial'] ?? '').trim();
+      final payloadClearSdh = payload?['clearSdh'] == 'true';
+
       // Support both full engine JSON and compact cloud JSON.
-      final sourceContent = (raw['sourceContent'] as String?) ?? '';
-      final clearSdh = raw['clearSdh'] as bool? ?? false;
-      final targetLanguage = (raw['targetLanguage'] as String?) ?? project.targetLanguage;
+      final sourceContent = payloadSourceContent.isNotEmpty
+          ? payloadSourceContent
+          : ((raw['sourceContent'] as String?) ?? '');
+      final clearSdh = payloadClearSdh || (raw['clearSdh'] as bool? ?? false);
+      final targetLanguage =
+          (raw['targetLanguage'] as String?) ?? project.targetLanguage;
       final hash = (raw['hash'] as String?) ?? project.sourceHash ?? '';
       final sourceEncoding = raw['sourceEncoding'] as String?;
       final chargeKey = (raw['chargeKey'] as String?)?.trim().isEmpty == true
@@ -2052,41 +2986,45 @@ class TranslationController extends ChangeNotifier {
         return (ok: false, clearSdh: clearSdh);
       }
 
+      List<SubtitleBlock> translatedBlocksList;
+      if (payloadPartialContent.isNotEmpty) {
+        translatedBlocksList = SubtitleParser.parseSrt(payloadPartialContent);
+      } else {
         final translatedBlocksRaw = raw['translatedBlocks'];
-        final translatedBlocksList = translatedBlocksRaw is List
-          ? translatedBlocksRaw.map((b) => SubtitleBlock.fromJson(b)).toList()
-          : <SubtitleBlock>[];
+        translatedBlocksList = translatedBlocksRaw is List
+            ? translatedBlocksRaw.map((b) => SubtitleBlock.fromJson(b)).toList()
+            : <SubtitleBlock>[];
+      }
 
       final chunksRaw = raw['chunks'];
       final chunks = chunksRaw is List
           ? chunksRaw.map((e) => e.toString()).toList()
-          : SubtitleParser.buildSrtChunksAdaptive(sourceContent);
+          : SubtitleParser.buildSrtChunksAdaptiveDesktop(sourceContent);
 
       int nextChunkIndex = 0;
       final nciRaw = raw['nextChunkIndex'];
-      if (nciRaw is num) {
-        nextChunkIndex = nciRaw.toInt();
-      } else {
-        // Fallback: derive from how many blocks are already translated.
-        final alreadyCount = translatedBlocksList.length;
-        var cumulativeBlocks = 0;
-        for (var i = 0; i < chunks.length; i++) {
-          final chunkBlocks = SubtitleParser.parseSrt(chunks[i]).length;
-          if (cumulativeBlocks + chunkBlocks <= alreadyCount) {
-            cumulativeBlocks += chunkBlocks;
-            nextChunkIndex = i + 1;
-          } else {
-            break;
-          }
+      final alreadyCount = translatedBlocksList.length;
+      var cumulativeBlocks = 0;
+      for (var i = 0; i < chunks.length; i++) {
+        final chunkBlocks = SubtitleParser.parseSrt(chunks[i]).length;
+        if (cumulativeBlocks + chunkBlocks <= alreadyCount) {
+          cumulativeBlocks += chunkBlocks;
+          nextChunkIndex = i + 1;
+        } else {
+          break;
         }
+      }
+      if (payloadPartialContent.isEmpty && nciRaw is num) {
+        nextChunkIndex = nciRaw.toInt();
       }
       if (nextChunkIndex < 0) nextChunkIndex = 0;
       if (nextChunkIndex > chunks.length) nextChunkIndex = chunks.length;
 
       final translatedTextRaw = raw['translatedText'];
-      final translatedText = (translatedTextRaw is String && translatedTextRaw.isNotEmpty)
-          ? translatedTextRaw
-          : SubtitleBuilder.buildSrt(translatedBlocksList);
+      final translatedText =
+          (translatedTextRaw is String && translatedTextRaw.isNotEmpty)
+              ? translatedTextRaw
+              : SubtitleBuilder.buildSrt(translatedBlocksList);
 
       int processedLines = 0;
       final plRaw = raw['processedLines'];
@@ -2103,8 +3041,8 @@ class TranslationController extends ChangeNotifier {
           ? totalLinesRaw.toInt()
           : sourceContent.split(RegExp(r'\r?\n')).length;
 
-        final totalBlocksRaw = raw['totalBlocks'];
-        final totalBlocks = totalBlocksRaw is num
+      final totalBlocksRaw = raw['totalBlocks'];
+      final totalBlocks = totalBlocksRaw is num
           ? totalBlocksRaw.toInt()
           : SubtitleParser.parseSrt(sourceContent).length;
 
@@ -2122,9 +3060,9 @@ class TranslationController extends ChangeNotifier {
           : '.srt';
       final base = path.basenameWithoutExtension(originalName);
 
-        final effectiveHash = hash.trim().isNotEmpty
+      final effectiveHash = hash.trim().isNotEmpty
           ? hash.trim()
-          : _fileService.calculateMd5FromString(sourceContent);
+          : _stableSubtitleHash(sourceContent);
 
       final generatedPath = path.join(
         subtitlesDir.path,
@@ -2168,7 +3106,8 @@ class TranslationController extends ChangeNotifier {
       notifyListeners();
       return (ok: true, clearSdh: clearSdh);
     } catch (e) {
-      _onLog?.call('log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
+      _onLog?.call(
+          'log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
       return (ok: false, clearSdh: false);
     }
   }
@@ -2201,7 +3140,8 @@ class TranslationController extends ChangeNotifier {
     final matches = expectedHash.isNotEmpty &&
         resume.hash.trim().isNotEmpty &&
         resume.hash.trim() == expectedHash &&
-        resume.targetLanguage.toLowerCase() == project.targetLanguage.toLowerCase();
+        resume.targetLanguage.toLowerCase() ==
+            project.targetLanguage.toLowerCase();
     if (!matches) {
       return (ok: false, clearSdh: resume.clearSdh);
     }
@@ -2226,7 +3166,7 @@ class TranslationController extends ChangeNotifier {
       final base = path.basenameWithoutExtension(originalName);
       final effectiveHash = resume.hash.trim().isNotEmpty
           ? resume.hash.trim()
-          : _fileService.calculateMd5FromString(resume.sourceContent);
+          : _stableSubtitleHash(resume.sourceContent);
 
       final generatedPath = path.join(
         subtitlesDir.path,
@@ -2267,7 +3207,8 @@ class TranslationController extends ChangeNotifier {
       notifyListeners();
       return (ok: true, clearSdh: resume.clearSdh);
     } catch (e) {
-      _onLog?.call('log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
+      _onLog?.call(
+          'log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
       return (ok: false, clearSdh: resume.clearSdh);
     }
   }
@@ -2280,7 +3221,7 @@ class TranslationController extends ChangeNotifier {
         await prefs.remove('resume_state_cache');
         return;
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
       final json = _resumeState!.toJson();
       final jsonStr = jsonEncode(json);
@@ -2290,7 +3231,8 @@ class TranslationController extends ChangeNotifier {
       // so other platforms can continue without needing the local file.
       _scheduleResumeCloudSync();
     } catch (e) {
-      _onLog?.call('log_resume_cache_save_failed', jsonEncode({'error': e.toString()}));
+      _onLog?.call(
+          'log_resume_cache_save_failed', jsonEncode({'error': e.toString()}));
     }
   }
 
@@ -2308,7 +3250,8 @@ class TranslationController extends ChangeNotifier {
     final minWait = (last == null)
         ? Duration.zero
         : _resumeCloudSyncMinInterval - now.difference(last);
-    final effectiveDelay = minWait > Duration.zero ? minWait : _resumeCloudSyncDebounce;
+    final effectiveDelay =
+        minWait > Duration.zero ? minWait : _resumeCloudSyncDebounce;
 
     _resumeCloudSyncTimer = Timer(effectiveDelay, () {
       unawaited(_syncResumeStateToFirestore());
@@ -2323,16 +3266,19 @@ class TranslationController extends ChangeNotifier {
 
     _lastResumeCloudSyncAt = DateTime.now();
 
-    final name = (currentFileName ?? '').trim().isNotEmpty
-        ? currentFileName!.trim()
-        : path.basename(resume.filePath.trim().isEmpty ? 'subtitle.srt' : resume.filePath);
+    final name = _bestFriendlyDisplayNameForHash(
+      hash: resume.hash,
+      targetLanguage: resume.targetLanguage,
+      fallbackName: currentFileName,
+      fallbackPath: resume.filePath,
+    );
 
     final translatedLines = resume.translatedBlocks.length;
     final totalBlocks = (sourceBlocks.isNotEmpty)
-      ? sourceBlocks.length
-      : (resume.totalBlocks > 0
-        ? resume.totalBlocks
-        : SubtitleParser.parseSrt(resume.sourceContent).length);
+        ? sourceBlocks.length
+        : (resume.totalBlocks > 0
+            ? resume.totalBlocks
+            : SubtitleParser.parseSrt(resume.sourceContent).length);
 
     try {
       await _repository.addToUserHistory(
@@ -2368,7 +3314,7 @@ class TranslationController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonStr = prefs.getString('resume_state_cache');
-      
+
       if (jsonStr != null && jsonStr.isNotEmpty) {
         final json = jsonDecode(jsonStr) as Map<String, dynamic>;
         _resumeState = TranslationResumeState.fromJson(json);
@@ -2380,10 +3326,14 @@ class TranslationController extends ChangeNotifier {
         final user = _auth.currentUser;
         final resume = _resumeState;
         if (user != null && resume != null && resume.hash.trim().isNotEmpty) {
-          final fileName = path.basename(resume.filePath.trim().isEmpty
-              ? (currentFileName ?? 'subtitle.srt')
-              : resume.filePath);
-          final totalBlocks = SubtitleParser.parseSrt(resume.sourceContent).length;
+          final fileName = _bestFriendlyDisplayNameForHash(
+            hash: resume.hash,
+            targetLanguage: resume.targetLanguage,
+            fallbackName: currentFileName,
+            fallbackPath: resume.filePath,
+          );
+          final totalBlocks =
+              SubtitleParser.parseSrt(resume.sourceContent).length;
           unawaited(() async {
             try {
               await _repository.addToUserHistory(
@@ -2416,7 +3366,8 @@ class TranslationController extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _onLog?.call('log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
+      _onLog?.call(
+          'log_resume_state_load_failed', jsonEncode({'error': e.toString()}));
       _resumeState = null;
     }
   }
@@ -2430,7 +3381,8 @@ class TranslationController extends ChangeNotifier {
       _onLog?.call('log_resume_cache_cleared');
       notifyListeners();
     } catch (e) {
-      _onLog?.call('log_resume_cache_clear_failed', jsonEncode({'error': e.toString()}));
+      _onLog?.call(
+          'log_resume_cache_clear_failed', jsonEncode({'error': e.toString()}));
     }
   }
 }

@@ -37,10 +37,9 @@ class AiPanelHeaderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final disabledBg = colorScheme.surfaceContainerHighest;
     final disabledFg = colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
-    final switchScale = balancedTopBand ? 1.08 : 1.0;
     final labelFontSize = balancedTopBand ? 18.0 : null;
-    final historyVerticalPadding = balancedTopBand ? 14.0 : 12.0;
-    final historyHorizontalPadding = balancedTopBand ? 18.0 : 16.0;
+    final historyVerticalPadding = balancedTopBand ? 10.0 : 8.0;
+    final historyHorizontalPadding = balancedTopBand ? 16.0 : 14.0;
     final historyIconSize = balancedTopBand ? 22.0 : 20.0;
 
     return Row(
@@ -50,12 +49,14 @@ class AiPanelHeaderSection extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Transform.scale(
-                scale: switchScale,
-                child: Switch(
-                  value: sdhClear,
-                  onChanged: onSdhClearChanged,
-                  activeThumbColor: colorScheme.primary,
+              SizedBox(
+                height: balancedTopBand ? 36 : 32,
+                child: FittedBox(
+                  child: Switch(
+                    value: sdhClear,
+                    onChanged: onSdhClearChanged,
+                    activeThumbColor: colorScheme.primary,
+                  ),
                 ),
               ),
               const SizedBox(width: kAiPanelInlineGap),
@@ -109,6 +110,9 @@ class AiPanelHeaderSection extends StatelessWidget {
                 padding: EdgeInsets.symmetric(
                   horizontal: historyHorizontalPadding,
                   vertical: historyVerticalPadding,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
                 ),
               ),
             ),

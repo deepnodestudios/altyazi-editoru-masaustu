@@ -1,9 +1,12 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from 'firebase-admin';
+import { meetsMinimumVersion, shouldUseV160ClientRules } from '../referral/referralUtils';
 
-const MOBILE_STARTER_BONUS = 5;
+const MOBILE_STARTER_BONUS_LEGACY = 5;
+const MOBILE_STARTER_BONUS_V160 = 2;
 const GOOGLE_LOGIN_BONUS = 2;
+const STARTER_CREDIT_INTEGRITY_MIN_VERSION = '1.6.2';
 const DESKTOP_PLATFORMS = new Set(['windows', 'macos', 'linux', 'desktop', 'desktop_client']);
 
 type AuthLike = {
@@ -53,6 +56,9 @@ async function resolveGoogleTrackingEmail({
         return tokenEmail;
     }
 
+    // Fallback: when Firebase callable receives a stale ID token right after
+    // link/sign-in, token claims may not include google provider yet.
+    // Admin Auth providerData is authoritative for current account state.
     try {
         const userRecord = await admin.auth().getUser(uid);
         const hasGoogleProvider = userRecord.providerData
@@ -73,11 +79,12 @@ async function resolveGoogleTrackingEmail({
 interface StarterCreditsData {
     deviceId?: string;
     platform?: string;
+    appVersion?: string;
 }
 
 export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
 
-    const { deviceId, platform } = request.data;
+    const { deviceId, platform, appVersion } = request.data;
     const resolvedPlatform = String(platform ?? '').trim().toLowerCase();
     const isMobilePlatform = resolvedPlatform === 'android' || resolvedPlatform === 'ios';
     const isWebPlatform = resolvedPlatform === 'web';
@@ -137,7 +144,23 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
 
             deviceBonusExisted = !!deviceBonusDoc?.exists;
 
-            const starterBonusAmount = isMobilePlatform ? MOBILE_STARTER_BONUS : 0;
+            const useV160StarterBonus = shouldUseV160ClientRules({
+                appVersion,
+                platform: resolvedPlatform,
+            });
+            const mobileStarterBonus = useV160StarterBonus
+                ? MOBILE_STARTER_BONUS_V160
+                : MOBILE_STARTER_BONUS_LEGACY;
+            const starterBonusAmount = isMobilePlatform ? mobileStarterBonus : 0;
+            const shouldEnforceStarterCreditIntegrity = meetsMinimumVersion(
+                appVersion,
+                STARTER_CREDIT_INTEGRITY_MIN_VERSION,
+            );
+            const starterBonusBlockedOnRootedDevice =
+                shouldEnforceStarterCreditIntegrity &&
+                isMobilePlatform &&
+                !request.app &&
+                !deviceBonusDoc?.exists;
             const trackingPlatform = resolvedPlatform || 'unknown';
 
             // Existing schema variants:
@@ -188,7 +211,12 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             if (!Number.isFinite(deviceCredits) || deviceCredits < 0) deviceCredits = 0;
             deviceCredits = Math.min(deviceCredits, remainingAllowed);
 
-            const canGiveStarterBonus = starterBonusAmount > 0 && !deviceBonusDoc?.exists;
+            const isAdRewardOnlyInit = existingData.adRewardOnlyInit === true;
+
+            const canGiveStarterBonus =
+                starterBonusAmount > 0 &&
+                (!deviceBonusDoc?.exists || isAdRewardOnlyInit) &&
+                !starterBonusBlockedOnRootedDevice;
             if (canGiveStarterBonus) {
                 grantedNow = true;
                 deviceCredits = starterBonusAmount;
@@ -251,34 +279,41 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 );
             }
 
-            const shouldWriteDeviceState = !!deviceBonusRef && (
+            let shouldWriteDeviceState = !!deviceBonusRef && (
                 !isWebPlatform ||
                 !!deviceBonusDoc?.exists ||
                 canGiveStarterBonus ||
                 googleLoginBonusToGive > 0
             );
+            if (starterBonusBlockedOnRootedDevice && !deviceBonusDoc?.exists) {
+                shouldWriteDeviceState = false;
+            }
             if (shouldWriteDeviceState && deviceBonusRef) {
+                const deviceBonusUpdate: Record<string, any> = {
+                    deviceId: normalizedDeviceId,
+                    deviceCredits,
+                    bonusGranted: true,
+                    bonusAmount: starterBonusAmount,
+                    totalBonusConsumed,
+                    createdAt: deviceBonusDoc?.exists
+                        ? (existingData.createdAt ?? admin.firestore.FieldValue.serverTimestamp())
+                        : admin.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    lastUserId: userId,
+                    ...(googleLoginBonusToGive > 0 ? {
+                        googleLoginBonusGranted: true,
+                        loginBonusGranted: true,
+                        googleLoginBonusClaimedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        googleLoginBonusClaimedByUid: userId,
+                        googleLoginBonusClaimedByEmail: googleTrackingEmail,
+                    } : {}),
+                };
+                if (isAdRewardOnlyInit) {
+                    deviceBonusUpdate.adRewardOnlyInit = admin.firestore.FieldValue.delete();
+                }
                 transaction.set(
                     deviceBonusRef,
-                    {
-                        deviceId: normalizedDeviceId,
-                        deviceCredits,
-                        bonusGranted: true,
-                        bonusAmount: starterBonusAmount,
-                        totalBonusConsumed,
-                        createdAt: deviceBonusDoc?.exists
-                            ? (existingData.createdAt ?? admin.firestore.FieldValue.serverTimestamp())
-                            : admin.firestore.FieldValue.serverTimestamp(),
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        lastUserId: userId,
-                        ...(googleLoginBonusToGive > 0 ? {
-                            googleLoginBonusGranted: true,
-                            loginBonusGranted: true,
-                            googleLoginBonusClaimedAt: admin.firestore.FieldValue.serverTimestamp(),
-                            googleLoginBonusClaimedByUid: userId,
-                            googleLoginBonusClaimedByEmail: googleTrackingEmail,
-                        } : {}),
-                    },
+                    deviceBonusUpdate,
                     { merge: true },
                 );
             }
@@ -308,9 +343,11 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             }
 
             const totalCredits = purchasedCredits + googleLoginCredits + deviceCredits;
-            const baseMessage = canGiveStarterBonus
-                ? 'Başlangıç kredisi verildi.'
-                : ((isWebPlatform || isDesktopPlatform) ? 'Hesap kredisi hazır.' : 'Cihaz kredisi hazır.');
+            const baseMessage = starterBonusBlockedOnRootedDevice
+                ? 'Cihaz bütünlüğü doğrulanamadığı için başlangıç kredisi verilmedi.'
+                : canGiveStarterBonus
+                    ? 'Başlangıç kredisi verildi.'
+                    : ((isWebPlatform || isDesktopPlatform) ? 'Hesap kredisi hazır.' : 'Cihaz kredisi hazır.');
 
             return {
                 success: true,
@@ -322,6 +359,9 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 googleLoginCredits,
                 totalCredits,
                 bonusAmount: (canGiveStarterBonus ? starterBonusAmount : 0) + googleLoginBonusToGive,
+                starterBonusBlockedReason: starterBonusBlockedOnRootedDevice
+                    ? 'ROOTED_DEVICE'
+                    : null,
             };
         });
 
@@ -334,6 +374,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             purchasedCredits: payload.purchasedCredits,
             totalCredits: payload.totalCredits,
             bonusAmount: payload.bonusAmount,
+            starterBonusBlockedReason: payload.starterBonusBlockedReason ?? null,
         });
 
         return payload;
@@ -349,5 +390,3 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
     }
 });
 
-// force redeploy
-// test change

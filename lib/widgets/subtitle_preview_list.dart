@@ -186,15 +186,13 @@ class SubtitlePreviewList extends StatelessWidget {
     );
   }
 
-  Widget _buildCompareStack(
-    {
+  Widget _buildCompareStack({
     required String? primaryText,
     required String? secondaryText,
     required TextStyle labelTextStyle,
     required BoxDecoration cardDecoration,
     required TextStyle bodyTextStyle,
-  }
-  ) {
+  }) {
     final pLabel = primaryLabel;
     final sLabel = secondaryLabel;
 

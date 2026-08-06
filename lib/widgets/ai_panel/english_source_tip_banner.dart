@@ -77,7 +77,7 @@ class AiPanelEnglishSourceTipBanner extends StatelessWidget {
       padding: EdgeInsets.all(fillHeight ? kAiPanelSectionGap + 2 : kAiPanelSectionGap),
       decoration: BoxDecoration(
         color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
         border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(

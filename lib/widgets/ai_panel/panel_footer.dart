@@ -59,20 +59,27 @@ class _AiPanelFooterState extends State<AiPanelFooter> {
       rightText = '$estimatedPrefix: $localizedEstimatedTimeText';
     }
 
+    // Cloud Batch modunda kalan süreyi gizle
+    if (controller.isCloudBatchMode && controller.isLoading) {
+      rightText = '';
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // İlerleme Çubuğu ve Zamanlayıcılar
         Container(
           color: Theme.of(context).scaffoldBackgroundColor,
-          padding: const EdgeInsets.fromLTRB(0, kAiPanelSectionGap, 0, kAiPanelSectionGap),
+          padding: const EdgeInsets.fromLTRB(
+              0, kAiPanelSectionGap, 0, kAiPanelSectionGap),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Aktif dosya adı
               if ((controller.status == TranslationStatus.running ||
                       controller.status == TranslationStatus.paused) &&
-                  controller.currentFileName != null)
+                  controller.currentFileName != null &&
+                  !controller.isBatchProcessing)
                 Padding(
                   padding: const EdgeInsets.only(bottom: kAiPanelSectionGap),
                   child: Align(
@@ -108,10 +115,14 @@ class _AiPanelFooterState extends State<AiPanelFooter> {
                       Widget buildTexts(Color color, [List<Shadow>? shadows]) {
                         return Stack(
                           children: [
-                            // Yüzde (Orta)
+                            // Yüzde (Orta) veya Sunucu metni
                             Center(
                               child: Text(
-                                '${(value * 100).toStringAsFixed(1)}%',
+                                controller.isTranslationComplete
+                                    ? (trans['log_translation_complete'] ?? 'Çeviri Tamamlandı')
+                                    : (controller.isCloudBatchMode && controller.isLoading)
+                                        ? (trans['batch_cloud_processing_text'] ?? 'Çeviri sunucuda devam ediyor...')
+                                        : '${(value * 100).toStringAsFixed(1)}%',
                                 style: TextStyle(
                                   color: color,
                                   fontWeight: FontWeight.bold,

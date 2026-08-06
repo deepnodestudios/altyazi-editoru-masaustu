@@ -1,5 +1,5 @@
-const LEGACY_GEMINI_MODEL = 'gemini-flash-lite-latest';
-const MODERN_GEMINI_MODEL = 'gemini-flash-lite-latest';
+const LEGACY_GEMINI_MODEL = 'gemini-2.5-flash-lite';
+const MODERN_GEMINI_MODEL = 'gemini-2.5-flash-lite';
 const MODEL_SWITCH_MIN_VERSION = '1.6.0';
 
 function isAtLeastVersion(appVersion?: string | null): boolean {

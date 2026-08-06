@@ -15,7 +15,8 @@ import '../services/subtitle_parser.dart';
 class ProjectManager extends ChangeNotifier {
   final TranslationRepository _repository = TranslationRepository();
   final List<TranslationProject> _projects = [];
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _firestoreSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _firestoreSubscription;
 
   bool _localPrefsLoaded = false;
   bool _firestoreInitialSyncDone = false;
@@ -94,6 +95,29 @@ class ProjectManager extends ChangeNotifier {
     return (translated: translated, total: total);
   }
 
+  Map<String, dynamic>? _normalizeResumeStateJson(
+    Map<String, dynamic> data, {
+    Map<String, dynamic>? fallback,
+  }) {
+    final resumeStateRaw = data['resumeState'];
+    final resumeStateJson = resumeStateRaw is Map
+        ? Map<String, dynamic>.from(resumeStateRaw)
+        : (fallback != null ? Map<String, dynamic>.from(fallback) : null);
+    final chargeKey = (data['chargeKey'] as String?)?.trim() ?? '';
+
+    if (chargeKey.isEmpty) {
+      return resumeStateJson;
+    }
+
+    final normalized = resumeStateJson ?? <String, dynamic>{};
+    final existingChargeKey =
+        (normalized['chargeKey'] as String?)?.trim() ?? '';
+    if (existingChargeKey.isEmpty) {
+      normalized['chargeKey'] = chargeKey;
+    }
+    return normalized;
+  }
+
   void startFirestoreSync() {
     // Zaten çalışıyorsa yeniden başlatma — Windows'ta 2 sn. polling timer
     // her çağrıda bu metodu tetikler; state sıfırlanmamalı.
@@ -168,7 +192,8 @@ class ProjectManager extends ChangeNotifier {
       return;
     }
     bool changed = false;
-    for (final DocumentChange<Map<String, dynamic>> change in snapshot.docChanges) {
+    for (final DocumentChange<Map<String, dynamic>> change
+        in snapshot.docChanges) {
       final docId = change.doc.id;
       switch (change.type) {
         case DocumentChangeType.removed:
@@ -179,10 +204,14 @@ class ProjectManager extends ChangeNotifier {
         case DocumentChangeType.added:
           final data = change.doc.data();
           if (data == null) break;
-          final existingIdx = _projects.indexWhere((p) => _matchesDocId(p, docId));
+          final existingIdx = _projects.indexWhere(
+            (p) => _matchesDocId(p, docId),
+          );
           if (existingIdx >= 0) {
             if (_projects[existingIdx].id != docId) {
-              _projects[existingIdx] = _projects[existingIdx].copyWith(id: docId);
+              _projects[existingIdx] = _projects[existingIdx].copyWith(
+                id: docId,
+              );
               changed = true;
             }
             break;
@@ -207,15 +236,20 @@ class ProjectManager extends ChangeNotifier {
           final translatedLinesRaw = data['translatedLines'];
           final totalLinesRaw = data['totalLines'];
           final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
-          final resumeStateRaw = data['resumeState'];
-          final resumeStateJson = resumeStateRaw is Map
-              ? resumeStateRaw.cast<String, dynamic>()
-              : null;
+          final resumeStateJson = _normalizeResumeStateJson(
+            data,
+            fallback: _projects[idx].resumeStateJson,
+          );
 
-          final clearSdh = data['clearSdh'] as bool?
-              ?? (resumeStateJson != null ? resumeStateJson['clearSdh'] as bool? : null)
-              ?? _projects[idx].clearSdh;
-          final completedPlatform = data['completedPlatform'] as String? ?? _projects[idx].completedPlatform;
+          final clearSdh =
+              data['clearSdh'] as bool? ??
+              (resumeStateJson != null
+                  ? resumeStateJson['clearSdh'] as bool?
+                  : null) ??
+              _projects[idx].clearSdh;
+          final completedPlatform =
+              data['completedPlatform'] as String? ??
+              _projects[idx].completedPlatform;
 
           _projects[idx] = _projects[idx].copyWith(
             id: docId,
@@ -246,7 +280,8 @@ class ProjectManager extends ChangeNotifier {
               translatedFallback: baseTranslated,
               totalFallback: baseTotal,
             );
-            if (derived.translated != baseTranslated || derived.total != baseTotal) {
+            if (derived.translated != baseTranslated ||
+                derived.total != baseTotal) {
               _projects[idx] = _projects[idx].copyWith(
                 translatedLines: derived.translated,
                 totalLines: derived.total,
@@ -266,7 +301,11 @@ class ProjectManager extends ChangeNotifier {
       }
     }
     if (changed) {
-      _projects.sort((a, b) => _safeParseTime(b.lastUpdated).compareTo(_safeParseTime(a.lastUpdated)));
+      _projects.sort(
+        (a, b) => _safeParseTime(
+          b.lastUpdated,
+        ).compareTo(_safeParseTime(a.lastUpdated)),
+      );
       await _saveProjectsToPrefs();
       notifyListeners();
     }
@@ -293,15 +332,20 @@ class ProjectManager extends ChangeNotifier {
         final translatedLinesRaw = data['translatedLines'];
         final totalLinesRaw = data['totalLines'];
         final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
-        final resumeStateRaw = data['resumeState'];
-        final resumeStateJson = resumeStateRaw is Map
-            ? resumeStateRaw.cast<String, dynamic>()
-            : null;
+        final resumeStateJson = _normalizeResumeStateJson(
+          data,
+          fallback: _projects[existingIdx].resumeStateJson,
+        );
 
-        final clearSdh = data['clearSdh'] as bool?
-            ?? (resumeStateJson != null ? resumeStateJson['clearSdh'] as bool? : null)
-            ?? _projects[existingIdx].clearSdh;
-        final completedPlatform = data['completedPlatform'] as String? ?? _projects[existingIdx].completedPlatform;
+        final clearSdh =
+            data['clearSdh'] as bool? ??
+            (resumeStateJson != null
+                ? resumeStateJson['clearSdh'] as bool?
+                : null) ??
+            _projects[existingIdx].clearSdh;
+        final completedPlatform =
+            data['completedPlatform'] as String? ??
+            _projects[existingIdx].completedPlatform;
 
         newProjects.add(
           _projects[existingIdx].copyWith(
@@ -317,7 +361,10 @@ class ProjectManager extends ChangeNotifier {
             totalLines: totalLinesRaw is num
                 ? totalLinesRaw.toInt()
                 : _projects[existingIdx].totalLines,
-            lastUpdated: (updatedAt ?? _safeParseTime(_projects[existingIdx].lastUpdated)).toIso8601String(),
+            lastUpdated:
+                (updatedAt ??
+                        _safeParseTime(_projects[existingIdx].lastUpdated))
+                    .toIso8601String(),
             resumeStateJson: isPartial ? resumeStateJson : null,
           ),
         );
@@ -326,8 +373,11 @@ class ProjectManager extends ChangeNotifier {
         if (project != null) newProjects.add(project);
       }
     }
-    newProjects.sort((a, b) =>
-        _safeParseTime(b.lastUpdated).compareTo(_safeParseTime(a.lastUpdated)));
+    newProjects.sort(
+      (a, b) => _safeParseTime(
+        b.lastUpdated,
+      ).compareTo(_safeParseTime(a.lastUpdated)),
+    );
     bool changed = _projects.length != newProjects.length;
     if (!changed) {
       final oldById = <String, TranslationProject>{
@@ -347,7 +397,9 @@ class ProjectManager extends ChangeNotifier {
         }
       }
     }
-    _projects..clear()..addAll(newProjects);
+    _projects
+      ..clear()
+      ..addAll(newProjects);
     if (changed) {
       await _saveProjectsToPrefs();
       notifyListeners();
@@ -357,34 +409,36 @@ class ProjectManager extends ChangeNotifier {
   /// Firestore dokümanından anında (ağ beklenmeden) metadata oluştur.
   /// Bloklar (içerik) kullanıcı tıkladığında [loadBlocksIfNeeded] ile lazy yüklenir.
   TranslationProject? _buildProjectMetadataFromFirestoreDoc(
-      String docId, Map<String, dynamic> data) {
+    String docId,
+    Map<String, dynamic> data,
+  ) {
     try {
-
       final globalRef = data['globalTranslationRef'] as String?;
       if (globalRef == null || globalRef.isEmpty) return null;
 
-      final fileName       = data['fileName']       as String? ?? 'unknown.srt';
+      final fileName = data['fileName'] as String? ?? 'unknown.srt';
       final targetLanguage = data['targetLanguage'] as String? ?? '';
-      final isPartial      = data['isPartial']      as bool?   ?? false;
-      final isActive       = data['isActive']       as bool?   ?? false;
-      final sourceHash     = data['sourceHash']     as String? ?? '';
+      final isPartial = data['isPartial'] as bool? ?? false;
+      final isActive = data['isActive'] as bool? ?? false;
+      final sourceHash = data['sourceHash'] as String? ?? '';
       final createdAt =
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
       final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
       final translatedLinesRaw = data['translatedLines'];
       final totalLinesRaw = data['totalLines'];
-      final translatedLinesBase =
-          translatedLinesRaw is num ? translatedLinesRaw.toInt() : 0;
+      final translatedLinesBase = translatedLinesRaw is num
+          ? translatedLinesRaw.toInt()
+          : 0;
       final totalLinesBase = totalLinesRaw is num ? totalLinesRaw.toInt() : 0;
 
-      final resumeStateRaw = data['resumeState'];
-      final resumeStateJson = resumeStateRaw is Map
-          ? resumeStateRaw.cast<String, dynamic>()
-          : null;
+      final resumeStateJson = _normalizeResumeStateJson(data);
 
-      final clearSdh = data['clearSdh'] as bool?
-          ?? (resumeStateJson != null ? resumeStateJson['clearSdh'] as bool? : null)
-          ?? false;
+      final clearSdh =
+          data['clearSdh'] as bool? ??
+          (resumeStateJson != null
+              ? resumeStateJson['clearSdh'] as bool?
+              : null) ??
+          false;
       final completedPlatform = data['completedPlatform'] as String?;
 
       final derived = _deriveProgressFromResumeState(
@@ -402,19 +456,25 @@ class ProjectManager extends ChangeNotifier {
       int legacyIdx = -1;
       if (sourceHash.isNotEmpty) {
         // Önce sourceHash ile eşleşmeye çalış (Phase-5 sonrası projeler)
-        legacyIdx = _projects.indexWhere((p) =>
-            p.id != docId &&
-            (p.sourceHash == sourceHash || p.id.contains(sourceHash)) &&
-            p.targetLanguage.toLowerCase() == targetLanguage.toLowerCase());
+        legacyIdx = _projects.indexWhere(
+          (p) =>
+              p.id != docId &&
+              (p.sourceHash == sourceHash || p.id.contains(sourceHash)) &&
+              p.targetLanguage.toLowerCase() == targetLanguage.toLowerCase(),
+        );
       }
       if (legacyIdx < 0) {
         // sourceHash yoksa dosya adı + dil ile eşleş (Phase-5 öncesi eski projeler)
-        legacyIdx = _projects.indexWhere((p) =>
-            p.id != docId &&
-            p.filePath.isNotEmpty &&   // yerel dosyası olan proje (Firestore kaynağı değil)
-            p.sourceHash == null &&    // henüz migrate edilmemiş
-            p.fileName == fileName &&
-            p.targetLanguage.toLowerCase() == targetLanguage.toLowerCase());
+        legacyIdx = _projects.indexWhere(
+          (p) =>
+              p.id != docId &&
+              p
+                  .filePath
+                  .isNotEmpty && // yerel dosyası olan proje (Firestore kaynağı değil)
+              p.sourceHash == null && // henüz migrate edilmemiş
+              p.fileName == fileName &&
+              p.targetLanguage.toLowerCase() == targetLanguage.toLowerCase(),
+        );
       }
       if (legacyIdx >= 0) {
         _projects[legacyIdx] = _projects[legacyIdx].copyWith(
@@ -422,14 +482,16 @@ class ProjectManager extends ChangeNotifier {
           sourceHash: sourceHash.isNotEmpty ? sourceHash : null,
           globalRef: globalRef,
         );
-        debugPrint('[Migrate] Proje ID\'si güncellendi: ${_projects[legacyIdx].filePath} → $docId');
+        debugPrint(
+          '[Migrate] Proje ID\'si güncellendi: ${_projects[legacyIdx].filePath} → $docId',
+        );
         return _projects[legacyIdx];
       }
 
       final project = TranslationProject(
         id: docId,
         fileName: fileName,
-        filePath: '',       // Uzak kaynaklı projede yerel dosya yolu yoktur
+        filePath: '', // Uzak kaynaklı projede yerel dosya yolu yoktur
         targetLanguage: targetLanguage,
         isCompleted: !isPartial,
         isPartial: isPartial,
@@ -438,8 +500,8 @@ class ProjectManager extends ChangeNotifier {
         totalLines: derived.total,
         translatedLines: derived.translated,
         lastUpdated: (updatedAt ?? createdAt).toIso8601String(),
-        sourceBlocks: const [],     // henüz yüklenmedi
-        processedBlocks: const [],  // henüz yüklenmedi
+        sourceBlocks: const [], // henüz yüklenmedi
+        processedBlocks: const [], // henüz yüklenmedi
         sourceHash: sourceHash,
         globalRef: globalRef,
         resumeStateJson: isPartial ? resumeStateJson : null,
@@ -448,7 +510,9 @@ class ProjectManager extends ChangeNotifier {
 
       // NOT: _projects'e ekleme yapılmaz — çağıran taraf (added handler veya
       // reconcile) bunu kendi üstüne alır.
-      debugPrint('Firestore\'tan metadata oluşturuldu (bloklar lazy): $docId ($fileName)');
+      debugPrint(
+        'Firestore\'tan metadata oluşturuldu (bloklar lazy): $docId ($fileName)',
+      );
       return project;
     } catch (e) {
       debugPrint('Firestore metadata oluşturulurken hata: $e');
@@ -457,35 +521,108 @@ class ProjectManager extends ChangeNotifier {
   }
 
   /// Bloklara ihtiyaç duyulduğunda (kullanıcı tıkladığında) yükle.
-  /// Bloklar zaten yüklüyse (processedBlocks.isNotEmpty) hiçbir şey yapmaz.
-  Future<void> loadBlocksIfNeeded(String projectId) async {
+  ///
+  /// Partial kayıtlar için önce resume payload okunur; böylece farklı cihazda
+  /// yarım kalan çeviri de önizleme ve karşılaştırma için açılabilir.
+  Future<bool> loadBlocksIfNeeded(
+    String projectId, {
+    bool forceCloudRefresh = false,
+  }) async {
     final idx = _projects.indexWhere((p) => p.id == projectId);
-    if (idx < 0) return;
-    final project = _projects[idx];
+    if (idx < 0) return false;
+    var project = _projects[idx];
 
-    // Zaten yüklü ise atla
-    if (project.processedBlocks.isNotEmpty) return;
+    if (!forceCloudRefresh) {
+      if (project.isPartial) {
+        if (project.sourceBlocks.isNotEmpty &&
+            project.processedBlocks.isNotEmpty) {
+          return true;
+        }
+      } else if (project.sourceBlocks.isNotEmpty &&
+          project.processedBlocks.isNotEmpty) {
+        return true;
+      }
+    }
+
+    try {
+      final historyDocId =
+          (project.sourceHash != null && project.sourceHash!.isNotEmpty)
+          ? '${project.sourceHash}_${project.targetLanguage.toLowerCase()}'
+          : project.id;
+      final payload = await _repository.getResumePayload(
+        historyDocId: historyDocId,
+      );
+
+      if (payload != null) {
+        final payloadClearSdh = payload['clearSdh'] == 'true';
+        if (payloadClearSdh && !project.clearSdh) {
+          project = project.copyWith(clearSdh: true);
+          _projects[idx] = project;
+        }
+
+        var sourceContent = payload['source'] ?? '';
+        final partialContent = payload['partial'] ?? '';
+
+        if (project.clearSdh && sourceContent.trim().isNotEmpty) {
+          sourceContent = SubtitleParser.clearSdh(sourceContent);
+        }
+
+        final sourceBlocks = sourceContent.isNotEmpty
+            ? SubtitleParser.parseSrt(sourceContent)
+            : <SubtitleBlock>[];
+        final processedBlocks = partialContent.isNotEmpty
+            ? SubtitleParser.parseSrt(partialContent)
+            : <SubtitleBlock>[];
+
+        if (sourceBlocks.isNotEmpty) {
+          final useCloud =
+              !forceCloudRefresh ||
+              processedBlocks.length >= project.processedBlocks.length;
+
+          _projects[idx] = project.copyWith(
+            sourceBlocks: sourceBlocks,
+            processedBlocks: useCloud
+                ? processedBlocks
+                : project.processedBlocks,
+            totalLines: sourceBlocks.length,
+            translatedLines: useCloud
+                ? processedBlocks.length
+                : project.processedBlocks.length,
+          );
+
+          await _saveProjectsToPrefs();
+          notifyListeners();
+          debugPrint(
+            'Resume payload lazy yüklendi: $projectId (${processedBlocks.length} blok)',
+          );
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Resume payload lazy yükleme hatası ($projectId): $e');
+    }
 
     final ref = project.globalRef;
-    if (ref == null || ref.isEmpty) return;
+    if (ref == null || ref.isEmpty) return false;
 
     try {
       final translationData = await _repository.getTranslationByRef(ref);
-      if (translationData == null) return;
+      if (translationData == null) return false;
 
       final translatedContent =
           translationData['translatedContent'] as String? ?? '';
-      var sourceContent =
-          translationData['sourceContent'] as String? ?? '';
+      var sourceContent = translationData['sourceContent'] as String? ?? '';
 
-      // SDH temizleme: clearSdh aktifse kaynak içeriğini temizle
       if (project.clearSdh && sourceContent.trim().isNotEmpty) {
         sourceContent = SubtitleParser.clearSdh(sourceContent);
       }
 
-      // SRT içeriğini bloklara ayrıştır (pure Dart, platform farkı yok)
-      final processedBlocks = SubtitleParser.parseSrt(translatedContent);
-      final sourceBlocks    = SubtitleParser.parseSrt(sourceContent);
+      final processedBlocks = translatedContent.isNotEmpty
+          ? SubtitleParser.parseSrt(translatedContent)
+          : <SubtitleBlock>[];
+      final sourceBlocks = sourceContent.isNotEmpty
+          ? SubtitleParser.parseSrt(sourceContent)
+          : <SubtitleBlock>[];
 
       _projects[idx] = project.copyWith(
         processedBlocks: processedBlocks,
@@ -498,9 +635,13 @@ class ProjectManager extends ChangeNotifier {
 
       await _saveProjectsToPrefs();
       notifyListeners();
-      debugPrint('Bloklar lazy yüklendi: $projectId (${processedBlocks.length} blok)');
+      debugPrint(
+        'Bloklar lazy yüklendi: $projectId (${processedBlocks.length} blok)',
+      );
+      return sourceBlocks.isNotEmpty || processedBlocks.isNotEmpty;
     } catch (e) {
       debugPrint('Blok lazy yükleme hatası ($projectId): $e');
+      return false;
     }
   }
 
@@ -511,7 +652,11 @@ class ProjectManager extends ChangeNotifier {
       List<String>? jsonList = prefs.getStringList('saved_projects');
       if (jsonList != null) {
         _projects.clear();
-        _projects.addAll(jsonList.map((json) => TranslationProject.fromJson(jsonDecode(json))).toList());
+        _projects.addAll(
+          jsonList
+              .map((json) => TranslationProject.fromJson(jsonDecode(json)))
+              .toList(),
+        );
 
         // Tekilleştirme: aynı dosya + aynı dil için en güncel kaydı tut.
         // (Eski batch kopyalamada timestamp_ ön eki ve _<md5> soneki sebebiyle
@@ -530,7 +675,8 @@ class ProjectManager extends ChangeNotifier {
           final bTime = _safeParseTime(p.lastUpdated);
           final isNewer = bTime.isAfter(aTime);
           final isSameTime = bTime.isAtSameMomentAs(aTime);
-          final preferP = isNewer || (isSameTime && p.isCompleted && !existing.isCompleted);
+          final preferP =
+              isNewer || (isSameTime && p.isCompleted && !existing.isCompleted);
           if (preferP) {
             deduped[key] = p;
           }
@@ -540,7 +686,11 @@ class ProjectManager extends ChangeNotifier {
           ..clear()
           ..addAll(deduped.values);
 
-        _projects.sort((a, b) => _safeParseTime(b.lastUpdated).compareTo(_safeParseTime(a.lastUpdated)));
+        _projects.sort(
+          (a, b) => _safeParseTime(
+            b.lastUpdated,
+          ).compareTo(_safeParseTime(a.lastUpdated)),
+        );
 
         // Temizlenmiş listeyi geri yaz (kalıcı olarak duplicate'leri kaldırır)
         await _saveProjectsToPrefs();
@@ -563,7 +713,10 @@ class ProjectManager extends ChangeNotifier {
     // timestamp_foo.srt -> foo.srt
     var n = name.replaceFirst(RegExp(r'^\d{10,}_'), '');
     // foo_<md5>.srt -> foo.srt
-    n = n.replaceFirst(RegExp(r'_[a-f0-9]{32}(?=\.[^.]+$)', caseSensitive: false), '');
+    n = n.replaceFirst(
+      RegExp(r'_[a-f0-9]{32}(?=\.[^.]+$)', caseSensitive: false),
+      '',
+    );
     return n.trim().toLowerCase();
   }
 
@@ -577,12 +730,19 @@ class ProjectManager extends ChangeNotifier {
 
   /// Projeler listesini SharedPreferences'e kaydet
   /// Ağır verileri (bloklar, resumeStateJson) hariç tutar — bunlar Firestore'dan
-  /// lazy yüklenir, böylece ana iş parçacığı bloke olmaz.
+  /// lazy yüklenir (ancak sadece Firestore globalRef'i olan projeler için).
+  /// Yerel projelerde veri kaybı olmaması için globalRef yoksa (veya boşsa) bloklar da kaydedilir.
   Future<void> _saveProjectsToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonList = _projects
-          .map((p) => jsonEncode(p.toJson(includeHeavyData: false)))
+          .map(
+            (p) => jsonEncode(
+              p.toJson(
+                includeHeavyData: p.globalRef == null || p.globalRef!.isEmpty,
+              ),
+            ),
+          )
           .toList();
       await prefs.setStringList('saved_projects', jsonList);
     } catch (e) {
@@ -625,14 +785,18 @@ class ProjectManager extends ChangeNotifier {
       _saveProjectsToPrefs();
 
       // Kalıcı dosyayı sil
-      final stillUsesFilePath = _projects.any((p) => p.filePath == project.filePath);
+      final stillUsesFilePath = _projects.any(
+        (p) => p.filePath == project.filePath,
+      );
       if (!stillUsesFilePath) {
         _deletePermanentFile(project.filePath);
       }
 
       final srcCachePath = project.translationSourceCachePath;
       if (srcCachePath != null && srcCachePath.isNotEmpty) {
-        final stillUsesCache = _projects.any((p) => p.translationSourceCachePath == srcCachePath);
+        final stillUsesCache = _projects.any(
+          (p) => p.translationSourceCachePath == srcCachePath,
+        );
         if (!stillUsesCache) {
           _deletePermanentFile(srcCachePath);
         }
@@ -656,11 +820,14 @@ class ProjectManager extends ChangeNotifier {
       final subtitlesDir = Directory(path.join(appDir.path, 'subtitles'));
 
       // Yolları normalize et
-      final context = path.Context(style: Platform.isWindows ? path.Style.windows : path.Style.posix);
+      final context = path.Context(
+        style: Platform.isWindows ? path.Style.windows : path.Style.posix,
+      );
       final root = context.canonicalize(subtitlesDir.path);
       final target = context.canonicalize(filePath);
 
-      if (context.isWithin(root, target) || context.equals(context.dirname(target), root)) {
+      if (context.isWithin(root, target) ||
+          context.equals(context.dirname(target), root)) {
         final file = File(filePath);
         if (await file.exists()) {
           await file.delete();
@@ -681,7 +848,9 @@ class ProjectManager extends ChangeNotifier {
       final candidateIds = <String>{};
       final sourceHash = project.sourceHash;
       if (sourceHash != null && sourceHash.isNotEmpty) {
-        candidateIds.add('${sourceHash}_${project.targetLanguage.toLowerCase()}');
+        candidateIds.add(
+          '${sourceHash}_${project.targetLanguage.toLowerCase()}',
+        );
       }
       if (project.id.isNotEmpty) candidateIds.add(project.id);
 
@@ -770,6 +939,7 @@ class TranslationProject {
   List<SubtitleBlock> processedBlocks;
   String? usedModel;
   String? sourceHash;
+
   /// Firestore'daki `global_translations` doküman referansı (lazy yükleme için)
   String? globalRef;
 
@@ -854,31 +1024,30 @@ class TranslationProject {
   }
 
   Map<String, dynamic> toJson({bool includeHeavyData = true}) => {
-        'id': id,
-        'fileName': fileName,
-        'filePath': filePath,
-        'translationSourceCachePath': translationSourceCachePath,
-        'targetLanguage': targetLanguage,
-        'isCompleted': isCompleted,
-        'isPartial': isPartial,
-        'isActive': isActive,
-        'clearSdh': clearSdh,
-        'totalLines': totalLines,
-        'translatedLines': translatedLines,
-        'lastUpdated': lastUpdated,
-        // Bloklar ve resumeStateJson ağır veri — SharedPreferences'a yazılmaz,
-        // Firestore'dan lazy yüklenir.
-        if (includeHeavyData)
-          'sourceBlocks': sourceBlocks.map((b) => b.toJson()).toList(),
-        if (includeHeavyData)
-          'processedBlocks': processedBlocks.map((b) => b.toJson()).toList(),
-        if (includeHeavyData)
-          'resumeStateJson': resumeStateJson,
-        'usedModel': usedModel,
-        'sourceHash': sourceHash,
-        'globalRef': globalRef,
-        'completedPlatform': completedPlatform,
-      };
+    'id': id,
+    'fileName': fileName,
+    'filePath': filePath,
+    'translationSourceCachePath': translationSourceCachePath,
+    'targetLanguage': targetLanguage,
+    'isCompleted': isCompleted,
+    'isPartial': isPartial,
+    'isActive': isActive,
+    'clearSdh': clearSdh,
+    'totalLines': totalLines,
+    'translatedLines': translatedLines,
+    'lastUpdated': lastUpdated,
+    // Bloklar ve resumeStateJson ağır veri — SharedPreferences'a yazılmaz,
+    // Firestore'dan lazy yüklenir.
+    if (includeHeavyData)
+      'sourceBlocks': sourceBlocks.map((b) => b.toJson()).toList(),
+    if (includeHeavyData)
+      'processedBlocks': processedBlocks.map((b) => b.toJson()).toList(),
+    if (includeHeavyData) 'resumeStateJson': resumeStateJson,
+    'usedModel': usedModel,
+    'sourceHash': sourceHash,
+    'globalRef': globalRef,
+    'completedPlatform': completedPlatform,
+  };
 
   factory TranslationProject.fromJson(Map<String, dynamic> json) {
     return TranslationProject(
@@ -894,16 +1063,21 @@ class TranslationProject {
       totalLines: json['totalLines'],
       translatedLines: json['translatedLines'],
       lastUpdated: json['lastUpdated'],
-      sourceBlocks: (json['sourceBlocks'] as List?)
-          ?.map((i) => SubtitleBlock.fromJson(i))
-          .toList() ?? const [],
-      processedBlocks: (json['processedBlocks'] as List?)
-          ?.map((i) => SubtitleBlock.fromJson(i))
-          .toList() ?? const [],
+      sourceBlocks:
+          (json['sourceBlocks'] as List?)
+              ?.map((i) => SubtitleBlock.fromJson(i))
+              .toList() ??
+          const [],
+      processedBlocks:
+          (json['processedBlocks'] as List?)
+              ?.map((i) => SubtitleBlock.fromJson(i))
+              .toList() ??
+          const [],
       usedModel: json['usedModel'],
       sourceHash: json['sourceHash'] as String?,
       globalRef: json['globalRef'] as String?,
-      resumeStateJson: (json['resumeStateJson'] as Map?)?.cast<String, dynamic>(),
+      resumeStateJson: (json['resumeStateJson'] as Map?)
+          ?.cast<String, dynamic>(),
       completedPlatform: json['completedPlatform'] as String?,
     );
   }

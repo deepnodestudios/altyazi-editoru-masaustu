@@ -10,9 +10,7 @@ class SubtitleBuilder {
       buffer.writeln(index);
       buffer.writeln(block.timecode.replaceAll('.', ','));
       buffer.writeln(block.text);
-      if (i < blocks.length - 1) {
-        buffer.writeln(''); // Add a blank line between blocks
-      }
+      buffer.writeln(''); // Always add a blank line after each block, including the last one
     }
     return buffer.toString();
   }

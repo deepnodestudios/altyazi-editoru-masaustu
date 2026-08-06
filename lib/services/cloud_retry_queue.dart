@@ -72,6 +72,9 @@ class CloudRetryQueue {
     required String originalName,
     required String targetLanguage,
     String? encodingDetected,
+    String? deviceId,
+    bool isBatch = false,
+    Map<String, dynamic>? cost,
   }) async {
     await init();
     _queue.add({
@@ -83,6 +86,9 @@ class CloudRetryQueue {
         'originalName': originalName,
         'targetLanguage': targetLanguage,
         if (encodingDetected != null) 'encodingDetected': encodingDetected,
+        if (deviceId != null) 'deviceId': deviceId,
+        'isBatch': isBatch,
+        if (cost != null && cost.isNotEmpty) 'cost': cost,
       },
       'attempt': 0,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -185,6 +191,9 @@ class CloudRetryQueue {
               originalName: payload['originalName'] as String,
               targetLanguage: payload['targetLanguage'] as String,
               encodingDetected: payload['encodingDetected'] as String?,
+              deviceId: payload['deviceId'] as String?,
+              isBatch: payload['isBatch'] as bool? ?? false,
+              cost: (payload['cost'] as Map?)?.cast<String, dynamic>(),
             );
           } else if (type == 'addToUserHistory') {
             final translatedLinesRaw = payload['translatedLines'];

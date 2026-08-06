@@ -4,7 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { defineSecret } from 'firebase-functions/params';
 import { normalizePlatform } from '../billing/creditUtils';
 
-const geminiApiKey = defineSecret('GEMINI_API_KEY');
+const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 
 export const pollBatchJobs = onSchedule({
     schedule: 'every 2 minutes',

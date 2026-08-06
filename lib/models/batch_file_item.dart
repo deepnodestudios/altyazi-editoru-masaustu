@@ -4,11 +4,13 @@ class BatchFileItem {
   final String name;
   final String path;
   final String source;
+  final String? hash;
 
   const BatchFileItem({
     required this.name,
     required this.path,
     this.source = 'device',
+    this.hash,
   });
 
   factory BatchFileItem.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class BatchFileItem {
       name: computedName,
       path: rawPath,
       source: (json['source'] ?? 'device').toString(),
+      hash: json['hash']?.toString(),
     );
   }
 
@@ -31,6 +34,7 @@ class BatchFileItem {
       'name': name,
       'path': path,
       'source': source,
+      'hash': hash,
     };
   }
 
@@ -38,11 +42,13 @@ class BatchFileItem {
     String? name,
     String? path,
     String? source,
+    String? hash,
   }) {
     return BatchFileItem(
       name: name ?? this.name,
       path: path ?? this.path,
       source: source ?? this.source,
+      hash: hash ?? this.hash,
     );
   }
 }

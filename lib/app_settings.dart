@@ -200,7 +200,9 @@ class AppSettings extends ChangeNotifier {
   bool _tutorialTranslationShown = false;
   bool _tutorialEditorShown = false;
   bool _hideInfoButtons = false;
+  bool _hideBatchTranslationInfo = false;
   bool _confirmDeletes = true;
+  bool _showCrashWarnings = true;
   bool _alwaysOnTop = false;
   bool _minimizeToTray = true;
 
@@ -209,7 +211,6 @@ class AppSettings extends ChangeNotifier {
   Timer? _authStatePollTimer;
   bool? _lastGoogleLinked;
   bool? _lastIsLoggedIn;
-  bool _desktopSessionRestoreComplete = false;
 
   bool get _useAuthStateStream => !(!kIsWeb && Platform.isWindows);
   bool get alwaysOnTop => _alwaysOnTop;
@@ -577,7 +578,7 @@ class AppSettings extends ChangeNotifier {
         // Desktop: oturum restore tamamlanmadan GDrive'ı kapatma.
         // Firebase oturumu henüz kurulmamış olabilir, token ile geri
         // yüklenecektir.
-        if (isDesktopPlatform && !_desktopSessionRestoreComplete) return;
+        if (isDesktopPlatform) return;
         _cloudStateManager.setIsGDriveConnected(false);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_gdrive_connected', false);
@@ -650,7 +651,9 @@ class AppSettings extends ChangeNotifier {
   bool get tutorialTranslationShown => _tutorialTranslationShown;
   bool get tutorialEditorShown => _tutorialEditorShown;
   bool get hideInfoButtons => _hideInfoButtons;
+  bool get hideBatchTranslationInfo => _hideBatchTranslationInfo;
   bool get confirmDeletes => _confirmDeletes;
+  bool get showCrashWarnings => _showCrashWarnings;
   bool get canUndo => _editorStateManager.canUndo;
   bool get canRedo => _editorStateManager.canRedo;
   bool get prefsLoaded => _prefsLoaded;
@@ -685,6 +688,7 @@ class AppSettings extends ChangeNotifier {
   }
 
   Future<void> promptCrashReportIfAvailable(BuildContext context) async {
+    if (!_showCrashWarnings) return;
     if (!await _crashReportManager.hasCrashLog()) return;
 
     // Check if we already prompted for this specific crash session
@@ -925,8 +929,7 @@ class AppSettings extends ChangeNotifier {
       ),
     );
     if (isEditorSave) {
-      _uiStateManager.setEditorDirty(false);
-      notifyListeners();
+      _editorStateManager.markSaved();
     }
   }
 
@@ -950,8 +953,7 @@ class AppSettings extends ChangeNotifier {
       ),
     );
     if (isEditorSave) {
-      _uiStateManager.setEditorDirty(false);
-      notifyListeners();
+      _editorStateManager.markSaved();
     }
   }
 
@@ -999,8 +1001,7 @@ class AppSettings extends ChangeNotifier {
           final account =
               await _cloudStorageService.ensureGDriveAccount(interactive: true);
           if (account == null) {
-            addLog("log_error",
-                "Google Drive sign-in returned null (cancelled or failed)");
+            addLog("log_error", "log_gdrive_signin_null");
           } else {
             addLog("log_gdrive_connected", account.email);
           }
@@ -1060,8 +1061,7 @@ class AppSettings extends ChangeNotifier {
       ),
     );
     if (isEditorSave) {
-      _uiStateManager.setEditorDirty(false);
-      notifyListeners();
+      _editorStateManager.markSaved();
     }
   }
 
@@ -1169,6 +1169,17 @@ class AppSettings extends ChangeNotifier {
     _hideInfoButtons = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hide_info_buttons', value);
+    if (!value) {
+      _hideBatchTranslationInfo = false;
+      await prefs.setBool('hide_batch_info', false);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setHideBatchTranslationInfo(bool value) async {
+    _hideBatchTranslationInfo = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hide_batch_info', value);
     notifyListeners();
   }
 
@@ -1176,6 +1187,13 @@ class AppSettings extends ChangeNotifier {
     _confirmDeletes = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('confirm_deletes', value);
+    notifyListeners();
+  }
+
+  Future<void> setShowCrashWarnings(bool value) async {
+    _showCrashWarnings = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_crash_warnings', value);
     notifyListeners();
   }
 
@@ -1514,8 +1532,10 @@ class AppSettings extends ChangeNotifier {
   /// Geçerli projenin bloklarını (SRT içeriğini) gerekirse lazy olarak yükler.
   /// Bloklar zaten yüklüyse anında döner. Firestore'dan getirildiğinde
   /// ProjectManager notifyListeners() çağırır, UI otomatik güncellenir.
-  Future<void> loadProjectBlocksIfNeeded(String projectId) =>
-      _projectManager.loadBlocksIfNeeded(projectId);
+    Future<bool> loadProjectBlocksIfNeeded(String projectId,
+        {bool forceCloudRefresh = false}) =>
+      _projectManager.loadBlocksIfNeeded(projectId,
+        forceCloudRefresh: forceCloudRefresh);
 
   void restoreProject(TranslationProject project) {
     _projectManager.restoreProject(project);
@@ -1867,6 +1887,9 @@ class AppSettings extends ChangeNotifier {
   }
 
   void shiftAllTimecodes(int offsetMs) {
+    debugPrint(
+      '[ShiftAll] AppSettings.shiftAllTimecodes offsetMs=$offsetMs searchQuery="${_editorStateManager.searchQuery}" blocks=${_editorStateManager.editorBlocks.length}',
+    );
     _editorStateManager.shiftAllTimecodes(offsetMs);
   }
 
@@ -1921,11 +1944,11 @@ class AppSettings extends ChangeNotifier {
           StringUtils.stripGeneratedPrefixAndHash(nameWithoutExt);
       final noEdited = noGenerated.replaceFirst(
           RegExp(r'_edited$', caseSensitive: false), '');
-      final nameStripped = StringUtils.stripLanguageSuffix(noEdited);
-      final base = nameStripped.trim().isEmpty ? 'output' : nameStripped.trim();
+          
+      final base = noEdited.trim().isEmpty ? 'output' : noEdited.trim();
 
       // We always generate SRT content currently.
-      defaultFileName = "${base}_${_targetLanguage}_edited.srt";
+      defaultFileName = "${base}_edited.srt";
     } else if (!isEditorSave && _selectedTranslationFilePath.isNotEmpty) {
       String fileName =
           _selectedTranslationFilePath.split('/').last.split('\\').last;
@@ -1967,8 +1990,7 @@ class AppSettings extends ChangeNotifier {
       }
       addLog("log_saved", isAndroidIos ? defaultFileName : f);
       if (isEditorSave) {
-        _uiStateManager.setEditorDirty(false);
-        notifyListeners();
+        _editorStateManager.markSaved();
       }
     }
   }
@@ -1984,7 +2006,10 @@ class AppSettings extends ChangeNotifier {
   }
 
   Future<void> _loadPreferences() async {
+    final sw = Stopwatch()..start();
+    debugPrint('⏱️ AppSettings._loadPreferences START');
     final prefs = await SharedPreferences.getInstance();
+    debugPrint('⏱️ [${sw.elapsedMilliseconds}ms] _loadPreferences: SharedPreferences');
 
     // Load all manager states
     await Future.wait<void>([
@@ -1996,6 +2021,7 @@ class AppSettings extends ChangeNotifier {
       _apiConfigManager.loadAPIConfigFromPrefs(),
       _cloudStateManager.loadCloudStateFromPrefs(),
     ]);
+    debugPrint('⏱️ [${sw.elapsedMilliseconds}ms] _loadPreferences: Future.wait managers');
 
     // Load legacy cloud connectivity states
     _cloudStateManager
@@ -2007,7 +2033,9 @@ class AppSettings extends ChangeNotifier {
 
     // Load UI toggles
     _hideInfoButtons = prefs.getBool('hide_info_buttons') ?? false;
+    _hideBatchTranslationInfo = prefs.getBool('hide_batch_info') ?? false;
     _confirmDeletes = prefs.getBool('confirm_deletes') ?? true;
+    _showCrashWarnings = prefs.getBool('show_crash_warnings') ?? true;
     _alwaysOnTop = prefs.getBool(_prefKeyAlwaysOnTop) ?? false;
     _minimizeToTray = prefs.getBool(_prefKeyMinimizeToTray) ?? true;
 
@@ -2016,6 +2044,7 @@ class AppSettings extends ChangeNotifier {
         await windowManager.setAlwaysOnTop(_alwaysOnTop);
       } catch (_) {}
     }
+    debugPrint('⏱️ [${sw.elapsedMilliseconds}ms] _loadPreferences: pre-prefsLoaded');
 
     // Sessizce Google oturumunu geri yükle:
     // • Pref true ise zaten restore etmeliyiz.
@@ -2026,12 +2055,18 @@ class AppSettings extends ChangeNotifier {
         !firebaseUser.isAnonymous &&
         firebaseUser.providerData.any((p) => p.providerId == 'google.com');
 
+    // [OPTIMİZASYON] UI'ın hemen açılması için prefsLoaded'i true yapıp bildiriyoruz.
+    // Google oturum geri yükleme ve Firestore sync arka planda yapılacak.
+    _prefsLoaded = true;
+    notifyListeners();
+    debugPrint('⏱️ [${sw.elapsedMilliseconds}ms] _loadPreferences: prefsLoaded=true, UI should render now');
+
+    // Google oturumunu arka planda geri yükle (UI'ı bloklamaz).
     if (_cloudStateManager.isGDriveConnected || hasGoogleFirebase) {
       try {
         await _cloudStorageService.restoreGoogleSession();
       } catch (_) {}
     }
-    _desktopSessionRestoreComplete = true;
 
     // Uygulama başlangıcında kullanıcı zaten giriş yapmışsa Firestore geçmiş
     // senkronizasyonunu hemen başlat (Windows dahil tüm platformlar için).
@@ -2039,10 +2074,6 @@ class AppSettings extends ChangeNotifier {
     if (startupUser != null && !startupUser.isAnonymous) {
       _projectManager.startFirestoreSync();
     }
-
-    // [OPTIMİZASYON] UI'ın hemen açılması için prefsLoaded'i true yapıp bildiriyoruz.
-    _prefsLoaded = true;
-    notifyListeners();
 
     // Prefs yüklendikten sonra auth durumunu bir kez daha senkronla ki
     // login yoksa cloud-only history hemen temizlensin.

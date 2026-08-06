@@ -17,6 +17,29 @@ class CreditHistoryRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
+  bool _isVisibleEntry(CreditHistoryEntry entry) {
+    if (entry.type != CreditHistoryEntryType.add) {
+      return true;
+    }
+
+    final source = (entry.source ?? '').trim().toLowerCase();
+    final reason = (entry.reason ?? '').trim().toLowerCase();
+
+    if (source == 'ad_reward' || reason == 'ad_reward') {
+      return false;
+    }
+
+    if (reason == 'monthly_google_bonus') {
+      return false;
+    }
+
+    return true;
+  }
+
+  List<CreditHistoryEntry> _filterVisibleEntries(List<CreditHistoryEntry> entries) {
+    return entries.where(_isVisibleEntry).toList(growable: false);
+  }
+
   void _debug(String message) {
     assert(() {
       debugPrint('[CreditHistory] $message');
@@ -35,6 +58,8 @@ class CreditHistoryRepository {
 
     StreamSubscription<User?>? authSub;
     Timer? authPollTimer;
+    // Windows polling timers (replaces Firestore stream listeners on Windows)
+    Timer? windowsPollTimer;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? txSub;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? purchaseSub;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? usageSub;
@@ -53,6 +78,8 @@ class CreditHistoryRepository {
     }
 
     Future<void> stopAllFirestoreSubs() async {
+      windowsPollTimer?.cancel();
+      windowsPollTimer = null;
       await txSub?.cancel();
       txSub = null;
       await stopLegacySubs();
@@ -60,6 +87,92 @@ class CreditHistoryRepository {
 
     void emitEmpty() {
       controller.add(const <CreditHistoryEntry>[]);
+    }
+
+    // Windows-only: one-time fetch of legacy collections (no stream listener).
+    Future<void> fetchLegacyOnceForUid(String uid) async {
+      _debug('windows polling: fetching legacy collections once');
+      try {
+        final purchaseSnap = await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection('purchase_history')
+            .orderBy('timestamp', descending: true)
+            .limit(limit)
+            .get();
+        final usageSnap = await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection('credit_usage')
+            .orderBy('timestamp', descending: true)
+            .limit(limit)
+            .get();
+        final purchases =
+            purchaseSnap.docs.map(CreditHistoryEntry.fromPurchaseHistoryDoc).toList();
+        final usages =
+            usageSnap.docs.map(CreditHistoryEntry.fromCreditUsageDoc).toList();
+        final merged = _filterVisibleEntries(<CreditHistoryEntry>[...purchases, ...usages]);
+        merged.sort((a, b) {
+          final at = a.timestamp;
+          final bt = b.timestamp;
+          if (at == null && bt == null) return 0;
+          if (at == null) return 1;
+          if (bt == null) return -1;
+          return bt.compareTo(at);
+        });
+        _debug(
+          'windows legacy fetched: purchases=${purchases.length}, usages=${usages.length}, total=${merged.length}',
+        );
+        if (!controller.isClosed) {
+          controller.add(merged.length > limit ? merged.sublist(0, limit) : merged);
+        }
+      } catch (e) {
+        _debug('windows legacy fetch error: $e');
+        if (!controller.isClosed) controller.addError(e);
+      }
+    }
+
+    // Windows-only: one-time fetch + polling via Timer (no stream listeners).
+    void startWindowsPollingForUid(String uid) {
+      windowsPollTimer?.cancel();
+      windowsPollTimer = null;
+
+      Future<void> poll() async {
+        if (activeUid != uid) return;
+        _debug('windows polling: fetching credit_transactions');
+        try {
+          final txSnap = await _firestore
+              .collection('users')
+              .doc(uid)
+              .collection('credit_transactions')
+              .orderBy('timestamp', descending: true)
+              .limit(limit)
+              .get();
+          if (activeUid != uid) return;
+          if (txSnap.docs.isNotEmpty) {
+            final txEntries = _filterVisibleEntries(txSnap.docs
+                .map(CreditHistoryEntry.fromCreditTransactionsDoc)
+                .toList());
+            _debug('windows polling: unified ${txEntries.length} entries');
+            if (!controller.isClosed) controller.add(txEntries);
+          } else if (includeLegacyFallback) {
+            await fetchLegacyOnceForUid(uid);
+          } else {
+            if (!controller.isClosed) {
+              controller.add(const <CreditHistoryEntry>[]);
+            }
+          }
+        } catch (e) {
+          _debug('windows poll error: $e');
+          if (!controller.isClosed) controller.addError(e);
+        }
+      }
+
+      // Initial fetch immediately, then poll every 15 seconds.
+      unawaited(poll());
+      windowsPollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        unawaited(poll());
+      });
     }
 
     void startLegacySubsForUid(String uid) {
@@ -83,7 +196,9 @@ class CreditHistoryRepository {
 
       void emitLegacyIfReady() {
         if (latestPurchases == null || latestUsages == null) return;
-        final merged = <CreditHistoryEntry>[...latestPurchases!, ...latestUsages!];
+        final merged = _filterVisibleEntries(
+          <CreditHistoryEntry>[...latestPurchases!, ...latestUsages!],
+        );
         merged.sort((a, b) {
           final at = a.timestamp;
           final bt = b.timestamp;
@@ -118,6 +233,14 @@ class CreditHistoryRepository {
     }
 
     void startUnifiedSubsForUid(String uid) {
+      // Windows'da Firestore stream callback'leri platform thread dışında
+      // gelebiliyor (engine crash riski). Windows'da polling kullan.
+      if (!kIsWeb && Platform.isWindows) {
+        _debug('windows: using polling instead of stream listeners');
+        startWindowsPollingForUid(uid);
+        return;
+      }
+
       final txQuery = _firestore
           .collection('users')
           .doc(uid)
@@ -128,9 +251,9 @@ class CreditHistoryRepository {
       if (!includeLegacyFallback) {
         txSub = txQuery.snapshots().listen(
           (snapshot) {
-            final txEntries = snapshot.docs
+            final txEntries = _filterVisibleEntries(snapshot.docs
                 .map(CreditHistoryEntry.fromCreditTransactionsDoc)
-                .toList();
+                .toList());
             controller.add(txEntries);
           },
           onError: controller.addError,
@@ -142,13 +265,14 @@ class CreditHistoryRepository {
       // back to legacy collections. If unified becomes non-empty later, switch.
       txSub = txQuery.snapshots().listen(
         (snapshot) async {
-          final txEntries = snapshot.docs
+          final rawTxEntries = snapshot.docs
               .map(CreditHistoryEntry.fromCreditTransactionsDoc)
               .toList();
+          final txEntries = _filterVisibleEntries(rawTxEntries);
 
-          _debug('unified snapshot: ${txEntries.length} entries');
+          _debug('unified snapshot: visible=${txEntries.length}, raw=${rawTxEntries.length}');
 
-          if (txEntries.isNotEmpty) {
+          if (rawTxEntries.isNotEmpty) {
             _debug('using unified credit_transactions');
             await stopLegacySubs();
             controller.add(txEntries);

@@ -63,6 +63,8 @@ class BillingService extends ChangeNotifier {
 
   int _purchasedCredits = 0;
   int get purchasedCredits => _purchasedCredits;
+  
+  bool _initialCreditsLoaded = false;
 
   int _deviceCredits = 0;
   int get deviceCredits => _deviceCredits;
@@ -166,7 +168,6 @@ class BillingService extends ChangeNotifier {
   }
 
   Future<void> _maybeCheckStarterCredits({bool silent = true}) async {
-    if (_isDesktopPlatform) return;
     if (_starterCreditsCheckTriggered) return;
     if (_deviceId == null) return;
     // Starter credits are granted server-side; require Firebase Auth (anonymous is OK).
@@ -175,7 +176,6 @@ class BillingService extends ChangeNotifier {
     _starterCreditsCheckTriggered = true;
     await checkAndGiveStarterCredits(silent: silent);
   }
-
   static String _generateInstallId() {
     final r = Random.secure();
     final bytes = List<int>.generate(16, (_) => r.nextInt(256));
@@ -358,6 +358,7 @@ class BillingService extends ChangeNotifier {
   void _listenToUserCredits() {
     _creditsSubscription?.cancel();
     _creditsPollTimer?.cancel();
+    _initialCreditsLoaded = false;
 
     final user = _auth.currentUser;
     if (user != null) {
@@ -419,7 +420,17 @@ class BillingService extends ChangeNotifier {
   void _applyCreditsFromUserSnapshot(Map<String, dynamic>? data) {
     final purchasedA = _asInt(data?['purchasedCredits']);
     final purchasedB = _asInt(data?['credits']);
-    _purchasedCredits = max(purchasedA, purchasedB);
+    final newPurchasedCredits = max(purchasedA, purchasedB);
+
+    if (_initialCreditsLoaded) {
+      if (newPurchasedCredits > _purchasedCredits) {
+        _purchaseSuccessController.add(null);
+      }
+    } else {
+      _initialCreditsLoaded = true;
+    }
+
+    _purchasedCredits = newPurchasedCredits;
     _recomputeTotalCredits();
     notifyListeners();
   }
@@ -728,12 +739,33 @@ class BillingService extends ChangeNotifier {
   }
 
   Future<void> checkAndGiveStarterCredits({bool silent = false}) async {
+    // The server expects Firebase Auth.
+    if (_auth.currentUser == null) return;
+
     if (_isDesktopPlatform) {
-      if (_deviceCredits != 0) {
-        _deviceCredits = 0;
+      // Desktop doesn't use device-based credits, but it CAN receive account-based login bonuses.
+      try {
+        final data = await _callCloudFunction('giveStarterCredits', {
+          'deviceId': _deviceId ?? 'desktop_client',
+          'platform': 'windows',
+        });
+
+        if (data.containsKey('purchasedCredits')) {
+          _purchasedCredits = _asInt(data['purchasedCredits']);
+        }
         _recomputeTotalCredits();
-        notifyListeners();
+
+        final bonusAmount = _asInt(data['bonusAmount'] ?? 0);
+        if (bonusAmount > 0 && !silent) {
+          onLog?.call(
+            'log_iap_starter_bonus_given',
+            jsonEncode({'amount': bonusAmount}),
+          );
+        }
+      } catch (e) {
+        debugPrint('Desktop starter credit check failed: $e');
       }
+
       _starterCreditsRetryTimer?.cancel();
       _starterCreditsRetryTimer = null;
       _starterCreditsRetryCount = 0;
@@ -748,6 +780,7 @@ class BillingService extends ChangeNotifier {
     try {
       final data = await _callCloudFunction('giveStarterCredits', {
         'deviceId': _deviceId,
+        'platform': Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : Platform.operatingSystem.toLowerCase()),
       });
 
       if (data.containsKey('deviceCredits')) {

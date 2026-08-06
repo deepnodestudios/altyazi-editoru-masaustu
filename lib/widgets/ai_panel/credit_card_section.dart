@@ -127,17 +127,20 @@ class AiPanelCreditCardSection extends StatelessWidget {
     final creditContainer =
         isLowCredits ? colorScheme.errorContainer : colorScheme.primaryContainer;
 
+    final double exactHeight = kAiPanelPrimaryButtonHeight * 2 + kAiPanelSectionGap;
+
     return SizedBox(
       width: double.infinity,
+      height: exactHeight,
       child: Card(
         margin: EdgeInsets.zero,
         elevation: 4,
         shadowColor: colorScheme.shadow.withValues(alpha: 0.26),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kAiPanelBorderRadius)),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
             gradient: LinearGradient(
               colors: [
                 creditContainer.withValues(alpha: 0.35),
@@ -209,7 +212,7 @@ class AiPanelCreditCardSection extends StatelessWidget {
                           '1 Credit = 1 Full Translation',
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        fontSize: 10,
+                        fontSize: 13,
                       ),
                     ),
                   ),
@@ -231,7 +234,7 @@ class AiPanelCreditCardSection extends StatelessWidget {
                     vertical: 10,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
                   ),
                 ),
                 child: SizedBox(

@@ -1,6 +1,40 @@
 import 'package:flutter/services.dart';
 
 class StringUtils {
+  /// Ensures the filename ends with `_<hash>` (right before extension).
+  ///
+  /// Examples:
+  /// - `Movie.srt` + `abcd...` -> `Movie_abcd....srt`
+  /// - `Movie_OLDHASH.srt` + `NEWHASH` -> `Movie_NEWHASH.srt`
+  /// - `Movie_NEWHASH.srt` + `NEWHASH` -> unchanged
+  static String ensureHashSuffixInFileName({
+    required String fileName,
+    required String hash,
+  }) {
+    final trimmed = fileName.trim();
+    final h = hash.trim();
+    if (trimmed.isEmpty || h.isEmpty) return fileName;
+
+    final leaf = trimmed.split(RegExp(r'[\\/]')).last.trim();
+    if (leaf.isEmpty) return fileName;
+
+    final dot = leaf.lastIndexOf('.');
+    final hasExt = dot > 0 && dot < leaf.length - 1;
+    final ext = hasExt ? leaf.substring(dot) : '';
+    var base = hasExt ? leaf.substring(0, dot) : leaf;
+
+    if (base.toLowerCase().endsWith('_${h.toLowerCase()}')) {
+      return '$base$ext';
+    }
+
+    base = base.replaceFirst(
+      RegExp(r'_[a-f0-9]{24,64}$', caseSensitive: false),
+      '',
+    );
+
+    return '${base}_$h$ext';
+  }
+
   static String fillTemplate(String template, Map<String, String> params) {
     var out = template;
     params.forEach((k, v) {
@@ -165,4 +199,51 @@ class StringUtils {
     final lower = name.toLowerCase();
     return lower.endsWith('.srt') || lower.endsWith('.vtt');
   }
+
+  static final RegExp _hex32 = RegExp(r'^[a-fA-F0-9]{32}$');
+
+  static String hideHashAndMarkersInFileName(String fileName) {
+    if (fileName.trim().isEmpty) return fileName;
+
+    final extMatch = RegExp(r'(\.[^.]+)$').firstMatch(fileName);
+    final ext = extMatch?.group(1) ?? '';
+    var base = ext.isEmpty
+        ? fileName
+        : fileName.substring(0, fileName.length - ext.length);
+
+    // Remove generated leading timestamp if present.
+    base = base.replaceFirst(RegExp(r'^\d{10,}_'), '');
+
+    final parts = base.split('_').where((p) => p.isNotEmpty).toList();
+    while (parts.isNotEmpty) {
+      final last = parts.last;
+      final lower = last.toLowerCase();
+      if (lower == 'cloud' || _hex32.hasMatch(last)) {
+        parts.removeLast();
+        continue;
+      }
+      break;
+    }
+
+    final cleanedBase = parts.isEmpty ? base : parts.join('_');
+    return '$cleanedBase$ext';
+  }
+
+  static String buildTranslatedSubtitleFileName({
+    required String fileName,
+    required String targetLanguage,
+  }) {
+    final extMatch = RegExp(r'(\.[^.]+)$').firstMatch(fileName);
+    final ext = extMatch?.group(1) ?? '';
+    final base = ext.isEmpty
+        ? fileName
+        : fileName.substring(0, fileName.length - ext.length);
+
+    final noGenerated = stripGeneratedPrefixAndHash(base);
+    final stripped = stripLanguageSuffix(noGenerated);
+
+    final safeExt = ext.isNotEmpty ? ext : '.srt';
+    return '${stripped}_$targetLanguage$safeExt';
+  }
+
 }

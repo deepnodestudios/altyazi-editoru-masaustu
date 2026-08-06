@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/ai_language_options.dart';
 
 class SettingsManager extends ChangeNotifier {
   static const String _prefKeyBatchSize = 'batchSize';
   static const String _prefKeyIsFreeSlow = 'isFreeSlow';
   static const String _prefKeyKeepScreenOn = 'keepScreenOn';
-  static const String _prefKeySleepPreventionPrompted = 'sleepPreventionPrompted';
-  static const String _prefKeyBatteryOptimizationPrompted = 'batteryOptimizationPrompted';
+  static const String _prefKeySleepPreventionPrompted =
+      'sleepPreventionPrompted';
+  static const String _prefKeyBatteryOptimizationPrompted =
+      'batteryOptimizationPrompted';
   static const String _prefKeySdhClear = 'sdhClear';
   static const String _prefKeySdhClearNoTrans = 'sdhClearNoTrans';
   static const String _prefKeyTargetLanguage = 'targetLanguage';
@@ -95,9 +98,10 @@ class SettingsManager extends ChangeNotifier {
   }
 
   void setTargetLanguage(String language) {
-    if (_targetLanguage != language) {
-      _targetLanguage = language;
-      _saveTargetLanguage(language);
+    final normalizedLanguage = normalizeAiPanelLanguageCode(language);
+    if (_targetLanguage != normalizedLanguage) {
+      _targetLanguage = normalizedLanguage;
+      _saveTargetLanguage(normalizedLanguage);
       notifyListeners();
     }
   }
@@ -105,14 +109,17 @@ class SettingsManager extends ChangeNotifier {
   // Loading from preferences
   Future<void> loadSettingsFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     _batchSize = prefs.getInt(_prefKeyBatchSize) ?? 150;
     _isFreeSlow = prefs.getBool(_prefKeyIsFreeSlow) ?? false;
     _keepScreenOn = prefs.getBool(_prefKeyKeepScreenOn) ?? false;
-    _sleepPreventionPrompted = prefs.getBool(_prefKeySleepPreventionPrompted) ?? false;
-    _batteryOptimizationPrompted = prefs.getBool(_prefKeyBatteryOptimizationPrompted) ?? false;
+    _sleepPreventionPrompted =
+        prefs.getBool(_prefKeySleepPreventionPrompted) ?? false;
+    _batteryOptimizationPrompted =
+        prefs.getBool(_prefKeyBatteryOptimizationPrompted) ?? false;
     final loadedSdhClear = prefs.getBool(_prefKeySdhClear) ?? true;
-    final loadedSdhClearNoTrans = prefs.getBool(_prefKeySdhClearNoTrans) ?? false;
+    final loadedSdhClearNoTrans =
+        prefs.getBool(_prefKeySdhClearNoTrans) ?? false;
 
     if (!_sdhClearTouched) {
       _sdhClear = loadedSdhClear;
@@ -125,8 +132,10 @@ class SettingsManager extends ChangeNotifier {
     if (_sdhClearNoTrans) {
       _sdhClear = false;
     }
-    _targetLanguage = prefs.getString(_prefKeyTargetLanguage) ?? "TR";
-    
+    _targetLanguage = normalizeAiPanelLanguageCode(
+      prefs.getString(_prefKeyTargetLanguage) ?? "TR",
+    );
+
     notifyListeners();
   }
 

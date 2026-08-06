@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+const _geminiFlashLiteLatest = "gemini-3.1-flash-lite";
+
 class APIConfigManager extends ChangeNotifier {
   static const String _prefKeySelectedModel = 'selectedModel';
   static const String _prefKeySelectedEngine = 'selectedEngine';
@@ -8,8 +10,8 @@ class APIConfigManager extends ChangeNotifier {
 
   // NOTE: App works in single-mode (server-managed API key).
   // We intentionally do NOT store any API key on-device.
-  String _selectedModel = "gemini-flash-latest";
-  List<String> _availableModels = ["gemini-flash-latest"];
+  String _selectedModel = _geminiFlashLiteLatest;
+  List<String> _availableModels = [_geminiFlashLiteLatest];
   String _selectedEngine = "gemini";
 
   // Getters
@@ -49,19 +51,19 @@ class APIConfigManager extends ChangeNotifier {
     await prefs.remove('apiKey');
     await prefs.remove('isApiEntered');
 
-    _selectedModel = prefs.getString(_prefKeySelectedModel) ?? "gemini-flash-latest";
+    _selectedModel = prefs.getString(_prefKeySelectedModel) ?? _geminiFlashLiteLatest;
     _selectedEngine = prefs.getString(_prefKeySelectedEngine) ?? "gemini";
     
     final modelsJson = prefs.getStringList(_prefKeyAvailableModels);
-    _availableModels = modelsJson ?? ["gemini-flash-latest"];
+    _availableModels = modelsJson ?? [_geminiFlashLiteLatest];
     
     notifyListeners();
   }
 
   // Reset API configuration
   Future<void> clearAPIConfig() async {
-    _selectedModel = "gemini-flash-latest";
-    _availableModels = ["gemini-flash-latest"];
+    _selectedModel = _geminiFlashLiteLatest;
+    _availableModels = [_geminiFlashLiteLatest];
     _selectedEngine = "gemini";
 
     final prefs = await SharedPreferences.getInstance();
@@ -85,7 +87,7 @@ class APIConfigManager extends ChangeNotifier {
 
   Future<void> fetchModelsFromApi({required bool isFreeSlow, required Function(String, String?) addLog}) async {
     // Client no longer fetches models from Gemini API to avoid exposing API keys.
-    _availableModels = ["gemini-1.5-flash", "gemini-2.0-flash"];
+    _availableModels = [_geminiFlashLiteLatest];
     if (!_availableModels.contains(_selectedModel)) {
       _selectedModel = _availableModels.first;
     }

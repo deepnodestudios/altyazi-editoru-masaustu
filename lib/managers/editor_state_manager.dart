@@ -9,18 +9,22 @@ class _EditorDiff {
   final int start;
   final List<SubtitleBlock> before;
   final List<SubtitleBlock> after;
+  final int beforeRevision;
+  final int afterRevision;
 
   _EditorDiff({
     required this.start,
     required this.before,
     required this.after,
+    required this.beforeRevision,
+    required this.afterRevision,
   });
 }
 
 class EditorStateManager extends ChangeNotifier {
   final UIStateManager _uiStateManager;
   final EditorService _editorService = EditorService();
-  
+
   // Callback for logging to the main AppSettings log list
   Function(String key, [String? param])? onLog;
 
@@ -29,7 +33,7 @@ class EditorStateManager extends ChangeNotifier {
   // State Variables
   List<SubtitleBlock> _editorBlocks = [];
   String _editorEncoding = "";
-  
+
   // Search State
   String _searchQuery = "";
   final List<int> _searchResultsIndices = [];
@@ -44,6 +48,9 @@ class EditorStateManager extends ChangeNotifier {
   DateTime? _lastEditTime;
   int? _lastEditBlockIndex;
   int? _activeTypingUndoIndex;
+  int _currentRevision = 0;
+  int _nextRevision = 1;
+  int? _savedRevision = 0;
 
   // Loading State
   bool _isOpeningEditor = false;
@@ -54,14 +61,15 @@ class EditorStateManager extends ChangeNotifier {
   String get editorEncoding => _editorEncoding;
   bool get isOpeningEditor => _isOpeningEditor;
   double get editorOpenProgress => _editorOpenProgress;
-  
+
   String get searchQuery => _searchQuery;
   bool get isCaseSensitive => _isCaseSensitive;
   bool get isRegexSearch => _isRegexSearch;
-  
+
   int get currentSearchMatchIndex => _currentSearchIndex;
   int get totalSearchMatches => _searchResultsIndices.length;
-  int get currentMatchedBlockIndex => (_currentSearchIndex >= 0 &&
+  int get currentMatchedBlockIndex =>
+      (_currentSearchIndex >= 0 &&
           _currentSearchIndex < _searchResultsIndices.length)
       ? _searchResultsIndices[_currentSearchIndex]
       : -1;
@@ -70,11 +78,11 @@ class EditorStateManager extends ChangeNotifier {
   bool get canRedo => _redoStack.isNotEmpty;
 
   List<SubtitleBlock> get filteredEditorBlocks => _editorService.filterBlocks(
-        _editorBlocks,
-        _searchQuery,
-        _isCaseSensitive,
-        _isRegexSearch,
-      );
+    _editorBlocks,
+    _searchQuery,
+    _isRegexSearch,
+    _isCaseSensitive,
+  );
 
   // Methods
 
@@ -82,9 +90,9 @@ class EditorStateManager extends ChangeNotifier {
     _uiStateManager.setSelectedEditorFile(name);
     _editorEncoding = encoding;
     _editorBlocks = SubtitleParser.parseSrt(content);
-    _uiStateManager.setEditorDirty(false);
     _resetSearch();
     _clearHistory();
+    _resetRevisionTracking(savedRevision: 0);
     onLog?.call("log_editor_file_loaded");
     notifyListeners();
   }
@@ -93,9 +101,9 @@ class EditorStateManager extends ChangeNotifier {
     _uiStateManager.setSelectedEditorFile(null);
     _editorEncoding = "";
     _editorBlocks.clear();
-    _uiStateManager.setEditorDirty(false);
     _resetSearch();
     _clearHistory();
+    _resetRevisionTracking(savedRevision: 0);
     onLog?.call("log_editor_file_removed");
     notifyListeners();
   }
@@ -112,9 +120,9 @@ class EditorStateManager extends ChangeNotifier {
     _uiStateManager.setSelectedEditorFile(name);
     _editorEncoding = "Generated";
     _editorBlocks = [];
-    _uiStateManager.setEditorDirty(true);
     _resetSearch();
     _clearHistory();
+    _resetRevisionTracking(savedRevision: null);
     notifyListeners();
 
     final int total = blocks.length;
@@ -152,6 +160,15 @@ class EditorStateManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markSaved() {
+    _savedRevision = _currentRevision;
+    _activeTypingUndoIndex = null;
+    _lastEditBlockIndex = null;
+    _lastEditTime = null;
+    _syncDirtyFlag();
+    notifyListeners();
+  }
+
   void updateBlockText(SubtitleBlock block, String t) {
     if (block.text != t) {
       final int index = _editorBlocks.indexOf(block);
@@ -168,7 +185,13 @@ class EditorStateManager extends ChangeNotifier {
         block.text = t;
         final afterBlock = _cloneBlock(block);
         _pushUndoDiff(
-          _EditorDiff(start: index, before: [beforeBlock], after: [afterBlock]),
+          _EditorDiff(
+            start: index,
+            before: [beforeBlock],
+            after: [afterBlock],
+            beforeRevision: _currentRevision,
+            afterRevision: _nextRevision,
+          ),
         );
         _activeTypingUndoIndex = _undoStack.length - 1;
       } else {
@@ -182,7 +205,7 @@ class EditorStateManager extends ChangeNotifier {
 
       _lastEditBlockIndex = index;
       _lastEditTime = now;
-      _uiStateManager.setEditorDirty(true);
+      _syncDirtyFlag();
       notifyListeners();
     }
   }
@@ -192,7 +215,6 @@ class EditorStateManager extends ChangeNotifier {
       final before = _cloneBlocks(_editorBlocks);
       block.timecode = newTimecode;
       _recordUndoFromBefore(before);
-      _uiStateManager.setEditorDirty(true);
       notifyListeners();
     }
   }
@@ -208,14 +230,22 @@ class EditorStateManager extends ChangeNotifier {
       block.timecode = "$start --> $end";
     }
     _recordUndoFromBefore(before);
-    _uiStateManager.setEditorDirty(true);
     notifyListeners();
   }
 
   void shiftAllTimecodes(int offsetMs) {
     if (offsetMs == 0) return;
-    final before = _cloneBlocks(_editorBlocks);
+    final totalWatch = Stopwatch()..start();
+    debugPrint(
+      '[ShiftAll] start blocks=${_editorBlocks.length} offsetMs=$offsetMs',
+    );
 
+    final cloneWatch = Stopwatch()..start();
+    final before = _cloneBlocks(_editorBlocks);
+    cloneWatch.stop();
+    debugPrint('[ShiftAll] cloneBefore=${cloneWatch.elapsedMilliseconds}ms');
+
+    final mutateWatch = Stopwatch()..start();
     for (var block in _editorBlocks) {
       List<String> parts = block.timecode.split('-->');
       if (parts.length == 2) {
@@ -224,9 +254,21 @@ class EditorStateManager extends ChangeNotifier {
         block.timecode = "$start --> $end";
       }
     }
+    mutateWatch.stop();
+    debugPrint('[ShiftAll] mutate=${mutateWatch.elapsedMilliseconds}ms');
+
+    final undoWatch = Stopwatch()..start();
     _recordUndoFromBefore(before);
-    _uiStateManager.setEditorDirty(true);
+    undoWatch.stop();
+    debugPrint('[ShiftAll] undoRecord=${undoWatch.elapsedMilliseconds}ms');
+
+    final notifyWatch = Stopwatch()..start();
     notifyListeners();
+    notifyWatch.stop();
+
+    totalWatch.stop();
+    debugPrint('[ShiftAll] notify=${notifyWatch.elapsedMilliseconds}ms');
+    debugPrint('[ShiftAll] total=${totalWatch.elapsedMilliseconds}ms');
   }
 
   void deleteBlock(SubtitleBlock block) {
@@ -234,24 +276,25 @@ class EditorStateManager extends ChangeNotifier {
     _editorBlocks.remove(block);
     _renumberBlocks();
     _recordUndoFromBefore(before);
-    _uiStateManager.setEditorDirty(true);
     _findMatches();
     notifyListeners();
   }
 
   void cleanSdhInEditor() {
     final before = _cloneBlocks(_editorBlocks);
-    
+
     final cleaned = _editorService.cleanSdhFromBlocks(_editorBlocks);
-    bool changed = cleaned.length != _editorBlocks.length ||
-        !_editorBlocks.asMap().entries.every((entry) =>
-            entry.key < cleaned.length &&
-            entry.value.text == cleaned[entry.key].text);
+    bool changed =
+        cleaned.length != _editorBlocks.length ||
+        !_editorBlocks.asMap().entries.every(
+          (entry) =>
+              entry.key < cleaned.length &&
+              entry.value.text == cleaned[entry.key].text,
+        );
 
     if (changed) {
       _editorBlocks = cleaned;
       _recordUndoFromBefore(before);
-      _uiStateManager.setEditorDirty(true);
       _findMatches();
       onLog?.call("log_sdh_complete");
       notifyListeners();
@@ -304,8 +347,11 @@ class EditorStateManager extends ChangeNotifier {
       final block = _editorBlocks[i];
       if (_isRegexSearch) {
         try {
-          final regex = RegExp(_searchQuery,
-              caseSensitive: _isCaseSensitive, multiLine: true);
+          final regex = RegExp(
+            _searchQuery,
+            caseSensitive: _isCaseSensitive,
+            multiLine: true,
+          );
           if (regex.hasMatch(block.text)) {
             final before = _cloneBlocks(_editorBlocks);
             block.text = block.text.replaceFirst(regex, replacement);
@@ -317,16 +363,16 @@ class EditorStateManager extends ChangeNotifier {
           }
         } catch (_) {}
       } else {
-        if (_isCaseSensitive
-            ? block.text.contains(_searchQuery)
-            : block.text.toLowerCase().contains(_searchQuery.toLowerCase())) {
+        final result = EditorService.replaceFirstPlainTextMatch(
+          block.text,
+          _searchQuery,
+          replacement,
+          _isCaseSensitive,
+        );
+        if (result.count > 0) {
           final before = _cloneBlocks(_editorBlocks);
-          block.text = _isCaseSensitive
-              ? block.text.replaceFirst(_searchQuery, replacement)
-              : block.text.replaceFirst(
-                  RegExp(_searchQuery, caseSensitive: false), replacement);
+          block.text = result.text;
           _recordUndoFromBefore(before);
-          _uiStateManager.setEditorDirty(true);
           onLog?.call("log_replaced_single");
           notifyListeners();
           return 1;
@@ -344,12 +390,15 @@ class EditorStateManager extends ChangeNotifier {
     // ... (Implementation identical to AppSettings logic)
     // Simplified for brevity in diff, but assumes full logic transfer
     for (var block in _editorBlocks) {
-       // ... (Same logic as AppSettings.replaceAllInEditor)
-       // Re-implementing core logic here for correctness in new file
-       if (_isRegexSearch) {
+      // ... (Same logic as AppSettings.replaceAllInEditor)
+      // Re-implementing core logic here for correctness in new file
+      if (_isRegexSearch) {
         try {
-          final regex = RegExp(_searchQuery,
-              caseSensitive: _isCaseSensitive, multiLine: true);
+          final regex = RegExp(
+            _searchQuery,
+            caseSensitive: _isCaseSensitive,
+            multiLine: true,
+          );
           int count = regex.allMatches(block.text).length;
           if (count > 0) {
             block.text = block.text.replaceAll(regex, replacement);
@@ -358,33 +407,22 @@ class EditorStateManager extends ChangeNotifier {
           }
         } catch (_) {}
       } else {
-        String text = block.text;
-        String query = _searchQuery;
-        if (!_isCaseSensitive) {
-          text = text.toLowerCase();
-          query = query.toLowerCase();
-        }
-        if (text.contains(query)) {
-          int count = RegExp(RegExp.escape(_searchQuery),
-                  caseSensitive: _isCaseSensitive)
-              .allMatches(block.text)
-              .length;
-          if (count > 0) {
-            block.text = block.text.replaceAll(
-                _isCaseSensitive
-                    ? _searchQuery
-                    : RegExp(RegExp.escape(_searchQuery), caseSensitive: false),
-                replacement);
-            changed = true;
-            totalCount += count;
-          }
+        final result = EditorService.replaceAllPlainTextMatches(
+          block.text,
+          _searchQuery,
+          replacement,
+          _isCaseSensitive,
+        );
+        if (result.count > 0) {
+          block.text = result.text;
+          changed = true;
+          totalCount += result.count;
         }
       }
     }
 
     if (changed) {
       _recordUndoFromBefore(before);
-      _uiStateManager.setEditorDirty(true);
       onLog?.call("log_replaced_all");
       notifyListeners();
     }
@@ -400,7 +438,8 @@ class EditorStateManager extends ChangeNotifier {
     _applyInverseDiff(diff);
     _redoStack.add(diff);
     _activeTypingUndoIndex = null;
-    _uiStateManager.setEditorDirty(true);
+    _currentRevision = diff.beforeRevision;
+    _syncDirtyFlag();
     notifyListeners();
   }
 
@@ -411,7 +450,8 @@ class EditorStateManager extends ChangeNotifier {
     _applyForwardDiff(diff);
     _undoStack.add(diff);
     _activeTypingUndoIndex = null;
-    _uiStateManager.setEditorDirty(true);
+    _currentRevision = diff.afterRevision;
+    _syncDirtyFlag();
     notifyListeners();
   }
 
@@ -431,6 +471,19 @@ class EditorStateManager extends ChangeNotifier {
     _lastEditTime = null;
   }
 
+  void _resetRevisionTracking({required int? savedRevision}) {
+    _currentRevision = 0;
+    _nextRevision = 1;
+    _savedRevision = savedRevision;
+    _syncDirtyFlag();
+  }
+
+  void _syncDirtyFlag() {
+    _uiStateManager.setEditorDirty(
+      _savedRevision == null || _currentRevision != _savedRevision,
+    );
+  }
+
   void _renumberBlocks() {
     for (int i = 0; i < _editorBlocks.length; i++) {
       _editorBlocks[i].index = i + 1;
@@ -441,14 +494,14 @@ class EditorStateManager extends ChangeNotifier {
     _searchResultsIndices.clear();
     _currentSearchIndex = -1;
     if (_searchQuery.isEmpty) return;
-    
+
     final indices = _editorService.findSearchResultIndices(
-      _editorBlocks, 
-      _searchQuery, 
-      _isRegexSearch, 
-      _isCaseSensitive
+      _editorBlocks,
+      _searchQuery,
+      _isRegexSearch,
+      _isCaseSensitive,
     );
-    
+
     _searchResultsIndices.addAll(indices);
 
     if (_searchResultsIndices.isNotEmpty) {
@@ -458,13 +511,31 @@ class EditorStateManager extends ChangeNotifier {
 
   void _recordUndoFromBefore(List<SubtitleBlock> before) {
     _activeTypingUndoIndex = null;
-    final diff = _createDiff(before, _editorBlocks);
+    final diffWatch = Stopwatch()..start();
+    final diff = _createDiff(
+      before,
+      _editorBlocks,
+      beforeRevision: _currentRevision,
+      afterRevision: _nextRevision,
+    );
+    diffWatch.stop();
+    debugPrint(
+      '[ShiftAll] createDiff=${diffWatch.elapsedMilliseconds}ms before=${before.length} after=${_editorBlocks.length}',
+    );
     if (diff == null) return;
+
+    final pushWatch = Stopwatch()..start();
     _pushUndoDiff(diff);
+    pushWatch.stop();
+    debugPrint('[ShiftAll] pushUndo=${pushWatch.elapsedMilliseconds}ms');
   }
 
   void _pushUndoDiff(_EditorDiff diff) {
     _undoStack.add(diff);
+    _currentRevision = diff.afterRevision;
+    if (diff.afterRevision >= _nextRevision) {
+      _nextRevision = diff.afterRevision + 1;
+    }
     if (_undoStack.length > _maxUndoLevels) {
       _undoStack.removeAt(0);
       if (_activeTypingUndoIndex != null) {
@@ -475,11 +546,13 @@ class EditorStateManager extends ChangeNotifier {
       }
     }
     _redoStack.clear();
+    _syncDirtyFlag();
   }
 
   _EditorDiff? _createDiff(
     List<SubtitleBlock> before,
     List<SubtitleBlock> after,
+    {required int beforeRevision, required int afterRevision}
   ) {
     int start = 0;
     final minLen = before.length < after.length ? before.length : after.length;
@@ -508,7 +581,13 @@ class EditorStateManager extends ChangeNotifier {
       return null;
     }
 
-    return _EditorDiff(start: start, before: beforeSlice, after: afterSlice);
+    return _EditorDiff(
+      start: start,
+      before: beforeSlice,
+      after: afterSlice,
+      beforeRevision: beforeRevision,
+      afterRevision: afterRevision,
+    );
   }
 
   void _applyForwardDiff(_EditorDiff diff) {
@@ -527,11 +606,7 @@ class EditorStateManager extends ChangeNotifier {
     int safeEnd = safeStart + removeCount;
     if (safeEnd > _editorBlocks.length) safeEnd = _editorBlocks.length;
 
-    _editorBlocks.replaceRange(
-      safeStart,
-      safeEnd,
-      insert.map(_cloneBlock),
-    );
+    _editorBlocks.replaceRange(safeStart, safeEnd, insert.map(_cloneBlock));
   }
 
   List<SubtitleBlock> _cloneBlocks(List<SubtitleBlock> source) {

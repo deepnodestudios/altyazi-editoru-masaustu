@@ -40,16 +40,28 @@ class CloudOAuthConfig {
     /// Defaults to the desktop OAuth client ID so Windows login works out of the
     /// box without additional runtime flags.
     static const String _defaultGoogleOauthClientId =
-            '203321032277-cg605ra970nte94lop8sgilbnpf7hncq.apps.googleusercontent.com';
+      '203321032277-47m517a2dd5k6f4u5jdjbrhfp0vcm2ce.apps.googleusercontent.com';
   static const String _envGoogleOauthClientId =
-            String.fromEnvironment(
-                'GOOGLE_OAUTH_CLIENT_ID',
-                defaultValue: _defaultGoogleOauthClientId,
-            );
+      String.fromEnvironment(
+        'GOOGLE_OAUTH_CLIENT_ID',
+        defaultValue: _defaultGoogleOauthClientId,
+      );
   static String get googleOauthClientId =>
       _envGoogleOauthClientId.trim().isNotEmpty
           ? _envGoogleOauthClientId
           : _defaultGoogleOauthClientId;
+
+  static const String _defaultGoogleOauthClientSecret =
+      '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';
+  static const String _envGoogleOauthClientSecret =
+      String.fromEnvironment(
+        'GOOGLE_OAUTH_CLIENT_SECRET',
+        defaultValue: _defaultGoogleOauthClientSecret,
+      );
+  static String get googleOauthClientSecret =>
+      _envGoogleOauthClientSecret.trim().isNotEmpty
+          ? _envGoogleOauthClientSecret
+          : _defaultGoogleOauthClientSecret;
 
   /// Yandex OAuth app id (ClientID) for Yandex Disk.
   /// Create an app at https://oauth.yandex.com/client/new/

@@ -119,6 +119,25 @@ class ThemeManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── Ölçek animasyonu: Şeffaf Pencere + Animasyonlu Kutu Modu ───
+  double? _appWidth;
+  double? _appHeight;
+
+  double? get appWidth => _appWidth;
+  double? get appHeight => _appHeight;
+
+  void setAppSize(double width, double height) {
+    _appWidth = width;
+    _appHeight = height;
+    notifyListeners();
+  }
+
+  void clearAppSize() {
+    _appWidth = null;
+    _appHeight = null;
+    notifyListeners();
+  }
+
   Future<void> setUiScale(double scale) async {
     final clamped = scale.clamp(0.75, 1.25);
     if (_uiScale == clamped) return;

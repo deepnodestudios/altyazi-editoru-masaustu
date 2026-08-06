@@ -1,15 +1,74 @@
-import { defineSecret } from 'firebase-functions/params';
 import { onCall, HttpsError, CallableRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
-import { HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Type } from '@google/genai';
 import { assertCreditsAvailable, consumeCreditInternal, getAuthEmail, normalizePlatform, requireDeviceId } from '../billing/creditUtils';
-import { MODERN_GEMINI_MODEL } from './modelUtils';
+import { resolveGeminiModel, shouldUseVertexAi } from './modelUtils';
 
-// Initialize Gemini
-// Important: Ensure 'gemini.api_key' is set in Firebase functions config
-// Command: firebase functions:config:set gemini.api_key="YOUR_KEY"
-// Or use process.env if you use environment variables (e.g. .env file)
+const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
+
+// Gemini 2.5 Flash-Lite (GA) fiyatları: $ / 1M token.
+// Tek kaynak noktası: client bu fiyatı bilmez; costUsd'yi sunucu hesaplar.
+const MODEL_PRICING_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
+    'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+};
+
+function computeCostUsd(modelName: string, inputTokens: number, outputTokens: number): string {
+    const pricing = MODEL_PRICING_USD_PER_MILLION[modelName]
+        ?? { input: 0.10, output: 0.40 };
+    const cost = (inputTokens / 1_000_000) * pricing.input
+        + (outputTokens / 1_000_000) * pricing.output;
+    return cost.toFixed(6);
+}
+
+type TranslateRequestData = {
+    text: string;
+    systemPrompt?: string;
+    model?: string;
+    deviceId?: string;
+    chargeKey?: string;
+    approveCharge?: boolean;
+    fileName?: string;
+    targetLanguage?: string;
+    platform?: string;
+    appVersion?: string;
+    // JSON structured output: client lines'ı JSON array olarak gönderir,
+    // model çevrilmiş string array döndürür.
+    structuredOutput?: boolean;
+    // Numaralı satır formatı: girdi "NUMARA|metin" biçiminde olur; çıktı
+    // {"i": NUMARA, "t": "ceviri"} objelerinden oluşan dizi olarak zorlanır
+    // (responseSchema). Konum kaymasına karşı index bazlı eşleme sağlar.
+    // Yalnızca yeni istemciler gönderir.
+    numberedLines?: boolean;
+};
+
+type TranslationSessionLookup = {
+    exists: boolean;
+    ref: FirebaseFirestore.DocumentReference | null;
+    data: FirebaseFirestore.DocumentData;
+};
+
+const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Ek kural: Bir altyazi satiri asiri cinsel veya acik sacik oldugu icin dogrudan cevrildiginde sorun cikacaksa satiri asla atlama, bos birakma veya cevirmeyi reddetme; anlami koruyarak daha yumusak ve ortulu bir dille cevir ve SRT yapisini aynen koru.';
+
+function withExplicitContentFallback(systemPrompt?: string): string {
+    const base = (systemPrompt ?? '').trim();
+    if (!base) return EXPLICIT_CONTENT_FALLBACK_INSTRUCTION;
+    if (base.includes('asla atlama') || base.includes('cevirmeyi reddetme')) {
+        return base;
+    }
+    return `${base}\n${EXPLICIT_CONTENT_FALLBACK_INSTRUCTION}`;
+}
+
+function parseChargeKeyMetadata(chargeKey: string): { sourceHash: string; targetToken: string } | null {
+    const match = /^run_\d+_([a-f0-9]{32})_(.+)$/i.exec(chargeKey.trim());
+    if (!match) return null;
+
+    const sourceHash = (match[1] ?? '').trim().toLowerCase();
+    const targetToken = (match[2] ?? '').trim().toLowerCase();
+    if (!sourceHash || !targetToken) return null;
+
+    return { sourceHash, targetToken };
+}
 
 function getVertexModelCandidates(modelName: string): string[] {
     return [modelName.trim()];
@@ -24,38 +83,6 @@ function getApiModelCandidates(modelName: string): string[] {
     }
 
     return [...new Set(candidates)];
-}
-
-const geminiApiKey = defineSecret('GEMINI_API_KEY');
-
-type TranslateRequestData = {
-    text: string;
-    systemPrompt?: string;
-    model?: string;
-    deviceId?: string;
-    chargeKey?: string;
-    approveCharge?: boolean;
-    fileName?: string;
-    targetLanguage?: string;
-    platform?: string;
-    appVersion?: string;
-};
-
-type TranslationSessionLookup = {
-    exists: boolean;
-    ref: FirebaseFirestore.DocumentReference | null;
-    data: FirebaseFirestore.DocumentData;
-};
-
-function parseChargeKeyMetadata(chargeKey: string): { sourceHash: string; targetToken: string } | null {
-    const match = /^run_\d+_([a-f0-9]{32})_(.+)$/i.exec(chargeKey.trim());
-    if (!match) return null;
-
-    const sourceHash = (match[1] ?? '').trim().toLowerCase();
-    const targetToken = (match[2] ?? '').trim().toLowerCase();
-    if (!sourceHash || !targetToken) return null;
-
-    return { sourceHash, targetToken };
 }
 
 async function loadTranslationSessionByChargeKey({
@@ -170,8 +197,14 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         targetLanguage,
         platform,
         appVersion,
+        structuredOutput,
+        numberedLines,
     } = request.data;
     const resolvedAppVersion = (appVersion ?? '').trim() || '1.6.0';
+    const useStructuredOutput = structuredOutput === true;
+    // Numaralı satır formatı yalnızca bunu bilen yeni istemciler için etkindir.
+    // Eski canlı istemciler bu bayrağı göndermez → prompt aynen eski davranır.
+    const useNumberedLines = numberedLines === true;
 
     const trimmedChargeKey = (chargeKey ?? '').trim();
     if (trimmedChargeKey.includes('/')) {
@@ -215,11 +248,17 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         // Platform bilgisi eksik gelirse oturumdaki bilgiyi kullan
         const finalPlatform = platform || sessionData.platform;
 
+        const normalizedFinalPlatform = normalizePlatform(finalPlatform);
+        if (sessionData.requiresRewardedAd === true && sessionData.rewardedAdConfirmed !== true) {
+            throw new HttpsError('failed-precondition', 'REWARDED_AD_REQUIRED');
+        }
+
         await assertCreditsAvailable({
             db,
             uid: request.auth.uid,
             deviceId: normalizedDeviceId,
-            platform: normalizePlatform(finalPlatform),
+            platform: normalizedFinalPlatform,
+            appVersion: resolvedAppVersion,
         });
     } else {
         let hasChargedSession = false;
@@ -266,31 +305,18 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         }
 
         if (!hasChargedSession) {
-            const deviceDoc = await db.collection('device_bonuses').doc(normalizedDeviceId).get();
-            const accessData = deviceDoc.data();
-
-            if (!deviceDoc.exists || !accessData?.accessExpiresAt) {
-                 console.warn(`Blocked request for device ${normalizedDeviceId}: No active access record.`);
-                 throw new HttpsError('permission-denied', 'No active access found. Please purchase/consume credits.');
-            }
-
-            const expiryTime = (accessData.accessExpiresAt as admin.firestore.Timestamp).toMillis();
-            if (Date.now() > expiryTime) {
-                 console.warn(`Blocked expired request for device ${normalizedDeviceId}`);
-                 throw new HttpsError('permission-denied', 'Access expired. Please consume a credit to continue.');
-            }
+            await assertCreditsAvailable({
+                db,
+                uid: request.auth.uid,
+                deviceId: normalizedDeviceId,
+                platform: normalizedPlatform,
+                appVersion: resolvedAppVersion,
+            });
         }
     }
 
-    // 3. Get API Key (Secrets Manager)
-    const apiKey = geminiApiKey.value();
-
-    if (!apiKey) {
-        throw new HttpsError('internal', 'Server-side API Key not configured. Please set GEMINI_API_KEY in Secrets Manager.');
-    }
-
-    const modelName = MODERN_GEMINI_MODEL; // Desktop always uses Vertex AI
-    const useVertex = true;
+    const modelName = resolveGeminiModel(resolvedAppVersion);
+    const useVertex = shouldUseVertexAi(resolvedAppVersion);
     const ai = useVertex
         ? new GoogleGenAI({
             vertexai: true,
@@ -298,12 +324,21 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             location: 'global',
         })
         : new GoogleGenAI({
-            apiKey: apiKey,
+            apiKey: geminiApiKey.value(),
             httpOptions: { apiVersion: 'v1beta' },
         });
     const modelCandidates = useVertex ? getVertexModelCandidates(modelName) : getApiModelCandidates(modelName);
 
-    console.log('translateText provider/model', { provider: 'vertex', modelName });
+    console.log('translateText provider/model', { provider: useVertex ? 'vertex' : 'gemini_api', modelName, appVersion: resolvedAppVersion, structuredOutput: useStructuredOutput, numberedLines: useNumberedLines });
+    let effectiveSystemPrompt = withExplicitContentFallback(systemPrompt);
+    if (useStructuredOutput) {
+        // Altyapı katmanı kuralı: çıktı her zaman JSON string array olmalı.
+        // (System prompt yalnızca ek bilgidir; asıl garanti responseSchema'da.)
+        const baseRules = `\n\nCikti kurallari (ZORUNLU):\n- Cevabin tek bir JSON dizisi olsun: ["cevrilmis satir 1", "cevrilmis satir 2", ...].\n- Dizi elemanlari, girdi dizisiyle BIREBIR ayni sirada ve ayni sayida olsun.\n- Zaman kodlari, blok numaralari veya SRT sekli EKLEME; yalnizca cevrilmis metinler.`;
+        const numberedRules = `\n- GIRDI "NUMARA|metin" biciminde numaralandirilmistir ve NUMARALAR SIRALI DEGILDIR (orn. 17, 3, 290, 81...). Cikti dizisindeki her eleman {"i": NUMARA, "t": "ceviri"} biciminde bir JSON objesi OLMALIDIR. "i" alani, girdideki KENDI satirinin numarasinin birebir KOPYASIDIR; sira numaralama yapma, kendi numaranizi uretmeyin, atlamayin, degistirmeyin ve tekrarlamayin. IKI GIRDI SATIRINI ASLA TEK CIKTI OBJESINDE BIRLESTIRME; her girdi satiri icin tam olarak bir obje uretilir.
+- BIR GIRDI SATIRI YARIM/BOLUNMUS CUMLE OLSA BILE ONU TAMAMLAMA, EKSIGINI TAHMIN ETME VE ONCEKI/SONRAKI SATIRIN ANLAMINI KENDI CEVIRINE EKLEME; her satiri bagimsiz olarak, sadece kendi sozcukleriyle cevir. IKI AYRI CIKTI OBJESINE AYNI/COK BENZER CUMLE YAZMA.`;
+        effectiveSystemPrompt = `${effectiveSystemPrompt}${baseRules}${useNumberedLines ? numberedRules : ''}`;
+    }
 
     try {
         let result: any = null;
@@ -321,6 +356,27 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                         temperature: 0.7,
                         topK: 40,
                         topP: 0.95,
+                    ...(useStructuredOutput
+                        ? {
+                              responseMimeType: 'application/json',
+                              responseSchema: useNumberedLines
+                                  ? {
+                                        type: Type.ARRAY,
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                i: { type: Type.INTEGER },
+                                                t: { type: Type.STRING },
+                                            },
+                                            required: ['i', 't'],
+                                        },
+                                    }
+                                  : {
+                                        type: Type.ARRAY,
+                                        items: { type: Type.STRING },
+                                    },
+                          }
+                        : {}),
                         safetySettings: [
                             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -328,7 +384,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                             { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
                             { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_NONE },
                         ],
-                        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+                        systemInstruction: { parts: [{ text: effectiveSystemPrompt }] },
                     },
                 });
                 modelUsed = candidate;
@@ -346,10 +402,14 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         }
 
         if (!result) {
-            throw lastError ?? new Error('No available model candidate');
+            throw lastError ?? new Error('No available Vertex model candidate');
         }
         const outputText = result.text ?? '';
         console.log('translateText model used', { modelUsed, providerUsed });
+        console.log('translateText output preview', {
+            numberedLines: useNumberedLines,
+            preview: outputText.slice(0, 300),
+        });
 
         if (approveCharge == true && trimmedChargeKey.length > 0) {
             // if we are here and platform is missing, use the one from session
@@ -368,6 +428,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                 targetLanguage: finalTargetLanguage,
                 platform: platform || platformFromSession || normalizedPlatform,
                 appVersion: resolvedAppVersion,
+                preferFreeCreditsFirst: sessionData.data()?.preferFreeCreditsFirst === true,
                 allowAutoApproveSession: true,
             });
         }
@@ -376,6 +437,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             text: outputText,
             inputTokens: result.usageMetadata?.promptTokenCount || 0,
             outputTokens: result.usageMetadata?.candidatesTokenCount || 0,
+            costUsd: computeCostUsd(modelUsed, result.usageMetadata?.promptTokenCount || 0, result.usageMetadata?.candidatesTokenCount || 0),
             modelUsed,
             providerUsed,
         };
@@ -395,6 +457,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                 text: text, // Süreci kırmamak için orijinal kaynak metni olduğu gibi geri veriyoruz
                 inputTokens: 0,
                 outputTokens: 0,
+                costUsd: '0.000000',
                 modelUsed: modelName
             };
         }

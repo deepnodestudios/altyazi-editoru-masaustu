@@ -9,7 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 import 'utils/single_instance_win.dart' as single_instance;
 import 'app_settings.dart';
@@ -22,12 +22,13 @@ import 'settings.dart';
 import 'widgets/adaptive_text.dart';
 import 'widgets/shared_system_log.dart';
 import 'translations.dart';
+import 'services/update_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
-import 'cloud_oauth_config.dart';
 
 const String _kPrefAppInForeground = 'app_in_foreground';
 const String _kPrefCrashForcePrompt = 'crash_report_force_prompt';
@@ -91,24 +92,17 @@ Future<bool> _tryRestoreGoogleFirebaseSession(FirebaseAuth auth) async {
   if (auth.currentUser != null) return true;
 
   try {
-    // On desktop, google_sign_in_dartio requires registration per-process.
-    // If we don't register before signInSilently(), the cached session won't
-    // be discovered and we'll incorrectly fall back to anonymous.
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      try {
-        await GoogleSignInDart.register(clientId: CloudOAuthConfig.googleOauthClientId);
-      } catch (e) {
-        debugPrint('GoogleSignInDart register failed (startup restore): $e');
-      }
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // Desktop: Özel localhost web sunucusu ile PKCE akışı kullandığımız için
+      // eklenti tabanlı signInSilently her zaman `null` döndürür veya çalışmaz.
+      // Bu adımda bir şey yapmıyoruz, `app_settings` yüklenince `restoreGoogleSession`
+      // üzerinden token/refresh_token kontrolüyle otomatik oturum açılıyor.
+      return false;
     }
 
-    // Use the same scopes as the Drive integration so the cached account (if
-    // any) matches what the user previously authorized.
+    // Mobil için mevcut eklenti akışına devam:
     final googleSignIn = GoogleSignIn(
-      scopes: const [
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/drive.appdata',
-      ],
+      scopes: const ['openid', 'email', 'profile'],
     );
 
     final account = await googleSignIn.signInSilently();
@@ -130,6 +124,85 @@ Future<bool> _tryRestoreGoogleFirebaseSession(FirebaseAuth auth) async {
   } catch (e) {
     debugPrint('Google silent restore failed: $e');
     return false;
+  }
+}
+
+/// Remote Config ve Firebase Auth oturum geri yükleme işlemlerini
+/// arka planda çalıştırır. main()'de runApp()'ı bloklamadan başlatılır.
+Future<void> _deferredStartupWork(FirebaseAuth auth) async {
+  // Remote Config (yalnızca mobil platformlarda)
+  if (Platform.isAndroid || Platform.isIOS || kIsWeb) {
+    try {
+      final remoteConfig = FirebaseRemoteConfig.instance;
+      await remoteConfig.setConfigSettings(RemoteConfigSettings(
+        fetchTimeout: const Duration(minutes: 1),
+        minimumFetchInterval: const Duration(hours: 1),
+      ));
+      await remoteConfig.fetchAndActivate();
+    } catch (e) {
+      debugPrint("Remote Config failed: $e");
+    }
+  }
+
+  // Firebase Auth oturum geri yükleme
+  try {
+    User? restoredUser = auth.currentUser;
+    if (restoredUser == null) {
+      try {
+        restoredUser = await auth
+            .authStateChanges()
+            .where((u) => u != null)
+            .first
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Ignore timeouts/stream errors; we'll fall back to anonymous.
+      }
+    }
+
+    if (restoredUser == null) {
+      final restoredGoogle = await _tryRestoreGoogleFirebaseSession(auth);
+      restoredUser = auth.currentUser;
+
+      if (restoredUser == null && !restoredGoogle) {
+        await auth.signInAnonymously();
+        restoredUser = auth.currentUser;
+      }
+    }
+
+    if (restoredUser != null) {
+      try {
+        await auth.currentUser?.reload();
+      } on FirebaseAuthException catch (e) {
+        const invalidCodes = <String>{
+          'user-disabled',
+          'user-not-found',
+          'invalid-user-token',
+          'user-token-expired',
+          'invalid-credential',
+        };
+
+        if (invalidCodes.contains(e.code)) {
+          debugPrint("⚠️ Oturum geçersiz (${e.code}), temizleniyor: $e");
+          await auth.signOut();
+          await auth.signInAnonymously();
+        } else {
+          debugPrint('⚠️ Oturum yenileme başarısız (${e.code}); oturum korunuyor: $e');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Oturum yenileme beklenmeyen hata; oturum korunuyor: $e');
+      }
+
+      try {
+        final currentUid = auth.currentUser?.uid ?? restoredUser.uid;
+        await FirebaseFirestore.instance.collection('users').doc(currentUid).set({
+          'lastAppOpen': FieldValue.serverTimestamp(),
+          'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
+          'lastPlatform': Platform.operatingSystem,
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
+  } catch (e) {
+    debugPrint("Firebase Auth failed: $e");
   }
 }
 
@@ -183,7 +256,9 @@ class _ForegroundFlagObserver extends WidgetsBindingObserver {
 }
 
 void main() async {
+  final mainStopwatch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('⏱️ [${mainStopwatch.elapsedMilliseconds}ms] WidgetsFlutterBinding.ensureInitialized');
 
   // Windows: tek örnek kontrolü.
   // Not: Debug/profile modlarında hot-restart ve geliştirme akışını bozabildiği
@@ -194,14 +269,23 @@ void main() async {
     }
   }
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // ── Bağımsız başlatma işlemlerini paralel çalıştır ──
+  // Firebase, SharedPreferences ve WindowManager birbirinden
+  // bağımsız olduğu için hepsini aynı anda başlatarak toplam bekleme süresini
+  // en yavaş olan tek işlem kadar düşürüyoruz.
+  final bool isDesktop =
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
-  // App Check: blocks emulator/automation from calling sensitive Cloud Functions.
-  // - Android: Play Integrity
-  // - iOS: DeviceCheck
-  // Debug builds use debug providers (register the debug token in Firebase Console).
+  late final SharedPreferences prefs;
+  await Future.wait<void>([
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+    SharedPreferences.getInstance().then((p) => prefs = p),
+    if (isDesktop) windowManager.ensureInitialized(),
+  ]);
+  debugPrint(
+      '⏱️ [${mainStopwatch.elapsedMilliseconds}ms] Parallel init (Firebase+Prefs+Window)');
+
+  // App Check (yalnızca mobil — masaüstünde atlanır)
   try {
     if (Platform.isAndroid || Platform.isIOS) {
       await FirebaseAppCheck.instance.activate(
@@ -217,20 +301,7 @@ void main() async {
     debugPrint('Firebase App Check failed: $e');
   }
 
-  final firebaseApp = Firebase.app();
-  final auth = FirebaseAuth.instanceFor(app: firebaseApp);
-
-  if (!kIsWeb &&
-      (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-    final desktopClientId = CloudOAuthConfig.googleOauthClientId.trim();
-    if (desktopClientId.isNotEmpty) {
-      try {
-        await GoogleSignInDart.register(clientId: desktopClientId);
-      } catch (e) {
-        debugPrint('GoogleSignInDart register failed: $e');
-      }
-    }
-  }
+  final auth = FirebaseAuth.instanceFor(app: Firebase.app());
 
   // Firebase Auth session'ını kontrol et (app restart sonrasında restore ediliyor mu?)
   final currentUser = auth.currentUser;
@@ -241,98 +312,11 @@ void main() async {
     debugPrint('⚠️ Firebase Auth session not found - anonymous or new user');
   }
 
-  // Emülatör Bağlantısı (Global Ayar)
-  // NOT: Gerçek verileri görmek için bu bloğu yorum satırına aldık.
-  // if (kDebugMode) {
-  //   try {
-  //     // Android Emulator için '10.0.2.2', iOS Simülatör ve diğerleri için 'localhost'
-  //     final String host = Platform.isAndroid ? '10.0.2.2' : 'localhost';
-  //
-  //     FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
-  //     FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
-  //
-  //     debugPrint('🚀 Firebase Emulator bağlandı: $host (Functions: 5001, Firestore: 8080)');
-  //   } catch (e) {
-  //     debugPrint('⚠️ Emulator bağlantı uyarısı: $e');
-  //   }
-  // }
-
-  if (Platform.isAndroid || Platform.isIOS || kIsWeb) {
-    try {
-      final remoteConfig = FirebaseRemoteConfig.instance;
-      await remoteConfig.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(minutes: 1),
-        minimumFetchInterval: const Duration(hours: 1),
-      ));
-      await remoteConfig.fetchAndActivate();
-    } catch (e) {
-      debugPrint("Remote Config failed: $e");
-    }
-  }
-
-  try {
-    // Give Firebase Auth a brief chance to restore persisted sessions on desktop
-    // before we force an anonymous user.
-    User? restoredUser = auth.currentUser;
-    if (restoredUser == null) {
-      try {
-        restoredUser = await auth
-            .authStateChanges()
-            .where((u) => u != null)
-            .first
-            .timeout(const Duration(seconds: 5));
-      } catch (_) {
-        // Ignore timeouts/stream errors; we'll fall back to anonymous.
-      }
-    }
-
-    if (restoredUser == null) {
-      // If we don't have a Firebase user yet, try restoring a cached Google
-      // session (best-effort). Only then fall back to anonymous.
-      final restoredGoogle = await _tryRestoreGoogleFirebaseSession(auth);
-      restoredUser = auth.currentUser;
-
-      if (restoredUser == null && !restoredGoogle) {
-        // Oturum yoksa anonim giriş yap
-        await auth.signInAnonymously();
-        restoredUser = auth.currentUser;
-      }
-    }
-
-    if (restoredUser != null) {
-      // Oturum varsa, token'ı tazelemeyi dene (Opsiyonel güvenlik önlemi)
-      try {
-        await auth.currentUser?.reload();
-      } on FirebaseAuthException catch (e) {
-        // Don't sign the user out on transient network errors.
-        // Only reset the session for clearly-invalid/disabled users.
-        const invalidCodes = <String>{
-          'user-disabled',
-          'user-not-found',
-          'invalid-user-token',
-          'user-token-expired',
-          'invalid-credential',
-        };
-
-        if (invalidCodes.contains(e.code)) {
-          debugPrint("⚠️ Oturum geçersiz (${
-              e.code
-            }), temizleniyor: $e");
-          await auth.signOut();
-          await auth.signInAnonymously();
-        } else {
-          debugPrint('⚠️ Oturum yenileme başarısız (${e.code}); oturum korunuyor: $e');
-        }
-      } catch (e) {
-        // Unknown reload error: keep existing session to avoid logging the user out.
-        debugPrint('⚠️ Oturum yenileme beklenmeyen hata; oturum korunuyor: $e');
-      }
-    }
-  } catch (e) {
-    debugPrint("Firebase Auth failed: $e");
-  }
-
-  final prefs = await SharedPreferences.getInstance();
+  // Remote Config ve Firebase Auth oturum geri yükleme işlemlerini
+  // runApp()'ı bloklamadan arka planda başlat.
+  // AppSettings zaten authStateChanges dinliyor; auth hazır olduğunda
+  // otomatik olarak senkronize olacaktır.
+  unawaited(_deferredStartupWork(auth));
 
   // Persist crash/Flutter framework errors to a file so we can inspect the full
   // overflow/assert output even if the device disconnects.
@@ -358,16 +342,17 @@ void main() async {
   final wasForeground = prefs.getBool(_kPrefAppInForeground) ?? false;
   if (wasForeground) {
     // Force prompt even if crash_log.txt size matches a previously prompted log.
-    await prefs.setBool(_kPrefCrashForcePrompt, true);
-    await prefs.remove('crash_report_prompted_size');
-    await appendFlutterError(
+    // SharedPreferences önbelleği anında güncellenir; disk yazımı arka planda.
+    unawaited(prefs.setBool(_kPrefCrashForcePrompt, true));
+    unawaited(prefs.remove('crash_report_prompted_size'));
+    unawaited(appendFlutterError(
       'Previous run ended unexpectedly',
       'Detected app_in_foreground=true at startup (likely native crash/kill).',
-    );
+    ));
   }
 
   // Reset startup state and install lifecycle observer.
-  await prefs.setBool(_kPrefAppInForeground, false);
+  unawaited(prefs.setBool(_kPrefAppInForeground, false));
   WidgetsBinding.instance.addObserver(_ForegroundFlagObserver(prefs));
 
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -399,13 +384,12 @@ void main() async {
   final bool isAlwaysOnTop = prefs.getBool(_kPrefWindowAlwaysOnTop) ?? false;
   final String startupAppTitle = _resolveStartupAppTitle(prefs);
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    await windowManager.ensureInitialized();
-
+  debugPrint('⏱️ [${mainStopwatch.elapsedMilliseconds}ms] Pre-windowManager setup');
+  if (isDesktop) {
+    // windowManager.ensureInitialized() paralel fazda tamamlandı.
     WindowOptions windowOptions = WindowOptions(
       size: Size(width, height),
       center: x == null,
-      backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
     );
@@ -444,6 +428,7 @@ void main() async {
     });
   }
 
+  debugPrint('⏱️ [${mainStopwatch.elapsedMilliseconds}ms] Pre-runApp');
   runApp(
     MultiProvider(
       providers: [
@@ -770,10 +755,17 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     final update = await settings.checkDesktopUpdateFromGoogleDrive(
       minimumCheckInterval: Duration.zero,
     );
-    if (update == null || !mounted || _isShuttingDown) return;
+    if (update == null || !mounted || _isShuttingDown) {
+      // Fallback to our direct website check
+      _desktopUpdatePromptShown = true;
+      if (_navigatorKey.currentContext != null) {
+        await UpdateService.checkForUpdates(_navigatorKey.currentContext!);
+      }
+      return;
+    }
 
     _desktopUpdatePromptShown = true;
-    if (!context.mounted) return;
+    if (!context.mounted || _navigatorKey.currentContext == null) return;
 
     final trans = settings.trans;
     final openLabel = trans['update_action'] ?? 'Update';
@@ -783,7 +775,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       trans['update_current_version'] ?? 'Current version';
 
     final openNow = await showDialog<bool>(
-      context: context,
+      context: _navigatorKey.currentContext!,
       builder: (ctx) => AlertDialog(
         title: Text(trans['update_title'] ?? 'Yeni sürüm bulundu'),
         content: Text(
@@ -940,8 +932,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     final bool isTranslating =
         controller.status == TranslationStatus.running ||
         controller.status == TranslationStatus.paused;
-    final bool hasUnsavedEditor =
-        settings.isEditorDirty || settings.canUndo;
+    final bool hasUnsavedEditor = settings.isEditorDirty;
 
     // Hiçbir engel yoksa doğrudan kapat
     if (!isTranslating && !hasUnsavedEditor) {
@@ -956,7 +947,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       return;
     }
 
-    if (!context.mounted) {
+    if (!context.mounted || _navigatorKey.currentContext == null) {
       _isShuttingDown = true;
       _isQuitRequested = true;
       
@@ -969,25 +960,27 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     }
 
     // Uyarı mesajını belirle
+    final translationWarning = trans['window_close_translation_warning'] ??
+        'Ceviri devam ediyor. Uygulamadan cikabilirsiniz; tamamlandiginda bildirim alacaksiniz.';
+    final unsavedWarning = trans['window_close_unsaved_warning'] ??
+        'Editorde kaydedilmemis degisiklikler var. Uygulamayi kapatmak istediginize emin misiniz?';
+
     String message;
     if (isTranslating && hasUnsavedEditor) {
-      message = trans['window_close_both_warning'] ??
-          'Çeviri devam ediyor ve editörde kaydedilmemiş değişiklikler var. Çıkmak istediğinize emin misiniz?';
+      message = '$translationWarning\n\n$unsavedWarning';
     } else if (isTranslating) {
-      message = trans['window_close_translation_warning'] ??
-          'Çeviri devam ediyor. Çıkmak istediğinize emin misiniz?';
+      message = translationWarning;
     } else {
-      message = trans['window_close_unsaved_warning'] ??
-          'Editörde kaydedilmemiş değişiklikler var. Çıkmak istediğinize emin misiniz?';
+      message = unsavedWarning;
     }
 
     final shouldClose = await showDialog<bool>(
-      context: context,
+      context: _navigatorKey.currentContext!,
       barrierDismissible: false,
       builder: (ctx) {
         final colorScheme = Theme.of(ctx).colorScheme;
         return AlertDialog(
-          title: Text(trans['window_close_title'] ?? 'Uygulamadan Çık'),
+          title: Text(trans['window_close_title'] ?? 'Uygulamayi Kapat'),
           content: Text(message),
           actions: [
             TextButton(
@@ -1000,7 +993,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
                 foregroundColor: colorScheme.onErrorContainer,
                 backgroundColor: colorScheme.errorContainer,
               ),
-              child: Text(trans['window_close_confirm'] ?? 'Çık'),
+              child: Text(trans['window_close_confirm'] ?? 'Kapat'),
             ),
           ],
         );
@@ -1008,6 +1001,14 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     );
 
     if (shouldClose == true) {
+      if (isTranslating) {
+        // Canlı çeviri varsa önce durdur (bu işlem partial sonucu geçmişe ekler)
+        await controller.stopTranslation(
+          clearSdh: settings.sdhClear,
+          targetLanguage: settings.targetLanguage,
+        );
+      }
+
       _isShuttingDown = true;
       _isQuitRequested = true;
       
@@ -1191,6 +1192,30 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
         unawaited(_restoreFromTray());
         return;
       case 'exit':
+        if (mounted && _navigatorKey.currentContext != null) {
+          final settings = _navigatorKey.currentContext!.read<AppSettings>();
+          final controller = _navigatorKey.currentContext!.read<TranslationController>();
+          
+          final bool isTranslating = controller.status == TranslationStatus.running ||
+              controller.status == TranslationStatus.paused;
+
+          if (isTranslating) {
+            // Canlı çeviri varsa geçmişe kaydedilmesini sağlamak için önce durduruyoruz
+            unawaited(controller.stopTranslation(
+              clearSdh: settings.sdhClear,
+              targetLanguage: settings.targetLanguage,
+            ).then((_) {
+              _isShuttingDown = true;
+              _isQuitRequested = true;
+              SharedPreferences.getInstance().then((prefs) {
+                prefs.setBool(_kPrefAppInForeground, false);
+              });
+              unawaited(windowManager.destroy());
+            }));
+            return;
+          }
+        }
+
         _isShuttingDown = true;
         _isQuitRequested = true;
         
@@ -1259,48 +1284,81 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       theme: AppTheme.light(),
       darkTheme: theme.oledMode ? AppTheme.oled() : AppTheme.dark(),
       builder: (context, child) {
-        final scale = theme.uiScale;
-        if (child == null || scale == 1.0) {
-          return child ?? const SizedBox.shrink();
-        }
+        if (child == null) return const SizedBox.shrink();
 
         final media = MediaQuery.of(context);
+        if (media.size.width == 0 || media.size.height == 0) {
+          return const SizedBox.shrink();
+        }
 
-        EdgeInsets scaleInsets(EdgeInsets value) {
-          return EdgeInsets.fromLTRB(
-            value.left / scale,
-            value.top / scale,
-            value.right / scale,
-            value.bottom / scale,
+        final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+        final double scale = theme.uiScale;
+
+        Widget content = child;
+
+        if (isDesktop) {
+          // Native title bar kullanıyor, sadece FittedBox ile ölçekleme yap.
+          if ((scale - 1.0).abs() >= 0.001) {
+            final physicalWidth = media.size.width;
+            final physicalHeight = media.size.height;
+            final logicalWidth = physicalWidth / scale;
+            final logicalHeight = physicalHeight / scale;
+            return FittedBox(
+              fit: BoxFit.fill,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: logicalWidth,
+                height: logicalHeight,
+                child: MediaQuery(
+                  data: media.copyWith(size: Size(logicalWidth, logicalHeight)),
+                  child: child,
+                ),
+              ),
+            );
+          }
+          return child;
+        }
+
+        // Mobil/Web için eski mantık
+        if ((scale - 1.0).abs() >= 0.001) {
+          EdgeInsets scaleInsets(EdgeInsets value) {
+            return EdgeInsets.fromLTRB(
+              value.left / scale,
+              value.top / scale,
+              value.right / scale,
+              value.bottom / scale,
+            );
+          }
+
+          final dpr = media.devicePixelRatio;
+          final scaledWidth =
+              ((media.size.width * dpr / scale).floorToDouble()) / dpr;
+          final scaledHeight =
+              ((media.size.height * dpr / scale).floorToDouble()) / dpr;
+
+          final scaledMedia = media.copyWith(
+            size: Size(scaledWidth, scaledHeight),
+            padding: scaleInsets(media.padding),
+            viewPadding: scaleInsets(media.viewPadding),
+            viewInsets: scaleInsets(media.viewInsets),
+            systemGestureInsets: scaleInsets(media.systemGestureInsets),
+          );
+
+          content = FittedBox(
+            fit: BoxFit.fill,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: scaledWidth,
+              height: scaledHeight,
+              child: MediaQuery(
+                data: scaledMedia,
+                child: child,
+              ),
+            ),
           );
         }
 
-        final dpr = media.devicePixelRatio;
-        final scaledWidth =
-            ((media.size.width * dpr / scale).floorToDouble()) / dpr;
-        final scaledHeight =
-            ((media.size.height * dpr / scale).floorToDouble()) / dpr;
-
-        final scaledMedia = media.copyWith(
-          size: Size(scaledWidth, scaledHeight),
-          padding: scaleInsets(media.padding),
-          viewPadding: scaleInsets(media.viewPadding),
-          viewInsets: scaleInsets(media.viewInsets),
-          systemGestureInsets: scaleInsets(media.systemGestureInsets),
-        );
-
-        return FittedBox(
-          fit: BoxFit.fill,
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: scaledWidth,
-            height: scaledHeight,
-            child: MediaQuery(
-              data: scaledMedia,
-              child: child,
-            ),
-          ),
-        );
+        return content;
       },
       home: const MainScreen(),
     );
@@ -1314,12 +1372,8 @@ class _StartupSplash extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Colors.black,
-      body: SizedBox.expand(
-        child: Image(
-          image: AssetImage('assets/icon/splash_bg.png'),
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.high,
-        ),
+      body: Center(
+        child: CircularProgressIndicator(),
       ),
     );
   }
@@ -1333,9 +1387,22 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _tabChannel = MethodChannel('com.deepnode.altyaziceviri/tab');
   TabController? _tabController;
+
+  // Pencere boyutu animasyonu için controller
+  late final AnimationController _sizeAnimController;
+  Animation<Size>? _sizeAnimation;
+
+  void _animateWindowSize(Size from, Size to, {VoidCallback? onComplete}) {
+    _sizeAnimation = Tween<Size>(begin: from, end: to).animate(
+      CurvedAnimation(parent: _sizeAnimController, curve: Curves.easeOut),
+    );
+    _sizeAnimController.forward(from: 0.0).whenComplete(() {
+      onComplete?.call();
+    });
+  }
 
   Widget _buildUiScaleMenu(ThemeManager theme, ColorScheme colorScheme) {
     final current = theme.uiScale;
@@ -1353,9 +1420,6 @@ class _MainScreenState extends State<MainScreen>
         final oldScale = theme.uiScale;
         if (value == oldScale) return;
 
-        // Ölçek değiştiğinde pencere boyutunu aynı oranda büyüt/küçült.
-        // Taban boyutu (ölçek=1.0'daki boyut) üzerinden hesapla —
-        // böylece yuvarlama hataları birikmez.
         if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
           final isMax = await windowManager.isMaximized();
           final newMinW = (_kDesktopMinWidth * value).roundToDouble();
@@ -1363,32 +1427,35 @@ class _MainScreenState extends State<MainScreen>
 
           if (!isMax) {
             final currentSize = await windowManager.getSize();
-            // Mevcut boyuttan taban (ölçek=1.0) boyutunu hesapla.
             final baseW = currentSize.width / oldScale;
             final baseH = currentSize.height / oldScale;
             var newW = (baseW * value).roundToDouble();
             var newH = (baseH * value).roundToDouble();
-
-            // Minimumun altına düşmesin.
             if (newW < newMinW) newW = newMinW;
             if (newH < newMinH) newH = newMinH;
 
-            // Minimum boyutu geçici olarak küçült (küçülme yönünde
-            // eski minimum engel olmasın), boyutu ayarla, sonra
-            // gerçek minimum'u koy.
-            await windowManager.setMinimumSize(const Size(400, 300));
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-            await windowManager.setSize(Size(newW, newH));
-            await Future<void>.delayed(const Duration(milliseconds: 60));
-            await windowManager.setMinimumSize(Size(newMinW, newMinH));
-          } else {
-            await windowManager.setMinimumSize(Size(newMinW, newMinH));
-          }
-        }
+            // Küçülme: önce min boyutu güncelle, küçülme başlasın
+            if (value < oldScale) {
+              await windowManager.setMinimumSize(Size(newMinW, newMinH));
+            }
 
-        // Pencere boyutu oturması için kısa bekle, sonra ölçeği uygula.
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        theme.setUiScale(value);
+            // Ölçeği hemen uygula (FittedBox içerik oranını günceller)
+            await theme.setUiScale(value);
+
+            // AnimationController ile OS penceresini kare kare boyutlandır
+            _animateWindowSize(currentSize, Size(newW, newH), onComplete: () async {
+              if (value > oldScale) {
+                await windowManager.setMinimumSize(Size(newMinW, newMinH));
+              }
+            });
+          } else {
+            // Maximize: boyut değişmez, yalnızca ölçek
+            await windowManager.setMinimumSize(Size(newMinW, newMinH));
+            await theme.setUiScale(value);
+          }
+        } else {
+          await theme.setUiScale(value);
+        }
       },
       itemBuilder: (_) => const [
         PopupMenuItem<double>(value: 0.75, child: Text('75%')),
@@ -1425,6 +1492,19 @@ class _MainScreenState extends State<MainScreen>
   @override
   void initState() {
     super.initState();
+
+    // Pencere boyutu animasyon denetleyicisi
+    _sizeAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _sizeAnimController.addListener(() {
+      final anim = _sizeAnimation;
+      if (anim != null) {
+        windowManager.setSize(anim.value);
+      }
+    });
+
     _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     _tabController?.addListener(_handleTabIndexChanged);
 
@@ -1442,61 +1522,13 @@ class _MainScreenState extends State<MainScreen>
       final settings = context.read<AppSettings>();
       settings.promptCrashReportIfAvailable(context);
 
-      // Check for partial translations after a short delay
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        if (!mounted) return;
-        final project =
-            await settings.promptPartialTranslationIfAvailable(context);
-
-        if (project != null && mounted) {
-          final controller = context.read<TranslationController>();
-          // Ensure UI settings match the project's resume parameters.
-          settings.setTranslationConfig(lang: project.targetLanguage);
-          // Çeviri sekmesine geç
-          _tabController?.animateTo(0);
-
-          // Controller üzerinden çeviriyi devam ettir
-          await controller.prepareResumeFromBlocks(
-            file: File(project.filePath),
-            alreadyTranslatedBlocks: project.processedBlocks,
-            clearSdh: settings.sdhClear,
-            targetLanguage: project.targetLanguage,
-          );
-
-          if (!mounted) return;
-
-          // Ensure we enqueue + start using the permanent path picked by the controller.
-          final permanentPath =
-              controller.selectedFile?.path ?? project.filePath;
-
-          // Make the resumed item visible in the AI Panel list and keep it on top.
-          await settings.addFileToBatchTranslation(
-            project.fileName,
-            permanentPath,
-            insertAtTop: true,
-          );
-
-          // Start immediately (resume from blocks) so user doesn't need to press start again.
-          unawaited(
-            controller.startBatchTranslationQueue(
-              files: [
-                BatchFile(
-                  name: project.fileName,
-                  path: permanentPath,
-                ),
-              ],
-              clearSdh: settings.sdhClear,
-              targetLanguage: project.targetLanguage,
-              playCompletionSound: true,
-            ),
-          );
-        }
-      });
+      // Partial translations check removed
     });
   }
 
   @override
   void dispose() {
+    _sizeAnimController.dispose();
     _tabController?.removeListener(_handleTabIndexChanged);
     _tabController?.dispose();
     super.dispose();
@@ -1517,9 +1549,11 @@ class _MainScreenState extends State<MainScreen>
               return TabBar(
                 controller: _tabController,
                 labelStyle:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                unselectedLabelStyle: const TextStyle(fontSize: 15),
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.2),
+                unselectedLabelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                 labelPadding: EdgeInsets.zero,
+                indicatorWeight: 3,
+                splashBorderRadius: BorderRadius.circular(8),
                 tabs: [
                   Tab(
                     child: SizedBox(
@@ -1552,6 +1586,47 @@ class _MainScreenState extends State<MainScreen>
     );
   }
 
+  Widget _buildNavRailItem({
+    required BuildContext context,
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+    return SideRailHoverButton(
+      onTap: onTap,
+      isSelected: selected,
+      verticalPadding: 8.0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            selected ? selectedIcon : icon,
+            size: 24,
+            color: color,
+          ),
+          const SizedBox(height: 4),
+          AdaptiveText(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            minFontSize: 8,
+            wrapWords: false,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: color,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettings>();
@@ -1579,96 +1654,90 @@ class _MainScreenState extends State<MainScreen>
           child: Row(
             children: [
               SizedBox(
-                width: 88,
-                child: ColoredBox(
-                  color: railBackgroundColor,
+                width: 82,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: railBackgroundColor,
+                    border: Border(
+                      right: BorderSide(
+                        color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                  ),
                   child: Column(
                     children: [
-                      SizedBox(
-                        width: double.infinity,
-                        height: 88,
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colorScheme.primary.withValues(alpha: 0.15),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: Image.asset(
                           'assets/icon/app_icon.png',
                           fit: BoxFit.contain,
-                          alignment: Alignment.topCenter,
                         ),
                       ),
+                      const SizedBox(height: 16),
                       Expanded(
-                        child: NavigationRail(
-                        selectedIndex: _tabController?.index ?? 0,
-                        backgroundColor: railBackgroundColor,
-                        selectedIconTheme: IconThemeData(
-                          size: 24,
-                          color: colorScheme.primary,
-                        ),
-                        unselectedIconTheme: IconThemeData(
-                          size: 24,
-                          color: colorScheme.primary,
-                        ),
-                        selectedLabelTextStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                          height: 1.1,
-                        ),
-                        unselectedLabelTextStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                          height: 1.1,
-                        ),
-                        onDestinationSelected: (index) {
-                          _tabController?.animateTo(index);
-                          setState(() {});
-                        },
-                        labelType: NavigationRailLabelType.all,
-                        destinations: [
-                          NavigationRailDestination(
-                            icon: const Icon(Icons.auto_awesome_outlined),
-                            selectedIcon: const Icon(Icons.auto_awesome),
-                            label: AdaptiveText(
-                              theme.trans["tab_translation"] ?? "",
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              minFontSize: 9,
-                              wrapWords: false,
+                        child: Column(
+                          children: [
+                            _buildNavRailItem(
+                              context: context,
+                              icon: Icons.auto_awesome_outlined,
+                              selectedIcon: Icons.auto_awesome,
+                              label: theme.trans["tab_translation"] ?? "",
+                              selected: (_tabController?.index ?? 0) == 0,
+                              onTap: () {
+                                _tabController?.animateTo(0);
+                                setState(() {});
+                              },
+                              colorScheme: colorScheme,
                             ),
-                          ),
-                          NavigationRailDestination(
-                            icon: const Icon(Icons.edit_outlined),
-                            selectedIcon: const Icon(Icons.edit),
-                            label: AdaptiveText(
-                              theme.trans["tab_editor"] ?? "",
-                              maxLines: 1,
-                              minFontSize: 8,
+                            const SizedBox(height: 4),
+                            _buildNavRailItem(
+                              context: context,
+                              icon: Icons.subtitles_outlined,
+                              selectedIcon: Icons.subtitles,
+                              label: theme.trans["tab_editor"] ?? "",
+                              selected: (_tabController?.index ?? 0) == 1,
+                              onTap: () {
+                                _tabController?.animateTo(1);
+                                setState(() {});
+                              },
+                              colorScheme: colorScheme,
                             ),
-                          ),
-                        ],
-                        trailing: Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              SettingsButton(showLabel: true),
-                              SizedBox(height: 10),
-                              FeaturesButton(),
-                            ],
-                          ),
-                        ),
+                            const Spacer(),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  SettingsButton(showLabel: true),
+                                  SizedBox(height: 10),
+                                  FeaturesButton(),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                    ),
+                  ),
                 ),
-              ),
-              VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: colorScheme.outlineVariant,
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
                   child: Column(
                     children: [
                       Row(
@@ -1684,6 +1753,7 @@ class _MainScreenState extends State<MainScreen>
                                   .titleLarge
                                   ?.copyWith(
                                     fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
                                   ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1693,7 +1763,7 @@ class _MainScreenState extends State<MainScreen>
                           _buildUiScaleMenu(theme, colorScheme),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Expanded(
                         child: AnimatedBuilder(
                           animation: _tabController!,

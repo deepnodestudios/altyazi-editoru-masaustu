@@ -10,6 +10,9 @@ Future<String?> showAiPanelTargetLanguagePickerBottomSheet({
   bool alignToLeft = false,
   Rect? anchorRect,
 }) {
+  var query = '';
+  final controller = TextEditingController();
+
   if (anchorRect != null) {
     return showGeneralDialog<String>(
       context: context,
@@ -18,9 +21,6 @@ Future<String?> showAiPanelTargetLanguagePickerBottomSheet({
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 120),
       pageBuilder: (ctx, _, __) {
-        var query = '';
-        final controller = TextEditingController();
-
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             final q = query.trim().toLowerCase();
@@ -91,7 +91,7 @@ Future<String?> showAiPanelTargetLanguagePickerBottomSheet({
                               },
                             ),
                             const SizedBox(height: 10),
-                            Expanded(
+                            Flexible(
                               child: ListView.separated(
                                 shrinkWrap: true,
                                 itemCount: filtered.length,
@@ -182,9 +182,6 @@ Future<String?> showAiPanelTargetLanguagePickerBottomSheet({
       barrierColor: colorScheme.scrim.withValues(alpha: 0.35),
       transitionDuration: const Duration(milliseconds: 180),
       pageBuilder: (ctx, _, __) {
-        var query = '';
-        final controller = TextEditingController();
-
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             final q = query.trim().toLowerCase();
@@ -323,8 +320,6 @@ Future<String?> showAiPanelTargetLanguagePickerBottomSheet({
     showDragHandle: true,
     backgroundColor: colorScheme.surface,
     builder: (ctx) {
-      var query = '';
-      final controller = TextEditingController();
       return StatefulBuilder(
         builder: (ctx, setSheetState) {
           final q = query.trim().toLowerCase();

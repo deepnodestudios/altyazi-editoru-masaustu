@@ -6,8 +6,20 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { assertCreditsAvailable, consumeCreditInternal, getAuthEmail, normalizePlatform, requireDeviceId } from '../billing/creditUtils';
+import { resolveGeminiModel } from './modelUtils';
 
-const geminiApiKey = defineSecret('GEMINI_API_KEY');
+const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
+
+const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Ek kural: Bir altyazi satiri asiri cinsel veya acik sacik oldugu icin dogrudan cevrildiginde sorun cikacaksa satiri asla atlama, bos birakma veya cevirmeyi reddetme; anlami koruyarak daha yumusak ve ortulu bir dille cevir ve SRT yapisini aynen koru.';
+
+function withExplicitContentFallback(systemPrompt?: string): string {
+    const base = (systemPrompt ?? '').trim();
+    if (!base) return EXPLICIT_CONTENT_FALLBACK_INSTRUCTION;
+    if (base.includes('asla atlama') || base.includes('cevirmeyi reddetme')) {
+        return base;
+    }
+    return `${base}\n${EXPLICIT_CONTENT_FALLBACK_INSTRUCTION}`;
+}
 
 interface BatchChunk {
     id: string; // so we know which chunk is which
@@ -30,6 +42,7 @@ interface StartBatchRequestData {
     canWriteUserHistory?: boolean;
     completedPlatform?: string;
     isMultiFileBatch?: boolean;
+    appVersion?: string;
 }
 
 export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 'public', enforceAppCheck: false, timeoutSeconds: 300 }, async (request: CallableRequest<StartBatchRequestData>) => {
@@ -37,12 +50,14 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
 
-    const { 
+    const {
         chunks, systemPrompt, deviceId, chargeKey,
         fcmToken, sourceHash, sourceContent, targetLanguage,
         originalNameForGlobalCache, fileNameForHistory,
-        totalLines, canWriteUserHistory, completedPlatform, isMultiFileBatch
+        totalLines, canWriteUserHistory, completedPlatform, isMultiFileBatch,
+        appVersion,
     } = request.data;
+    const resolvedAppVersion = (appVersion ?? '').trim() || '1.6.0';
 
     if (!chunks || chunks.length === 0) {
         throw new HttpsError('invalid-argument', 'Chunks are required');
@@ -69,12 +84,16 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
     if (sessionData.charged === true) {
         throw new HttpsError('failed-precondition', 'Translation session already charged.');
     }
+    if (sessionData.requiresRewardedAd === true && sessionData.rewardedAdConfirmed !== true) {
+        throw new HttpsError('failed-precondition', 'REWARDED_AD_REQUIRED');
+    }
 
     await assertCreditsAvailable({
         db,
         uid: request.auth.uid,
         deviceId: normalizedDeviceId,
         platform: resolvedPlatform,
+        appVersion: resolvedAppVersion,
     });
     
     const apiKey = geminiApiKey.value();
@@ -84,6 +103,7 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
 
     try {
         const ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1beta' } });
+        const effectiveSystemPrompt = withExplicitContentFallback(systemPrompt);
 
         // Construct JSONL content
         // Based on Gemini Batch API schema: each line must have a request object
@@ -110,9 +130,9 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
                     ]
                 }
             };
-            if (systemPrompt) {
+            if (effectiveSystemPrompt) {
                 reqObj.request.systemInstruction = {
-                    parts: [{ text: systemPrompt }]
+                    parts: [{ text: effectiveSystemPrompt }]
                 };
             }
             jsonlContent += JSON.stringify(reqObj) + '\n';
@@ -139,7 +159,7 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
 
         // Create Batch Job
         const batchJob = await ai.batches.create({
-            model: "gemini-flash-lite-latest",
+            model: resolveGeminiModel(resolvedAppVersion),
             src: uploadedFile.name,
         });
 
@@ -158,6 +178,8 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             fileName: fileNameForHistory,
             targetLanguage,
             platform: resolvedPlatform,
+            appVersion: resolvedAppVersion,
+            preferFreeCreditsFirst: sessionData.preferFreeCreditsFirst === true,
             allowAutoApproveSession: true,
         });
 

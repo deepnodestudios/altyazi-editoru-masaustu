@@ -571,7 +571,79 @@ try {
         } else {
           Write-Warning 'Installer is unsigned. Unsigned installers are commonly blocked by SmartScreen/antivirus.'
         }
-        Write-Host "Installer ready: $($latest.FullName)"
+          Write-Host "Installer ready: $($latest.FullName)"
+
+          # Prepare files and generate release notes, then create ZIP package.
+          try {
+            $zipName = "$installerBaseName.zip"
+            $zipPath = Join-Path $installerOutDir $zipName
+            $guideFile = Join-Path $installerOutDir 'how to install.txt'
+            $releaseNotesFile = Join-Path $installerOutDir "release-notes_v$pubspecVersion.txt"
+
+            # Ensure guide exists
+            if (-not (Test-Path $guideFile)) {
+              Copy-Item -Path $howToInstallPath -Destination $guideFile -Force -ErrorAction SilentlyContinue
+            }
+
+            # Generate release notes from git if available
+            $gitAvailable = $false
+            try {
+              Get-Command git -ErrorAction Stop | Out-Null
+              $gitAvailable = $true
+            } catch {
+              $gitAvailable = $false
+            }
+
+            $changesText = ""
+            if ($gitAvailable) {
+              try {
+                $lastTag = (& git -C $repoRoot describe --tags --abbrev=0 2>$null).Trim()
+                if (-not [string]::IsNullOrWhiteSpace($lastTag)) {
+                  $logRange = "$lastTag..HEAD"
+                  $commits = & git -C $repoRoot log $logRange --pretty=format:'- %s (%an)'
+                } else {
+                  $commits = & git -C $repoRoot log -n 20 --pretty=format:'- %s (%an)'
+                }
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commits)) {
+                  $changesText = $commits -join "`n"
+                }
+              } catch {
+                $changesText = "(Could not collect git commits: $($_.Exception.Message))"
+              }
+            } else {
+              $changesText = "(git not available in PATH; no commit list generated)"
+            }
+
+            $header = @()
+            $header += "Release notes for $installerBaseName"
+            $header += "Generated: $(Get-Date -Format 'u')"
+            $header += ""
+            $header += "Changes:"
+            if (-not [string]::IsNullOrWhiteSpace($changesText)) {
+              $header += $changesText
+            } else {
+              $header += "(No changes found)"
+            }
+
+            Set-Content -Path $releaseNotesFile -Value ($header -join "`n") -Encoding UTF8
+            Write-Host "Release notes written: $releaseNotesFile"
+
+            # Files to include in the ZIP
+            $filesToZip = @()
+            $filesToZip += $latest.FullName
+            if (Test-Path $guideFile) { $filesToZip += $guideFile }
+            if (Test-Path $releaseNotesFile) { $filesToZip += $releaseNotesFile }
+
+            if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue }
+            if ($filesToZip.Count -gt 0) {
+              Compress-Archive -Path $filesToZip -DestinationPath $zipPath -Force
+              Write-Host "ZIP archive ready: $zipPath"
+            } else {
+              Write-Warning "No files to add to ZIP: $zipPath"
+            }
+          } catch {
+            Write-Warning "Failed to create ZIP package: $($_.Exception.Message)"
+          }
       }
     }
   } finally {

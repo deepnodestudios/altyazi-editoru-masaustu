@@ -1,3 +1,4 @@
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 
 import '../../app_settings.dart';
@@ -30,10 +31,16 @@ class AiPanelFilePickerSection extends StatelessWidget {
             label: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.center,
-              child: Text(
+              child: AutoSizeText(
                 '${settings.trans['add_file'] ?? 'DOSYA EKLE'} (SRT - VTT)',
                 maxLines: 1,
+                minFontSize: 10,
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
               ),
             ),
             style: ElevatedButton.styleFrom(
@@ -46,11 +53,7 @@ class AiPanelFilePickerSection extends StatelessWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               shadowColor: colorScheme.shadow.withValues(alpha: 0.25),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              textStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+                borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
               ),
               padding: const EdgeInsets.symmetric(vertical: 8),
             ),

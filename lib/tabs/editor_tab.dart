@@ -11,9 +11,6 @@ import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:altyazi_editoru/app_settings.dart';
 import '../widgets/adaptive_text.dart';
 import '../widgets/cloud_source_sheet.dart';
-import '../widgets/gdrive_picker_sheet.dart';
-import '../widgets/dropbox_picker_sheet.dart';
-import '../widgets/yandex_picker_sheet.dart';
 import '../widgets/editor_text_field.dart';
 import '../models/subtitle_block.dart';
 import '../utils/string_utils.dart';
@@ -42,7 +39,7 @@ class _EditorTabState extends State<EditorTab> {
   ) async {
     if (!mounted || !context.mounted) return false;
 
-    final hasUnsavedWork = settings.isEditorDirty || settings.canUndo;
+    final hasUnsavedWork = settings.isEditorDirty;
     if (!hasUnsavedWork) {
       return true;
     }
@@ -91,12 +88,55 @@ class _EditorTabState extends State<EditorTab> {
     return decision == 'remove';
   }
 
+  Widget _buildFileInfo(BuildContext context, AppSettings settings) {
+    if (settings.selectedEditorFile == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              _displayFileName(settings.selectedEditorFile!),
+              style: TextStyle(
+                fontSize: settings.editorFontSize,
+                fontWeight: FontWeight.w700,
+                color: Colors.orange,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.blueGrey.withAlpha(77),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Center(
+              child: Text(
+                settings.editorEncoding,
+                style: TextStyle(
+                    fontSize: (settings.editorFontSize * 0.75).clamp(10.0, 14.0),
+                    color: Colors.white70),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<bool> _confirmReplaceDirtyEditorIfNeeded(
     BuildContext context,
     AppSettings settings,
   ) async {
     if (!mounted || !context.mounted) return false;
-    final hasUnsavedWork = settings.isEditorDirty || settings.canUndo;
+    final hasUnsavedWork = settings.isEditorDirty;
     if (!hasUnsavedWork) {
       return true;
     }
@@ -344,10 +384,13 @@ class _EditorTabState extends State<EditorTab> {
     // Kalıcı depolama hash'ini ekranda göstermeyelim: foo_<md5>.srt -> foo.srt
     final withoutTimestamp =
         name.replaceFirst(RegExp(r'^\d{10,}_(?=.+\.[^.]+$)'), '');
-    return withoutTimestamp.replaceFirst(
+    final cleaned = withoutTimestamp.replaceFirst(
       RegExp(r'_[a-f0-9]{32}(?=\.[^.]+$)', caseSensitive: false),
       '',
     );
+    // Allow line breaks at dots by adding a zero-width space after each dot.
+    // This makes long filenames prefer breaking at '.' instead of mid-word.
+    return cleaned.replaceAll('.', '.\u200B');
   }
 
   @override
@@ -408,10 +451,13 @@ class _EditorTabState extends State<EditorTab> {
     });
   }
 
-  void _showShiftTimeDialog(BuildContext context, AppSettings settings) {
+  Future<void> _showShiftTimeDialog(
+    BuildContext context,
+    AppSettings settings,
+  ) async {
     final trans = settings.trans;
     final TextEditingController offsetCtrl = TextEditingController();
-    showDialog(
+    final int? ms = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(trans["editor_shift_time_title"] ?? "Tüm Zamanları Kaydır"),
@@ -434,34 +480,31 @@ class _EditorTabState extends State<EditorTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: AdaptiveText(
-              trans["btn_cancel"] ?? "İptal",
-              maxLines: 1,
-              minFontSize: 10,
-            ),
+            child: Text(trans["btn_cancel"] ?? "İptal"),
           ),
           ElevatedButton(
             onPressed: () {
-              int? ms = int.tryParse(offsetCtrl.text);
-              if (ms != null && ms != 0) {
-                settings.shiftAllTimecodes(ms);
-              }
-              Navigator.pop(ctx);
+              final int? parsedMs = int.tryParse(offsetCtrl.text);
+              debugPrint('[ShiftAll] dialogApply parsedMs=$parsedMs');
+              Navigator.pop(ctx, parsedMs);
             },
-            child: AdaptiveText(
-              trans["btn_apply"] ?? "Uygula",
-              maxLines: 1,
-              minFontSize: 10,
-            ),
+            child: Text(trans["btn_apply"] ?? "Uygula"),
           ),
         ],
       ),
-    ).then((_) {
-      // Dialog closing animation can still be using the controller.
-      Future<void>.delayed(const Duration(milliseconds: 500), () {
-        offsetCtrl.dispose();
-      });
+    );
+
+    // Dialog closing animation can still be using the controller.
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      offsetCtrl.dispose();
     });
+
+    if (!context.mounted || ms == null || ms == 0) {
+      return;
+    }
+
+    debugPrint('[ShiftAll] dialogClosed applying ms=$ms');
+    settings.shiftAllTimecodes(ms);
   }
 
   void _showRegexHelpDialog(BuildContext context, AppSettings settings) {
@@ -487,163 +530,27 @@ class _EditorTabState extends State<EditorTab> {
     );
   }
 
-  Future<void> _handleCloudPick<T>({
-    required AppSettings settings,
-    required Future<T?> Function() picker,
-    required Future<Map<String, String>> Function(T) downloader,
-    required String Function(T) nameExtractor,
-  }) async {
-    if (_isSwitchingEditorFile) return;
-
-    final picked = await picker();
-    if (picked == null || !mounted) return;
-
-    _isSwitchingEditorFile = true;
-
-    try {
-      final canReplace = await _confirmReplaceDirtyEditorIfNeeded(context, settings);
-      if (!canReplace || !mounted) return;
-
-      final result = await downloader(picked);
-      settings.setEditorFile(
-        nameExtractor(picked),
-        result['content'] ?? '',
-        encoding: result['encoding'] ?? 'UTF-8',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final trans = settings.trans;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(StringUtils.fillTemplate(
-            trans['snackbar_file_read_error'] ?? 'File read error: {error}',
-            {'error': e.toString()},
-          )),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      _isSwitchingEditorFile = false;
-    }
-  }
-
-  Future<void> _handleCloudSave<T>({
-    required AppSettings settings,
-    required String fileName,
-    required Future<T?> Function() picker,
-    required Future<void> Function(T) saver,
-    required String successMessageKey,
-    required String errorMessageKey,
-  }) async {
-    final picked = await picker();
-    if (picked == null || !mounted) return;
-
-    final trans = settings.trans;
-    try {
-      await saver(picked);
-      if (!mounted) return;
-      final msg = StringUtils.fillTemplate(
-        trans[successMessageKey] ?? 'Saved: {name}',
-        {'name': fileName},
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      final msg = StringUtils.fillTemplate(
-        trans[errorMessageKey] ?? 'Save error: {error}',
-        {'error': e.toString()},
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
   Future<void> _pickEditorFileWithSource(
       BuildContext context, AppSettings settings) async {
     final trans = settings.trans;
-    final source = await showCloudSourceSheet(
-      context: context,
-      trans: trans,
+    final dialogTitle = cloudSourceDialogTitle(
+      CloudSource.device,
+      trans,
       isSave: false,
     );
-    if (source == null || !context.mounted) return;
-
-    if (source == CloudSource.device) {
-      final dialogTitle = cloudSourceDialogTitle(source, trans, isSave: false);
-      final res = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'vtt'],
-        dialogTitle: dialogTitle,
-      );
-      if (res != null && res.files.single.path != null) {
-        if (!context.mounted) return;
-        await _openEditorFileFromLocalPath(
-          context,
-          settings,
-          res.files.single.path!,
-        );
-      }
-      return;
-    }
-
-    if (source == CloudSource.googleDrive) {
-      await _handleCloudPick(
-        settings: settings,
-        picker: () => showGoogleDriveSubtitlePickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        downloader: (picked) =>
-            settings.cloudStorage.downloadGDriveFileWithEncoding(picked.id),
-        nameExtractor: (picked) => picked.name,
-      );
-      return;
-    }
-
-    if (source == CloudSource.dropbox) {
-      await _handleCloudPick(
-        settings: settings,
-        picker: () => showDropboxSubtitlePickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        downloader: (picked) =>
-            settings.cloudStorage.downloadDropboxFileWithEncoding(picked.path),
-        nameExtractor: (picked) => picked.name,
-      );
-      return;
-    }
-
-    if (source == CloudSource.yandexDisk) {
-      await _handleCloudPick(
-        settings: settings,
-        picker: () => showYandexDiskSubtitlePickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        downloader: (picked) =>
-            settings.cloudStorage.downloadYandexDiskFileWithEncoding(picked.path),
-        nameExtractor: (picked) => picked.name,
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(trans['cloud_not_supported'] ??
-            'Bu bulut sağlayıcı henüz desteklenmiyor.'),
-      ),
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['srt', 'vtt'],
+      dialogTitle: dialogTitle,
     );
+    if (res != null && res.files.single.path != null) {
+      if (!context.mounted) return;
+      await _openEditorFileFromLocalPath(
+        context,
+        settings,
+        res.files.single.path!,
+      );
+    }
   }
 
   Future<void> _saveEditorFileWithSource(
@@ -655,89 +562,15 @@ class _EditorTabState extends State<EditorTab> {
     if (chosenName == null) return;
     if (!context.mounted) return;
 
-    final source = await showCloudSourceSheet(
-      context: context,
-      trans: trans,
+    final dialogTitle = cloudSourceDialogTitle(
+      CloudSource.device,
+      trans,
       isSave: true,
     );
-    if (source == null || !context.mounted) return;
-
-    if (source == CloudSource.device) {
-      final dialogTitle = cloudSourceDialogTitle(source, trans, isSave: true);
-      await settings.saveResult(
-        isEditorSave: true,
-        dialogTitle: dialogTitle,
-        customFileName: chosenName,
-      );
-      return;
-    }
-
-    if (source == CloudSource.googleDrive) {
-      await _handleCloudSave(
-        settings: settings,
-        fileName: chosenName,
-        picker: () => showGoogleDriveFolderPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        saver: (folderId) => settings.saveResultToGoogleDrive(
-          isEditorSave: true,
-          fileName: chosenName,
-          folderId: folderId,
-        ),
-        successMessageKey: 'snackbar_saved_gdrive',
-        errorMessageKey: 'snackbar_save_error_gdrive',
-      );
-      return;
-    }
-
-    if (source == CloudSource.dropbox) {
-      await _handleCloudSave(
-        settings: settings,
-        fileName: chosenName,
-        picker: () => showDropboxFolderPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        saver: (folderPath) => settings.saveResultToDropbox(
-          isEditorSave: true,
-          fileName: chosenName,
-          folderPath: folderPath,
-        ),
-        successMessageKey: 'snackbar_saved_dropbox',
-        errorMessageKey: 'snackbar_save_error_dropbox',
-      );
-      return;
-    }
-
-    if (source == CloudSource.yandexDisk) {
-      await _handleCloudSave(
-        settings: settings,
-        fileName: chosenName,
-        picker: () => showYandexDiskFolderPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        ),
-        saver: (folderPath) => settings.saveResultToYandexDisk(
-          isEditorSave: true,
-          fileName: chosenName,
-          folderPath: folderPath,
-        ),
-        successMessageKey: 'snackbar_saved_yandex',
-        errorMessageKey: 'snackbar_save_error_yandex',
-      );
-      return;
-    }
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(trans['cloud_not_supported'] ??
-            'Bu bulut sağlayıcı henüz desteklenmiyor.'),
-      ),
+    await settings.saveResult(
+      isEditorSave: true,
+      dialogTitle: dialogTitle,
+      customFileName: chosenName,
     );
   }
 
@@ -871,43 +704,6 @@ class _EditorTabState extends State<EditorTab> {
             ],
           ),
 
-          // Dosya Adı (Varsa) - Başlat düğmelerinin alt satırında
-          if (settings.selectedEditorFile != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.description, color: Colors.orange, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: AdaptiveText(
-                    _displayFileName(settings.selectedEditorFile!),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    // overflow: TextOverflow.ellipsis, // Kaldırıldı, ismi komple görünsün
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.fade,
-                    minFontSize: 8,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.blueGrey.withAlpha(77),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: AdaptiveText(
-                    settings.editorEncoding,
-                    style: const TextStyle(fontSize: 10, color: Colors.white70),
-                    maxLines: 1,
-                    minFontSize: 8,
-                  ),
-                ),
-              ],
-            ),
-          ],
-
           const SizedBox(height: 8),
           // Araç Çubuğu (Zaman Kaydır, Undo, Redo, Zoom) - Her zaman görünür
           Row(
@@ -942,27 +738,30 @@ class _EditorTabState extends State<EditorTab> {
                 ),
               ),
               const SizedBox(width: 4),
-              Expanded(
+              Flexible(
                 flex: 3,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.timer, size: 18),
-                  label: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                        trans["editor_shift_time_tooltip"] ?? "Zaman Kaydır"),
-                  ),
-                  onPressed: settings.selectedEditorFile != null
-                      ? () => _showShiftTimeDialog(context, settings)
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    side: BorderSide(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .outline
-                            .withAlpha(128)),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.timer, size: 18),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                          trans["editor_shift_time_tooltip"] ?? "Zaman Kaydır"),
+                    ),
+                    onPressed: settings.selectedEditorFile != null
+                        ? () => _showShiftTimeDialog(context, settings)
+                        : null,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      side: BorderSide(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withAlpha(128)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ),
               ),
@@ -1249,6 +1048,7 @@ class _EditorTabState extends State<EditorTab> {
       BuildContext context, AppSettings settings, Map<String, String> trans) {
     final bool isDesktop =
         !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+    final filteredBlocks = settings.filteredEditorBlocks;
     if (settings.selectedEditorFile == null) {
       return Center(
         child: SingleChildScrollView(
@@ -1295,11 +1095,11 @@ class _EditorTabState extends State<EditorTab> {
       controller: _scrollController,
       thumbVisibility: true,
       child: ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(8),
-      itemCount: settings.filteredEditorBlocks.length,
-      itemBuilder: (context, index) {
-        final block = settings.filteredEditorBlocks[index];
+        controller: _scrollController,
+        padding: const EdgeInsets.all(8),
+        itemCount: filteredBlocks.length,
+        itemBuilder: (context, index) {
+        final block = filteredBlocks[index];
         final bool isCurrentMatch = settings.currentMatchedBlockIndex != -1 &&
             settings.currentMatchedBlockIndex < settings.editorBlocks.length &&
             settings.editorBlocks[settings.currentMatchedBlockIndex] == block;
@@ -1324,10 +1124,10 @@ class _EditorTabState extends State<EditorTab> {
                     ? colorScheme.surfaceContainerHigh.withAlpha(180)
                     : null),
             child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 Row(
                   children: [
                     InkWell(
@@ -1439,22 +1239,22 @@ class _EditorTabState extends State<EditorTab> {
                   ],
                 ),
                 const SizedBox(height: 5),
-                EditorTextField(
-                  initialText: block.text,
-                  onChanged: (val) => settings.updateBlockText(block, val),
-                  searchQuery: _searchCtrl.text,
-                  isCaseSensitive: settings.isCaseSensitive,
-                  isRegexSearch: settings.isRegexSearch,
-                  fontSize: settings.editorFontSize,
-                  isCurrentMatch: isCurrentMatch,
-                ),
-              ],
+                  EditorTextField(
+                    initialText: block.text,
+                    onChanged: (val) => settings.updateBlockText(block, val),
+                    searchQuery: _searchCtrl.text,
+                    isCaseSensitive: settings.isCaseSensitive,
+                    isRegexSearch: settings.isRegexSearch,
+                    fontSize: settings.editorFontSize,
+                    isCurrentMatch: isCurrentMatch,
+                  ),
+                ],
+              ),
             ),
-          ),
           ),
         );
       },
-    ),
+      ),
     );
   }
 
@@ -1633,13 +1433,15 @@ class _EditorTabState extends State<EditorTab> {
                                     child: Column(
                                       children: [
                                         _buildTopControls(context, settings, trans),
-                                        if (settings.selectedEditorFile != null)
+                                        if (settings.selectedEditorFile != null) ...[
                                           _buildSearchPanel(
                                             context,
                                             settings,
                                             trans,
                                             isRegexError,
                                           ),
+                                          _buildFileInfo(context, settings),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -1661,9 +1463,11 @@ class _EditorTabState extends State<EditorTab> {
                                         child: Column(
                                           children: [
                                             _buildTopControls(context, settings, trans),
-                                            if (settings.selectedEditorFile != null)
+                                            if (settings.selectedEditorFile != null) ...[
                                               _buildSearchPanel(
                                                   context, settings, trans, isRegexError),
+                                              _buildFileInfo(context, settings),
+                                            ],
                                           ],
                                         ),
                                       ),
@@ -1679,9 +1483,11 @@ class _EditorTabState extends State<EditorTab> {
                                 : Column(
                                     children: [
                                       _buildTopControls(context, settings, trans),
-                                      if (settings.selectedEditorFile != null)
+                                      if (settings.selectedEditorFile != null) ...[
                                         _buildSearchPanel(
                                             context, settings, trans, isRegexError),
+                                        _buildFileInfo(context, settings),
+                                      ],
                                       Expanded(
                                         child: Padding(
                                           padding: const EdgeInsets.only(left: 8.0),

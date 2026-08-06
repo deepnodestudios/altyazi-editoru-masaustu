@@ -569,7 +569,7 @@ class _BatchSaveDialogState extends State<BatchSaveDialog> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              trans['batch_complete_title'] ?? 'Toplu Çeviri Tamamlandı',
+              trans['batch_complete_title'] ?? 'Çeviri Tamamlandı',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),

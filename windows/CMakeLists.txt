@@ -59,6 +59,11 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Suppress deprecation error for <experimental/coroutine> on newer MSVC toolchains.
+# See: static assertion in <experimental/coroutine> that suggests defining
+# _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS to silence the error.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # MSVC: Avoid C1041 (PDB write contention) during parallel builds.
 if(MSVC)
   add_compile_options(/FS)

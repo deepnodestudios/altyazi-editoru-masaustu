@@ -200,10 +200,10 @@ class _LiveSubtitleViewerState extends State<LiveSubtitleViewer>
     final colorScheme = Theme.of(context).colorScheme;
     final fontSize = settings.liveViewFontSize;
 
-    // Responsive: use ~40% of viewport height, clamped to a sensible range.
+    // Responsive: use ~48% of viewport height, clamped to a sensible range.
     final viewerHeight = widget.isFullScreen
         ? double.infinity
-        : (MediaQuery.of(context).size.height * 0.40).clamp(250.0, 600.0);
+        : (MediaQuery.of(context).size.height * 0.48).clamp(300.0, 600.0);
 
     return Container(
       height: viewerHeight,

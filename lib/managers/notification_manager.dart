@@ -85,7 +85,7 @@ class NotificationManager {
         if (fallbackOk != true) {
           addLog(
             'log_notification_error',
-            'Windows notification init failed (primary+fallback).',
+            'log_notification_init_failed_windows',
           );
           initialized = false;
         } else {
@@ -297,8 +297,8 @@ class NotificationManager {
     } catch (e) {
       // Bildirim gösterilemezse işlemi durdurma, devam et
       if (isDesktop && isComplete) {
-        _addLog?.call('log_notification_error',
-            'Desktop completion notification failed: ${e.toString()}');
+        _addLog?.call('log_notification_desktop_failed',
+            e.toString());
         // This helps diagnose Windows toast delivery problems.
         try {
           final t = Translations.getWithGlobalFallback(language);

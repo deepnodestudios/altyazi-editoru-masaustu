@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import '../constants/ai_language_options.dart';
 
 import '../utils/io_platform_stub.dart'
   if (dart.library.io) '../utils/io_platform_io.dart' as io_platform;
@@ -19,6 +20,78 @@ class GeminiService {
 
   String? _translationChargeKey;
   bool _approveChargeForTranslateCalls = false;
+
+  // Usage tracking (mirrors mobile translation_engine).
+  int _usageInputTokens = 0;
+  int _usageOutputTokens = 0;
+  int _usageApiCalls = 0;
+  int _usageApiRetries = 0;
+  int _usageResendRounds = 0;
+  double _usageCostUsd = 0;
+  String _usageModel = '';
+
+  Map<String, dynamic> get usageSnapshot => {
+        'inputTokens': _usageInputTokens,
+        'outputTokens': _usageOutputTokens,
+        'apiCalls': _usageApiCalls,
+        'apiRetries': _usageApiRetries,
+        'resendRounds': _usageResendRounds,
+        'costUsd': _usageCostUsd,
+        'model': _usageModel,
+      };
+
+  void resetUsage() {
+    _usageInputTokens = 0;
+    _usageOutputTokens = 0;
+    _usageApiCalls = 0;
+    _usageApiRetries = 0;
+    _usageResendRounds = 0;
+    _usageCostUsd = 0;
+    _usageModel = '';
+  }
+
+  Future<void> prepareTranslationAccess({
+    required String chargeKey,
+    String? fileName,
+    String? targetLanguage,
+    String? platform,
+  }) async {
+    await _ensureAuthReady();
+    try {
+      final payload = {
+        'deviceId': _deviceId,
+        'chargeKey': chargeKey,
+        if (fileName != null && fileName.trim().isNotEmpty)
+          'fileName': fileName.trim(),
+        if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
+          'targetLanguage': targetLanguage.trim(),
+        if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
+          'targetLanguageName': _getFullLanguageName(targetLanguage.trim()),
+        if (platform != null && platform.trim().isNotEmpty)
+          'platform': platform.trim(),
+      };
+
+      if (io_platform.isDesktop) {
+        await _callCloudFunctionViaHttp('checkTranslationAccess', payload);
+      } else {
+        final callable = _functions.httpsCallable(
+          'checkTranslationAccess',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+        );
+        await callable.call(payload);
+      }
+
+      setChargeKey(chargeKey);
+      setTranslationChargeContext(chargeKey: chargeKey, approveCharge: true);
+    } on FirebaseFunctionsException catch (e) {
+      final message = e.message ?? '';
+      if (e.code == 'failed-precondition' &&
+          message.contains('INSUFFICIENT_CREDIT')) {
+        throw Exception('INSUFFICIENT_CREDIT');
+      }
+      throw Exception('Server Hatası (${e.code}): $message');
+    }
+  }
 
   GeminiService() : _app = Firebase.app() {
     // Bind all Firebase clients to the same app instance.
@@ -50,7 +123,10 @@ class GeminiService {
     if (_chargeKey != null && _chargeKey!.trim().isNotEmpty) return _chargeKey!.trim();
     return null;
   }
-
+  String _getFullLanguageName(String codeOrName) {
+    final resolved = aiPanelLanguagePromptNameForCode(codeOrName);
+    return resolved.isEmpty ? 'Turkish' : resolved;
+  }
   void setTranslationChargeContext({String? chargeKey, bool approveCharge = false}) {
     final trimmed = chargeKey?.trim();
     _translationChargeKey = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
@@ -94,7 +170,7 @@ class GeminiService {
         error.contains('unauthenticated');
   }
 
-  Future<({String text, int inputTokens, int outputTokens})>
+  Future<({String text, int inputTokens, int outputTokens, String costUsd, String model})>
       _callCloudTranslateViaHttpCallable({
     required String text,
     String? systemPrompt,
@@ -163,6 +239,8 @@ class GeminiService {
         text: (result['text'] as String?) ?? '',
         inputTokens: (result['inputTokens'] as num?)?.toInt() ?? 0,
         outputTokens: (result['outputTokens'] as num?)?.toInt() ?? 0,
+        costUsd: (result['costUsd'] as String?) ?? '0.000000',
+        model: (result['modelUsed'] as String?) ?? '',
       );
     }
 
@@ -213,7 +291,17 @@ class GeminiService {
   /// [SERVER-SIDE] Core Translation Call
   /// Tüm çeviri istekleri bu metod üzerinden Cloud Functions'a yönlendirilir.
   /// API Key ve Model seçimi SUNUCU tarafında yönetilir.
-  Future<({String text, int inputTokens, int outputTokens})> _callCloudTranslate({
+  void _accumulateUsage(({String text, int inputTokens, int outputTokens, String costUsd, String model}) result) {
+    _usageApiCalls += 1;
+    _usageInputTokens += result.inputTokens;
+    _usageOutputTokens += result.outputTokens;
+    _usageCostUsd += double.tryParse(result.costUsd) ?? 0;
+    if (result.model.isNotEmpty) {
+      _usageModel = result.model;
+    }
+  }
+
+  Future<({String text, int inputTokens, int outputTokens, String costUsd, String model})> _callCloudTranslate({
     required String text,
     String? systemPrompt,
     String? model, // Sunucuya loglama amaçlı gönderilir, kararı sunucu verir.
@@ -224,13 +312,15 @@ class GeminiService {
       // On desktop (especially Windows), Firebase Functions gRPC callable can hang.
       // Prefer the HTTP callable endpoint for reliability.
       if (io_platform.isDesktop) {
-        return _callCloudTranslateViaHttpCallable(
+        final result = await _callCloudTranslateViaHttpCallable(
           text: text,
           systemPrompt: systemPrompt,
           model: model,
           chargeKey: chargeKey,
           approveCharge: approveCharge,
         );
+        _accumulateUsage(result);
+        return result;
       }
 
       await _ensureAuthReady().timeout(const Duration(seconds: 25));
@@ -254,20 +344,26 @@ class GeminiService {
           .timeout(const Duration(minutes: 2));
 
       final data = result.data as Map;
-      return (
+      final translated = (
         text: (data['text'] as String?) ?? '',
         inputTokens: (data['inputTokens'] as int?) ?? 0,
         outputTokens: (data['outputTokens'] as int?) ?? 0,
+        costUsd: (data['costUsd'] as String?) ?? '0.000000',
+        model: (data['modelUsed'] as String?) ?? '',
       );
+      _accumulateUsage(translated);
+      return translated;
     } catch (e) {
       if (e is TimeoutException || _shouldUseHttpCallableFallback(e)) {
-        return _callCloudTranslateViaHttpCallable(
+        final result = await _callCloudTranslateViaHttpCallable(
           text: text,
           systemPrompt: systemPrompt,
           model: model,
           chargeKey: chargeKey,
           approveCharge: approveCharge,
         );
+        _accumulateUsage(result);
+        return result;
       }
 
       if (e is FirebaseFunctionsException && e.code == 'unauthenticated') {
@@ -290,11 +386,15 @@ class GeminiService {
           });
 
           final retryData = retryResult.data as Map;
-          return (
+          final retried = (
             text: (retryData['text'] as String?) ?? '',
             inputTokens: (retryData['inputTokens'] as int?) ?? 0,
             outputTokens: (retryData['outputTokens'] as int?) ?? 0,
+            costUsd: (retryData['costUsd'] as String?) ?? '0.000000',
+            model: (retryData['modelUsed'] as String?) ?? '',
           );
+          _accumulateUsage(retried);
+          return retried;
         } catch (retryError) {
           throw Exception('Server Hatası (unauthenticated): ${retryError.toString()}');
         }
@@ -315,8 +415,10 @@ class GeminiService {
     final lines = const LineSplitter().convert(content);
     List<String> buffer = [];
 
+    final fullLanguageName = _getFullLanguageName(targetLanguage);
+
     final systemPrompt = 'Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin. '
-        'Aşağıdaki SRT formatındaki metinleri $targetLanguage diline çevir. '
+        'Aşağıdaki SRT formatındaki metinleri $fullLanguageName diline çevir. '
         'Zaman kodlarını ve satır numaralarını ASLA değiştirme. '
         'Kelime kelime değil, anlam odaklı çevir. '
         'Günlük konuşma diline uygun, doğal ve akıcı olsun.';
@@ -329,8 +431,11 @@ class GeminiService {
             text: text,
             systemPrompt: systemPrompt,
             chargeKey: _effectiveChargeKey(null),
-            approveCharge: true,
+            approveCharge: _approveChargeForTranslateCalls,
           );
+          if (_approveChargeForTranslateCalls && result.text.isNotEmpty) {
+            _approveChargeForTranslateCalls = false;
+          }
           return result.text;
         } catch (e) {
           attempts++;
@@ -374,19 +479,21 @@ class GeminiService {
   }) async {
     // Client-side key fetch kaldırıldı.
 
+    final fullLanguageName = _getFullLanguageName(targetLanguage);
     final ctx = (contextHint ?? '').trim();
     final srcHint = (sourceLanguageHint ?? '').trim();
 
     final systemPrompt = '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Verilen SRT formatındaki altyazı bloklarını [${srcHint.isNotEmpty ? srcHint : 'Kaynak Dil'}]'den $targetLanguage diline çevirmek.
+Görevin: Verilen SRT formatındaki altyazı bloklarını [${srcHint.isNotEmpty ? srcHint : 'Kaynak Dil'}]'den $fullLanguageName diline çevirmek.
 
 Kurallar:
-1. Çeviriyi yaparken "çeviri kokan" cümlelerden kaçın. Hedef dilde ($targetLanguage) günlük hayatta nasıl konuşuluyorsa öyle yaz.
-2. Deyimleri, argoları ve kültürel referansları kelimesi kelimesine değil, $targetLanguage kültüründeki en doğal karşılıklarıyla uyarla.
+1. Çeviriyi yaparken "çeviri kokan" cümlelerden kaçın. Hedef dilde ($fullLanguageName) günlük hayatta nasıl konuşuluyorsa öyle yaz.
+2. Deyimleri, argoları ve kültürel referansları kelimesi kelimesine değil, $fullLanguageName kültüründeki en doğal karşılıklarıyla uyarla.
 3. Cümleleri mümkün olduğunca kısa ve öz tut (altyazı okuma hızı için). Gereksiz dolgu kelimelerini at.
 4. Karakterlerin duygusunu ve sahnenin tonunu yansıt. Resmiyetten uzak, samimi ve akıcı bir dil kullan.
 5. SRT formatını (Zaman kodları ve Blok Numaraları) ASLA bozma ve değiştirmeden aynen koru.
-${expectedBlockCount != null ? '6. Çıktıda tam olarak $expectedBlockCount blok olmalı.\n' : ''}${ctx.isNotEmpty ? 'Bağlam (Film/Dizi Bilgisi): $ctx\n' : ''}''';
+6. Bir satır aşırı cinsel/açık saçık olduğu için doğrudan çevrilirse sorun çıkaracaksa satırı ASLA atlama, boş bırakma veya çevirmeyi reddetme; anlamı koruyarak daha yumuşak ve örtülü bir dille çevir.
+${expectedBlockCount != null ? '7. Çıktıda tam olarak $expectedBlockCount blok olmalı.\n' : ''}${ctx.isNotEmpty ? 'Bağlam (Film/Dizi Bilgisi): $ctx\n' : ''}''';
 
     int attempts = 0;
     while (attempts < 3) {
@@ -404,6 +511,9 @@ ${expectedBlockCount != null ? '6. Çıktıda tam olarak $expectedBlockCount blo
         
         final text = result.text;
         if (text.isNotEmpty) {
+          if (_approveChargeForTranslateCalls) {
+            _approveChargeForTranslateCalls = false;
+          }
           return text;
         }
         throw Exception('Boş çeviri sonucu alındı.');
@@ -431,6 +541,7 @@ ${expectedBlockCount != null ? '6. Çıktıda tam olarak $expectedBlockCount blo
   }) async {
     // Client-side key fetch kaldırıldı.
 
+    final fullLanguageName = _getFullLanguageName(targetLanguage);
     final hint = fileTitleYearHint.trim();
     final sample = sampleSrt.trim();
     final srcHint = (sourceLanguageHint ?? '').trim();
@@ -455,7 +566,7 @@ ${expectedBlockCount != null ? '6. Çıktıda tam olarak $expectedBlockCount blo
   ''';
 
     final userPrompt = '''Aşağıdaki SRT örneğini incele ve yukarıdaki kurallara göre "çeviri hafızası" üret.
-Hedef dil: $targetLanguage
+Hedef dil: $fullLanguageName
 
 SRT ÖRNEĞİ (sadece örnek):
 $sample
@@ -486,7 +597,7 @@ $sample
   }
 
   /// TranslationService için çeviri metodu
-  Future<({String text, int inputTokens, int outputTokens})> translate({
+  Future<({String text, int inputTokens, int outputTokens, String costUsd, String model})> translate({
     required String text,
     required String targetLanguage,
     required String model,
@@ -495,13 +606,15 @@ $sample
     List<String> ignoredWords = const [],
   }) async {
     
+    final fullLanguageName = _getFullLanguageName(targetLanguage);
+
     final prompt = systemPrompt.isNotEmpty
         ? systemPrompt
         : '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Aşağıdaki metni $targetLanguage diline çevirmek.
+Görevin: Aşağıdaki metni $fullLanguageName diline çevirmek.
 Kurallar:
 1. Metni kelime kelime değil, anlam bütünlüğünü koruyarak doğal bir şekilde çevir.
-2. Hedef dilin ($targetLanguage) günlük konuşma kalıplarını kullan.
+2. Hedef dilin ($fullLanguageName) günlük konuşma kalıplarını kullan.
 3. Formatı koru.
 4. Deyimleri ve kültürel öğeleri hedef dile uygun şekilde yerelleştir.''';
     
@@ -513,5 +626,200 @@ Kurallar:
     );
     
     return result;
+  }
+
+    Future<Map<String, dynamic>> _callCloudFunctionViaHttp(String functionName, Map<String, dynamic> data) async {
+    final projectId = _app.options.projectId.trim();
+    if (projectId.isEmpty) {
+      throw Exception('Server Hatası: Firebase projectId bulunamadı.');
+    }
+
+    final endpoint = Uri.parse(
+      'https://us-central1-$projectId.cloudfunctions.net/$functionName',
+    );
+
+    final user = _auth.currentUser;
+    final idToken = await user?.getIdToken().timeout(const Duration(seconds: 25));
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (idToken != null && idToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $idToken';
+    }
+
+    final payload = jsonEncode({'data': data});
+
+http.Response? response;
+      int attempt = 0;
+      const maxAttempts = 3;
+      while (true) {
+        attempt++;
+        try {
+          final timeout = io_platform.isDesktop
+              ? const Duration(minutes: 4)
+              : const Duration(minutes: 2);
+          response = await http.post(endpoint, headers: headers, body: payload).timeout(timeout);
+          break;
+        } catch (e) {
+          if (attempt >= maxAttempts) {
+            throw Exception('Bağlantı Hatası ($attempt. deneme başarısız): $e');
+          }
+          await Future.delayed(Duration(seconds: 2 * attempt));
+        }
+    }
+
+    final dynamic decoded = response.body.isEmpty ? const <String, dynamic>{} : jsonDecode(response.body);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final map = decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+      final resultRaw = map?['result'] ?? map?['data'];
+      return resultRaw is Map ? Map<String, dynamic>.from(resultRaw) : <String, dynamic>{};
+    }
+
+    final errorMap = decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    final errorPayload = errorMap?['error'];
+    String message = 'Bilinmeyen Hata';
+    if (errorPayload is Map) {
+      message = errorPayload['message']?.toString() ?? message;
+    }
+    throw FirebaseFunctionsException(message: message, code: 'unknown');
+  }
+
+  /// BATCH API METODLARI ///
+
+  Future<String> startBatchTranslation({
+    required List<Map<String, String>> chunks,
+    String targetLanguage = 'Turkish',
+    String? sourceLanguageHint,
+    String? contextHint,
+    String? fcmToken,
+    String? sourceHash,
+    String? sourceContent,
+    String? originalNameForGlobalCache,
+    String? fileNameForHistory,
+    int? totalLines,
+    bool? canWriteUserHistory,
+    String? completedPlatform,
+    bool? isMultiFileBatch,
+  }) async {
+    await _ensureAuthReady();
+
+    if ((_chargeKey ?? '').trim().isEmpty) {
+      throw Exception('SERVER_ERROR:failed-precondition:Translation session not prepared.');
+    }
+
+    final fullTargetLanguage = _getFullLanguageName(targetLanguage);
+    final ctx = (contextHint ?? '').trim();
+    final srcHint = (sourceLanguageHint ?? '').trim();
+
+    final systemPrompt =
+        '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
+Görevin: Verilen SRT formatındaki altyazı bloklarını [${srcHint.isNotEmpty ? srcHint : 'Kaynak Dil'}]'den $fullTargetLanguage diline çevirmek.
+
+Kurallar:
+1. Çeviriyi yaparken "çeviri kokan" cümlelerden kaçın. Hedef dilde ($fullTargetLanguage) günlük hayatta nasıl konuşuluyorsa öyle yaz.
+2. Deyimleri, argoları ve kültürel referansları kelimesi kelimesine değil, $fullTargetLanguage kültüründeki en doğal karşılıklarıyla uyarla.
+3. Cümleleri mümkün olduğunca kısa ve öz tut.
+4. Karakterlerin duygusunu ve sahnenin tonunu yansıt.
+5. SRT formatını (Zaman kodları ve Blok Numaraları) ASLA bozma ve değiştirmeden aynen koru.
+6. Bir satır aşırı cinsel/açık saçık olduğu için doğrudan çevrilirse sorun çıkaracaksa satırı ASLA atlama, boş bırakma veya çevirmeyi reddetme; anlamı koruyarak daha yumuşak ve örtülü bir dille çevir.
+${ctx.isNotEmpty ? 'Bağlam (Film/Dizi Bilgisi): $ctx\n' : ''}''';
+
+    Future<String> attemptCall() async {
+      final data = {
+        'chunks': chunks,
+        'systemPrompt': systemPrompt,
+        'deviceId': _deviceId,
+        if (_chargeKey != null && _chargeKey!.trim().isNotEmpty)
+          'chargeKey': _chargeKey,
+        if (fcmToken != null) 'fcmToken': fcmToken,
+        if (sourceHash != null) 'sourceHash': sourceHash,
+        if (sourceContent != null) 'sourceContent': sourceContent,
+        'targetLanguage': targetLanguage,
+        'targetLanguageName': fullTargetLanguage,
+        if (originalNameForGlobalCache != null)
+          'originalNameForGlobalCache': originalNameForGlobalCache,
+        if (fileNameForHistory != null) 'fileNameForHistory': fileNameForHistory,
+        if (totalLines != null) 'totalLines': totalLines,
+        if (canWriteUserHistory != null)
+          'canWriteUserHistory': canWriteUserHistory,
+        if (completedPlatform != null) 'completedPlatform': completedPlatform,
+        if (isMultiFileBatch != null) 'isMultiFileBatch': isMultiFileBatch,
+      };
+
+      Map resultData;
+      if (io_platform.isDesktop) {
+        resultData = await _callCloudFunctionViaHttp('startBatchTranslation', data);
+      } else {
+        final callable = _functions.httpsCallable('startBatchTranslation');
+        final result = await callable.call(data);
+        resultData = result.data as Map;
+      }
+
+      if (resultData['success'] == true) {
+        return resultData['jobName'] as String;
+      }
+      throw Exception('Failed to start batch job');
+    }
+
+    try {
+      return await attemptCall();
+    } catch (e) {
+      if (e is FirebaseFunctionsException && e.code == 'unauthenticated') {
+        // Try a one-time auth refresh + retry.
+        await _ensureAuthReady();
+        try {
+          return await attemptCall();
+        } catch (retryError) {
+          throw Exception('SERVER_ERROR:unauthenticated:Auth refresh declined.');
+        }
+      }
+      if (e is FirebaseFunctionsException) {
+        throw Exception('SERVER_ERROR:${e.code}:${e.message}');
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> checkBatchTranslationStatus({
+    required String jobName,
+    String? sourceHash,
+    String? sourceContent,
+    String? targetLanguage,
+    String? originalNameForGlobalCache,
+    String? fileNameForHistory,
+    int? totalLines,
+    bool? canWriteUserHistory,
+    String? completedPlatform,
+  }) async {
+    await _ensureAuthReady();
+    final data = {
+      'jobName': jobName,
+      'deviceId': _deviceId,
+      if (sourceHash != null) 'sourceHash': sourceHash,
+      if (sourceContent != null) 'sourceContent': sourceContent,
+      if (targetLanguage != null) 'targetLanguage': targetLanguage,
+      if (targetLanguage != null)
+        'targetLanguageName': _getFullLanguageName(targetLanguage),
+      if (originalNameForGlobalCache != null)
+        'originalNameForGlobalCache': originalNameForGlobalCache,
+      if (fileNameForHistory != null) 'fileNameForHistory': fileNameForHistory,
+      if (totalLines != null) 'totalLines': totalLines,
+      if (canWriteUserHistory != null)
+        'canWriteUserHistory': canWriteUserHistory,
+      if (completedPlatform != null) 'completedPlatform': completedPlatform,
+    };
+    
+    if (io_platform.isDesktop) {
+      return await _callCloudFunctionViaHttp('checkBatchTranslation', data);
+    } else {
+      final callable = _functions.httpsCallable('checkBatchTranslation');
+      final result = await callable.call(data);
+      final mapData = result.data;
+      if (mapData is Map) {
+        return Map<String, dynamic>.from(mapData);
+      }
+      return {};
+    }
   }
 }

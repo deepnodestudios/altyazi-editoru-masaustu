@@ -20,6 +20,7 @@ class AiPanelSelectedFilesSection extends StatefulWidget {
   final List<BatchFileItem> selectedFiles;
   final int activeIndex;
   final bool isTranslationRunning;
+  final List<String> activeBatchPaths;
 
   final VoidCallback onClearAll;
   final Future<void> Function(String path) onRemoveByPath;
@@ -41,6 +42,7 @@ class AiPanelSelectedFilesSection extends StatefulWidget {
     required this.selectedFiles,
     required this.activeIndex,
     required this.isTranslationRunning,
+    this.activeBatchPaths = const [],
     required this.onClearAll,
     required this.onRemoveByPath,
     required this.onReorder,
@@ -82,6 +84,15 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
   String? _draggedPath;
   Set<String> _dragGroupPaths = <String>{};
   List<BatchFileItem> _dragGroupItems = const <BatchFileItem>[];
+  // ── Custom multi-drag state ──
+  bool _customMultiDragActive = false;
+  Offset? _customDragPointerGlobal;
+  int _customDragGapVirtualIndex = 0;
+  OverlayEntry? _customDragOverlay;
+  Timer? _customDragAutoScrollTimer;
+  int? _customDragPointerId;
+  List<BatchFileItem> _customDragNonSelectedFiles = const [];
+  final ScrollController _scrollController = ScrollController();
 
   bool get _isDesktopLayout =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -94,12 +105,6 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
 
   bool get _shouldSuppressHoverUi =>
       _isReorderDragging || _isTooltipCooldownActive || _marqueeArmed || _isMarqueeActive;
-
-    bool get _isMultiDragProxyActive =>
-      _isReorderDragging &&
-      _draggedPath != null &&
-      _dragGroupItems.length > 1 &&
-      _dragGroupPaths.contains(_draggedPath);
 
   void _setStateSafely(VoidCallback fn) {
     if (!mounted) return;
@@ -146,6 +151,10 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
   @override
   void dispose() {
     _deleteHoverTimer?.cancel();
+    _customDragAutoScrollTimer?.cancel();
+    _customDragOverlay?.remove();
+    _customDragOverlay = null;
+    _scrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -171,14 +180,18 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
           _sourceIcon(fileInfo.source),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              fileInfo.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: widget.colorScheme.onSurface,
-                fontSize: 12,
-                fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
+            child: Tooltip(
+              message: fileInfo.name,
+              waitDuration: const Duration(milliseconds: 500),
+              child: Text(
+                fileInfo.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: widget.colorScheme.onSurface,
+                  fontSize: 12,
+                  fontWeight: primary ? FontWeight.w700 : FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -220,18 +233,362 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
     );
   }
 
-  double _movingGroupGapHeight() {
-    final count = _dragGroupItems.isEmpty ? 1 : _dragGroupItems.length;
-    final rowUnit = _isDesktopLayout ? (_desktopTileHeight + 2) : 58.0;
-    const containerVerticalPadding = 10.0; // top 6 + bottom 4
-    return (count * rowUnit) + containerVerticalPadding;
+  // ── Custom multi-drag helpers ──
+
+  double get _rowHeight => _isDesktopLayout ? (_desktopTileHeight + 2) : 58.0;
+
+  void _startCustomMultiDrag(int index, String filePath, PointerDownEvent event) {
+    final selectedInList = widget.selectedFiles
+        .map((f) => f.path)
+        .where(_selectedPaths.contains)
+        .toSet();
+
+    final dragPaths = selectedInList.contains(filePath) && selectedInList.length > 1
+        ? selectedInList
+        : <String>{filePath};
+    final dragItems = widget.selectedFiles
+        .where((item) => dragPaths.contains(item.path))
+        .toList(growable: false);
+    final nonSelected = widget.selectedFiles
+        .where((item) => !dragPaths.contains(item.path))
+        .toList(growable: false);
+
+    _endMarquee();
+    _deleteHoverTimer?.cancel();
+
+    final savedOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+    setState(() {
+      _isReorderDragging = true;
+      _lastReorderEndedAt = null;
+      _deleteLabelIndex = null;
+      _draggedPath = filePath;
+      _dragGroupPaths = dragPaths;
+      _dragGroupItems = dragItems;
+      _customMultiDragActive = true;
+      _customDragPointerGlobal = event.position;
+      _customDragPointerId = event.pointer;
+      _customDragNonSelectedFiles = nonSelected;
+      _customDragGapVirtualIndex = _initialGapIndex(dragPaths);
+    });
+
+    // Restore scroll position after widget tree swap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients && _customMultiDragActive) {
+        _scrollController.jumpTo(savedOffset.clamp(
+          0.0, _scrollController.position.maxScrollExtent));
+      }
+    });
+
+    _customDragOverlay = OverlayEntry(builder: (_) => _buildCustomDragOverlayWidget());
+    Overlay.of(context).insert(_customDragOverlay!);
   }
 
-  Widget _buildMovingGroupGapPlaceholder() {
-    return SizedBox(
-      height: _movingGroupGapHeight(),
-      child: const ColoredBox(color: Colors.transparent),
+  void _updateCustomDrag(Offset globalPosition) {
+    final newGap = _calculateGapIndex(globalPosition);
+    setState(() {
+      _customDragPointerGlobal = globalPosition;
+      _customDragGapVirtualIndex = newGap;
+    });
+    _customDragOverlay?.markNeedsBuild();
+    _handleAutoScroll(globalPosition);
+  }
+
+  void _endCustomMultiDrag() {
+    _customDragAutoScrollTimer?.cancel();
+    _customDragAutoScrollTimer = null;
+
+    // Calculate delta for parent's reorder algorithm
+    final selectedIndices = <int>[];
+    for (var i = 0; i < widget.selectedFiles.length; i++) {
+      if (_dragGroupPaths.contains(widget.selectedFiles[i].path)) {
+        selectedIndices.add(i);
+      }
+    }
+
+    final draggedPath = _draggedPath ?? '';
+    final selectedPaths = {..._selectedPaths};
+
+    // Remove overlay & reset state
+    _customDragOverlay?.remove();
+    _customDragOverlay = null;
+
+    final savedOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+    setState(() {
+      _customMultiDragActive = false;
+      _isReorderDragging = false;
+      _lastReorderEndedAt = DateTime.now();
+      _hoveredIndex = null;
+      _draggedPath = null;
+      _dragGroupPaths = <String>{};
+      _dragGroupItems = const <BatchFileItem>[];
+      _customDragPointerGlobal = null;
+      _customDragPointerId = null;
+      _customDragNonSelectedFiles = const [];
+    });
+
+    // Restore scroll position after widget tree swap
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients && !_customMultiDragActive) {
+        _scrollController.jumpTo(savedOffset.clamp(
+          0.0, _scrollController.position.maxScrollExtent));
+      }
+    });
+
+    if (selectedIndices.isEmpty) return;
+    selectedIndices.sort();
+
+    final oldIndex = widget.selectedFiles.indexWhere((f) => f.path == draggedPath);
+    if (oldIndex < 0) return;
+
+    // delta = desired gap position minus current first-selected position
+    final minIndex = selectedIndices.first;
+    final delta = _customDragGapVirtualIndex - minIndex;
+    if (delta == 0) return;
+
+    // Convert to (oldIndex, newIndex) pair that the parent expects
+    final normalizedNew = oldIndex + delta;
+    final newIndex = delta > 0 ? normalizedNew + 1 : normalizedNew;
+
+    widget.onReorder(oldIndex, newIndex, selectedPaths, draggedPath);
+  }
+
+  void _cancelCustomMultiDrag() {
+    _customDragAutoScrollTimer?.cancel();
+    _customDragAutoScrollTimer = null;
+    _customDragOverlay?.remove();
+    _customDragOverlay = null;
+
+    final savedOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+    setState(() {
+      _customMultiDragActive = false;
+      _isReorderDragging = false;
+      _lastReorderEndedAt = DateTime.now();
+      _hoveredIndex = null;
+      _draggedPath = null;
+      _dragGroupPaths = <String>{};
+      _dragGroupItems = const <BatchFileItem>[];
+      _customDragPointerGlobal = null;
+      _customDragPointerId = null;
+      _customDragNonSelectedFiles = const [];
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients && !_customMultiDragActive) {
+        _scrollController.jumpTo(savedOffset.clamp(
+          0.0, _scrollController.position.maxScrollExtent));
+      }
+    });
+  }
+
+  /// Where the gap should start initially: count non-selected items
+  /// that appear before the first selected item in the original list.
+  int _initialGapIndex(Set<String> dragPaths) {
+    int firstSelectedOrigIdx = -1;
+    for (var i = 0; i < widget.selectedFiles.length; i++) {
+      if (dragPaths.contains(widget.selectedFiles[i].path)) {
+        firstSelectedOrigIdx = i;
+        break;
+      }
+    }
+    if (firstSelectedOrigIdx < 0) return 0;
+    int count = 0;
+    for (var i = 0; i < firstSelectedOrigIdx; i++) {
+      if (!dragPaths.contains(widget.selectedFiles[i].path)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /// Incremental gap calculation: uses the proxy's top/bottom edges
+  /// so that a file swaps as soon as the first pixel touches it.
+  int _calculateGapIndex(Offset globalPointer) {
+    final listContext = _listStackKey.currentContext;
+    if (listContext == null) return _customDragGapVirtualIndex;
+    final renderBox = listContext.findRenderObject();
+    if (renderBox is! RenderBox || !renderBox.hasSize) return _customDragGapVirtualIndex;
+
+    final localY = renderBox.globalToLocal(globalPointer).dy;
+    final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+    final relativeY = localY + scrollOffset;
+
+    final gapSize = _dragGroupPaths.length;
+    final nonSelectedCount = _customDragNonSelectedFiles.length;
+    final currentGap = _customDragGapVirtualIndex;
+
+    // Where the dragged item sits within the group (0-based)
+    final dragIdxInGroup = _dragGroupItems.indexWhere((item) => item.path == _draggedPath);
+    final idxInGroup = dragIdxInGroup < 0 ? 0 : dragIdxInGroup;
+
+    // Proxy top/bottom in virtual-list pixel space
+    final proxyTopPx = relativeY - idxInGroup * _rowHeight - _rowHeight / 2;
+    final proxyBottomPx = proxyTopPx + gapSize * _rowHeight;
+
+    // Current gap boundaries
+    final gapTopPx = currentGap * _rowHeight;
+    final gapBottomPx = (currentGap + gapSize) * _rowHeight;
+
+    if (proxyBottomPx > gapBottomPx && currentGap < nonSelectedCount) {
+      // Proxy bottom passed gap bottom → move gap down
+      final crossed = ((proxyBottomPx - gapBottomPx) / _rowHeight).floor() + 1;
+      return (currentGap + crossed).clamp(0, nonSelectedCount);
+    }
+
+    if (proxyTopPx < gapTopPx && currentGap > 0) {
+      // Proxy top passed gap top → move gap up
+      final crossed = ((gapTopPx - proxyTopPx) / _rowHeight).floor() + 1;
+      return (currentGap - crossed).clamp(0, nonSelectedCount);
+    }
+
+    return currentGap;
+  }
+
+  void _handleAutoScroll(Offset globalPointer) {
+    if (!widget.scrollableList || !_scrollController.hasClients) {
+      _customDragAutoScrollTimer?.cancel();
+      _customDragAutoScrollTimer = null;
+      return;
+    }
+
+    final listContext = _listStackKey.currentContext;
+    if (listContext == null) return;
+    final renderBox = listContext.findRenderObject();
+    if (renderBox is! RenderBox || !renderBox.hasSize) return;
+
+    final localY = renderBox.globalToLocal(globalPointer).dy;
+    final listHeight = renderBox.size.height;
+
+    const edgeThreshold = 50.0;
+    const maxSpeed = 10.0;
+
+    double scrollDelta = 0;
+    if (localY < edgeThreshold) {
+      scrollDelta = -maxSpeed * (1.0 - localY / edgeThreshold);
+    } else if (localY > listHeight - edgeThreshold) {
+      scrollDelta = maxSpeed * (1.0 - (listHeight - localY) / edgeThreshold);
+    }
+
+    if (scrollDelta != 0) {
+      _customDragAutoScrollTimer ??= Timer.periodic(
+        const Duration(milliseconds: 16),
+        (_) {
+          if (!_customMultiDragActive || !_scrollController.hasClients) {
+            _customDragAutoScrollTimer?.cancel();
+            _customDragAutoScrollTimer = null;
+            return;
+          }
+          final newOffset = (_scrollController.offset + scrollDelta)
+              .clamp(0.0, _scrollController.position.maxScrollExtent);
+          _scrollController.jumpTo(newOffset);
+          // Recalculate gap while auto-scrolling
+          if (_customDragPointerGlobal != null) {
+            final newGap = _calculateGapIndex(_customDragPointerGlobal!);
+            if (newGap != _customDragGapVirtualIndex) {
+              setState(() => _customDragGapVirtualIndex = newGap);
+            }
+          }
+        },
+      );
+    } else {
+      _customDragAutoScrollTimer?.cancel();
+      _customDragAutoScrollTimer = null;
+    }
+  }
+
+  Widget _buildCustomDragOverlayWidget() {
+    final pointer = _customDragPointerGlobal;
+    if (pointer == null || _dragGroupItems.isEmpty) return const SizedBox.shrink();
+
+    // Calculate proxy position so dragged item is at pointer
+    final listContext = _listStackKey.currentContext;
+    double proxyLeft = pointer.dx - 200;
+    double proxyWidth = 400;
+    if (listContext != null) {
+      final rb = listContext.findRenderObject();
+      if (rb is RenderBox && rb.hasSize) {
+        final origin = rb.localToGlobal(Offset.zero);
+        proxyLeft = origin.dx;
+        proxyWidth = rb.size.width;
+      }
+    }
+
+    final draggedIndexInGroup =
+        _dragGroupItems.indexWhere((item) => item.path == _draggedPath);
+    const containerPadTop = 6.0;
+    final draggedOffsetInProxy =
+        containerPadTop + (draggedIndexInGroup < 0 ? 0 : draggedIndexInGroup) * _rowHeight + _desktopTileHeight / 2;
+    final proxyTop = pointer.dy - draggedOffsetInProxy;
+
+    return Positioned(
+      left: proxyLeft,
+      top: proxyTop,
+      width: proxyWidth,
+      child: IgnorePointer(
+        child: Material(
+          color: Colors.transparent,
+          elevation: 8,
+          shadowColor: widget.colorScheme.shadow.withValues(alpha: 0.28),
+          child: Opacity(
+            opacity: 0.92,
+            child: _buildDragProxyGroup(),
+          ),
+        ),
+      ),
     );
+  }
+
+  Widget _buildAnimatedCustomDragList() {
+    final nonSelected = _customDragNonSelectedFiles;
+    final gapIdx = _customDragGapVirtualIndex;
+    final gapSize = _dragGroupPaths.length;
+
+    final children = <Widget>[];
+    for (var i = 0; i <= nonSelected.length; i++) {
+      // Animated gap spacer at each possible position
+      children.add(
+        AnimatedContainer(
+          key: ValueKey('__aGap_$i'),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          height: i == gapIdx ? gapSize * _rowHeight : 0,
+        ),
+      );
+      // File tile
+      if (i < nonSelected.length) {
+        final fileInfo = nonSelected[i];
+        final originalIndex = widget.selectedFiles.indexOf(fileInfo);
+        final isActive = originalIndex == widget.activeIndex || widget.activeBatchPaths.contains(fileInfo.path);
+        children.add(
+          KeyedSubtree(
+            key: ObjectKey(fileInfo),
+            child: _buildTile(
+              index: originalIndex,
+              isActive: isActive,
+              isSelected: false,
+              fileInfo: fileInfo,
+              tileKey: _keyForPath(fileInfo.path),
+            ),
+          ),
+        );
+      }
+    }
+
+    final column = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+
+    if (widget.scrollableList) {
+      return SingleChildScrollView(
+        controller: _scrollController,
+        physics: const ClampingScrollPhysics(),
+        child: column,
+      );
+    }
+    return column;
   }
 
   bool get _isCtrlPressed =>
@@ -350,6 +707,8 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
     final origin = renderObject.localToGlobal(Offset.zero);
     return globalRect.shift(-origin);
   }
+
+
 
   Future<void> _deleteSelectedByKeyboard() async {
     if (_selectedPaths.isEmpty) return;
@@ -603,23 +962,27 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
             if (widget.scrollableList)
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    _isDesktopLayout ? 8 : 10,
-                    0,
-                    _isDesktopLayout ? 8 : 10,
-                    _isDesktopLayout ? 8 : 10,
-                  ),
+                  padding: widget.selectedFiles.isEmpty
+                      ? EdgeInsets.zero
+                      : EdgeInsets.fromLTRB(
+                          _isDesktopLayout ? 8 : 10,
+                          0,
+                          _isDesktopLayout ? 8 : 10,
+                          _isDesktopLayout ? 8 : 10,
+                        ),
                   child: _buildContent(),
                 ),
               )
             else
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                  _isDesktopLayout ? 8 : 10,
-                  0,
-                  _isDesktopLayout ? 8 : 10,
-                  _isDesktopLayout ? 8 : 10,
-                ),
+                padding: widget.selectedFiles.isEmpty
+                    ? EdgeInsets.zero
+                    : EdgeInsets.fromLTRB(
+                        _isDesktopLayout ? 8 : 10,
+                        0,
+                        _isDesktopLayout ? 8 : 10,
+                        _isDesktopLayout ? 8 : 10,
+                      ),
                 child: _buildContent(),
               ),
           ],
@@ -724,6 +1087,10 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         _startMarquee(event.position);
       },
       onPointerMove: (event) {
+        if (_customMultiDragActive && event.pointer == _customDragPointerId) {
+          _updateCustomDrag(event.position);
+          return;
+        }
         if (_isReorderDragging) return;
         if (_suppressMarqueePointerId == event.pointer) return;
         if (!_marqueeArmed || _marqueeStartGlobal == null) return;
@@ -742,6 +1109,10 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         _updateSelectionFromMarquee(event.position);
       },
       onPointerUp: (event) {
+        if (_customMultiDragActive && event.pointer == _customDragPointerId) {
+          _endCustomMultiDrag();
+          return;
+        }
         if (_isReorderDragging) return;
         if (_suppressMarqueePointerId == event.pointer) {
           _suppressMarqueePointerId = null;
@@ -764,158 +1135,124 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
         if (_suppressMarqueePointerId == event.pointer) {
           _suppressMarqueePointerId = null;
         }
+        if (_customMultiDragActive && event.pointer == _customDragPointerId) {
+          _cancelCustomMultiDrag();
+          return;
+        }
         if (_isReorderDragging) return;
         _endMarquee();
       },
       child: Stack(
         key: _listStackKey,
         children: [
-          ReorderableListView.builder(
-      shrinkWrap: !widget.scrollableList,
-      physics: widget.scrollableList
-          ? const ClampingScrollPhysics()
-          : const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      itemCount: widget.selectedFiles.length,
-      proxyDecorator: (child, index, animation) {
-        final pathAtIndex =
-            (index >= 0 && index < widget.selectedFiles.length)
-                ? widget.selectedFiles[index].path
-                : null;
-        final useGroupProxy =
-            _isMultiDragProxyActive &&
-            pathAtIndex != null &&
-            pathAtIndex == _draggedPath;
+          if (_customMultiDragActive)
+            _buildAnimatedCustomDragList()
+          else
+            ReorderableListView.builder(
+              scrollController: _scrollController,
+              shrinkWrap: !widget.scrollableList,
+              physics: widget.scrollableList
+                  ? const ClampingScrollPhysics()
+                  : const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: widget.selectedFiles.length,
+              proxyDecorator: (child, index, animation) {
+                return AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, _) {
+                    final elevation = Tween<double>(begin: 2, end: 10)
+                        .transform(animation.value);
+                    return Material(
+                      color: Colors.transparent,
+                      elevation: elevation,
+                      shadowColor:
+                          widget.colorScheme.shadow.withValues(alpha: 0.28),
+                      child: child,
+                    );
+                  },
+                );
+              },
+              onReorderStart: (index) {
+                // Only fires for single-item framework drag
+                final draggedPath =
+                    (index >= 0 && index < widget.selectedFiles.length)
+                        ? widget.selectedFiles[index].path
+                        : null;
+                if (mounted) {
+                  setState(() {
+                    _isReorderDragging = true;
+                    _lastReorderEndedAt = null;
+                    _deleteLabelIndex = null;
+                    _draggedPath = draggedPath;
+                    _dragGroupPaths =
+                        draggedPath == null ? <String>{} : <String>{draggedPath};
+                    _dragGroupItems = draggedPath == null
+                        ? const <BatchFileItem>[]
+                        : widget.selectedFiles
+                            .where((f) => f.path == draggedPath)
+                            .toList(growable: false);
+                  });
+                }
+                _deleteHoverTimer?.cancel();
+                _endMarquee();
+              },
+              onReorderEnd: (_) {
+                if (mounted) {
+                  setState(() {
+                    _isReorderDragging = false;
+                    _lastReorderEndedAt = DateTime.now();
+                    _hoveredIndex = null;
+                    _draggedPath = null;
+                    _dragGroupPaths = <String>{};
+                    _dragGroupItems = const <BatchFileItem>[];
+                  });
+                }
+              },
+              onReorder: (oldIndex, newIndex) {
+                if (oldIndex < 0 || oldIndex >= widget.selectedFiles.length) return;
+                final draggedPath = widget.selectedFiles[oldIndex].path;
+                widget.onReorder(
+                  oldIndex,
+                  newIndex,
+                  {..._selectedPaths},
+                  draggedPath,
+                );
+              },
+              itemBuilder: (context, index) {
+                  final fileInfo = widget.selectedFiles[index];
+                  final filePath = fileInfo.path;
+                  final isActive = index == widget.activeIndex || widget.activeBatchPaths.contains(filePath);
+                  final isSelected = _selectedPaths.contains(filePath);
 
-        return AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            final elevation = Tween<double>(begin: 2, end: 10).transform(animation.value);
-            return Material(
-              color: Colors.transparent,
-              elevation: elevation,
-              shadowColor: widget.colorScheme.shadow.withValues(alpha: 0.28),
-              child: useGroupProxy ? _buildDragProxyGroup() : child,
-            );
-          },
-        );
-      },
-      onReorderStart: (index) {
-        final draggedPath =
-            (index >= 0 && index < widget.selectedFiles.length)
-                ? widget.selectedFiles[index].path
-                : null;
-        final selectedInList = widget.selectedFiles
-            .map((f) => f.path)
-            .where(_selectedPaths.contains)
-            .toSet();
+                final tile = _buildTile(
+                  index: index,
+                  isActive: isActive,
+                  isSelected: isSelected,
+                  fileInfo: fileInfo,
+                  tileKey: _keyForPath(filePath),
+                );
 
-        final shouldDragAsGroup =
-            draggedPath != null &&
-            selectedInList.contains(draggedPath) &&
-            selectedInList.length > 1;
-        final dragPaths = shouldDragAsGroup
-            ? selectedInList
-            : (draggedPath == null ? <String>{} : <String>{draggedPath});
-        final dragItems = widget.selectedFiles
-            .where((item) => dragPaths.contains(item.path))
-            .toList(growable: false);
+                if (_isDesktopLayout) {
+                  return KeyedSubtree(
+                    key: ObjectKey(fileInfo),
+                    child: tile,
+                  );
+                }
 
-        if (mounted) {
-          setState(() {
-            _isReorderDragging = true;
-            _lastReorderEndedAt = null;
-            _deleteLabelIndex = null;
-            _draggedPath = draggedPath;
-            _dragGroupPaths = dragPaths;
-            _dragGroupItems = dragItems;
-          });
-        } else {
-          _isReorderDragging = true;
-          _lastReorderEndedAt = null;
-          _deleteLabelIndex = null;
-          _draggedPath = draggedPath;
-          _dragGroupPaths = dragPaths;
-          _dragGroupItems = dragItems;
-        }
-        _deleteHoverTimer?.cancel();
-        _endMarquee();
-      },
-      onReorderEnd: (_) {
-        if (mounted) {
-          setState(() {
-            _isReorderDragging = false;
-            _lastReorderEndedAt = DateTime.now();
-            _hoveredIndex = null;
-            _draggedPath = null;
-            _dragGroupPaths = <String>{};
-            _dragGroupItems = const <BatchFileItem>[];
-          });
-        } else {
-          _isReorderDragging = false;
-          _lastReorderEndedAt = DateTime.now();
-          _hoveredIndex = null;
-          _draggedPath = null;
-          _dragGroupPaths = <String>{};
-          _dragGroupItems = const <BatchFileItem>[];
-        }
-      },
-      onReorder: (oldIndex, newIndex) {
-        if (oldIndex < 0 || oldIndex >= widget.selectedFiles.length) return;
-        final draggedPath = widget.selectedFiles[oldIndex].path;
-        widget.onReorder(
-          oldIndex,
-          newIndex,
-          {..._selectedPaths},
-          draggedPath,
-        );
-      },
-      itemBuilder: (context, index) {
-        final isActive = index == widget.activeIndex;
-        final fileInfo = widget.selectedFiles[index];
-        final filePath = fileInfo.path;
-        final isSelected = _selectedPaths.contains(filePath);
-
-        final tile = _buildTile(
-          index: index,
-          isActive: isActive,
-          isSelected: isSelected,
-          fileInfo: fileInfo,
-          tileKey: _keyForPath(filePath),
-        );
-
-        final hideAsPartOfDragGroup =
-            _isMultiDragProxyActive &&
-            _dragGroupPaths.contains(filePath) &&
-            filePath != _draggedPath;
-        final isDraggedGroupAnchor =
-            _isMultiDragProxyActive && filePath == _draggedPath;
-        final itemTile = AnimatedSize(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: hideAsPartOfDragGroup
-              ? const SizedBox.shrink()
-              : (isDraggedGroupAnchor ? _buildMovingGroupGapPlaceholder() : tile),
-        );
-
-        if (_isDesktopLayout) {
-          return KeyedSubtree(
-            key: ObjectKey(fileInfo),
-            child: itemTile,
-          );
-        }
-
-        return Dismissible(
-          key: ObjectKey(fileInfo),
-          direction: isActive ? DismissDirection.none : DismissDirection.horizontal,
-          background: _buildDismissBackground(left: true),
-          secondaryBackground: _buildDismissBackground(left: false),
-          onDismissed: (_) => unawaited(widget.onRemoveByPath(filePath)),
-          child: itemTile,
-        );
-      },
-    ),
+                return Dismissible(
+                  key: ObjectKey(fileInfo),
+                  direction: isActive
+                      ? DismissDirection.none
+                      : DismissDirection.horizontal,
+                  background: _buildDismissBackground(left: true),
+                  secondaryBackground: _buildDismissBackground(left: false),
+                  onDismissed: (_) =>
+                      unawaited(widget.onRemoveByPath(filePath)),
+                  child: tile,
+                );
+              },
+            ),
+          // ── Marquee selection overlay ──
           if (_isMarqueeActive && _marqueeRectLocal() != null)
             Positioned.fromRect(
               rect: _marqueeRectLocal()!,
@@ -1060,6 +1397,22 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
               _showContextMenu(context, details.globalPosition, fileInfo, index);
             }
           },
+          onDoubleTap: () {
+            var path = fileInfo.path;
+            if (widget.onGetOriginalPath != null) {
+              final original = widget.onGetOriginalPath!(path);
+              if (original.isNotEmpty) path = original;
+            }
+            if (Platform.isWindows) {
+              final windowsPath = path.replaceAll('/', '\\');
+              Process.run('explorer.exe', ['/select,', windowsPath]);
+            } else if (Platform.isMacOS) {
+              Process.run('open', ['-R', path]);
+            } else if (Platform.isLinux) {
+              final dir = File(path).parent.path;
+              Process.run('xdg-open', [dir]);
+            }
+          },
           child: ListTile(
         dense: _isDesktopLayout,
         visualDensity: _isDesktopLayout
@@ -1081,15 +1434,19 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
                   ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                fileInfo.name,
-                style: TextStyle(
-                  color: widget.colorScheme.onSurface,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                  fontSize: _isDesktopLayout ? 12 : 14,
+              child: Tooltip(
+                message: fileInfo.name,
+                waitDuration: const Duration(milliseconds: 500),
+                child: Text(
+                  fileInfo.name,
+                  style: TextStyle(
+                    color: widget.colorScheme.onSurface,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                    fontSize: _isDesktopLayout ? 12 : 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -1202,26 +1559,13 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
               const SizedBox(width: 4),
             ],
             if (!isActive)
-              ReorderableDragStartListener(
-                index: index,
-                child: Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (event) {
-                    if (!_isDesktopLayout) return;
-                    if (event.buttons != kPrimaryMouseButton) return;
-                    _suppressMarqueeForPointer(event.pointer);
-                  },
-                  onPointerUp: (event) {
-                    if (_suppressMarqueePointerId == event.pointer) {
-                      _suppressMarqueePointerId = null;
-                    }
-                  },
-                  onPointerCancel: (event) {
-                    if (_suppressMarqueePointerId == event.pointer) {
-                      _suppressMarqueePointerId = null;
-                    }
-                  },
-                  child: Container(
+              Builder(
+                builder: (dragHandleContext) {
+                  final useCustomMultiDrag = _isDesktopLayout &&
+                      _selectedPaths.contains(fileInfo.path) &&
+                      _selectedPaths.length > 1;
+
+                  final dragIcon = Container(
                     padding: EdgeInsets.all(_isDesktopLayout ? 4 : 8),
                     color: Colors.transparent,
                     child: Icon(
@@ -1229,8 +1573,45 @@ class _AiPanelSelectedFilesSectionState extends State<AiPanelSelectedFilesSectio
                       color: widget.colorScheme.outline,
                       size: _isDesktopLayout ? 18 : 22,
                     ),
-                  ),
-                ),
+                  );
+
+                  if (useCustomMultiDrag) {
+                    // Custom multi-drag: intercept pointer, bypass framework drag
+                    return Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (event) {
+                        if (event.buttons != kPrimaryMouseButton) return;
+                        _suppressMarqueeForPointer(event.pointer);
+                        _startCustomMultiDrag(index, fileInfo.path, event);
+                      },
+                      child: dragIcon,
+                    );
+                  }
+
+                  // Single-item drag via framework
+                  return ReorderableDragStartListener(
+                    index: index,
+                    child: Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (event) {
+                        if (!_isDesktopLayout) return;
+                        if (event.buttons != kPrimaryMouseButton) return;
+                        _suppressMarqueeForPointer(event.pointer);
+                      },
+                      onPointerUp: (event) {
+                        if (_suppressMarqueePointerId == event.pointer) {
+                          _suppressMarqueePointerId = null;
+                        }
+                      },
+                      onPointerCancel: (event) {
+                        if (_suppressMarqueePointerId == event.pointer) {
+                          _suppressMarqueePointerId = null;
+                        }
+                      },
+                      child: dragIcon,
+                    ),
+                  );
+                },
               )
             else if (widget.isTranslationRunning)
               Padding(

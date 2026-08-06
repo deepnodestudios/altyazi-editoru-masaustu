@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
@@ -35,8 +35,9 @@ class CloudStorageService {
   // Dependencies
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: [
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive.appdata',
+      'openid',
+      'email',
+      'profile',
     ],
   );
 
@@ -74,11 +75,11 @@ class CloudStorageService {
   // Overrides
   String _overrideDropboxClientId = '';
   String _overrideGoogleOauthClientId = '';
+  final String _overrideGoogleOauthClientSecret = '';
   String _overrideYandexClientId = '';
   String _overrideYandexClientSecret = '';
   bool _remoteGoogleOauthClientResolved = false;
   DateTime? _lastRemoteGoogleOauthAttemptAt;
-  bool _desktopGoogleSignInRegistered = false;
 
   CloudStorageService(this._cloudStateManager) {
     _preferencesLoadFuture = _loadPreferences();
@@ -149,8 +150,15 @@ class CloudStorageService {
     final prefs = await SharedPreferences.getInstance();
     _overrideDropboxClientId =
         prefs.getString(_prefsDropboxClientIdOverride) ?? '';
-    _overrideGoogleOauthClientId =
-        prefs.getString(_prefsGoogleOauthClientIdOverride) ?? '';
+    
+    // Ignore cached overrides for Google if on desktop (force native config)
+    if (_isDesktop) {
+        _overrideGoogleOauthClientId = '';
+    } else {
+        _overrideGoogleOauthClientId =
+            prefs.getString(_prefsGoogleOauthClientIdOverride) ?? '';
+    }
+
     _overrideYandexClientId =
         prefs.getString(_prefsYandexClientIdOverride) ?? '';
     _overrideYandexClientSecret =
@@ -209,9 +217,9 @@ class CloudStorageService {
       final fromWeb = safeGetString('google_web_client_id');
         final resolved = fromDesktop.isNotEmpty
           ? fromDesktop
-          : (fromPrimary.isNotEmpty
+          : (_isDesktop ? '' : (fromPrimary.isNotEmpty
             ? fromPrimary
-            : (fromLegacy.isNotEmpty ? fromLegacy : fromWeb));
+            : (fromLegacy.isNotEmpty ? fromLegacy : fromWeb)));
 
       if (resolved.isEmpty) {
         onLog?.call(
@@ -245,25 +253,7 @@ class CloudStorageService {
     return _secureMigrationFuture ??= _migrateOAuthTokensToSecureStorage();
   }
 
-  Future<void> _ensureDesktopGoogleSignInRegistered() async {
-    if (!_isDesktop || _desktopGoogleSignInRegistered) return;
-
-    if (!hasGoogleOAuthConfig) {
-      await _tryLoadGoogleOauthClientIdFromRemoteConfig();
-    }
-
-    if (!hasGoogleOAuthConfig) {
-      throw Exception(
-          'Google OAuth client id missing. On Windows, provide --dart-define=GOOGLE_OAUTH_CLIENT_ID=... (Remote Config is not available on this platform).');
-    }
-
-    try {
-      await GoogleSignInDart.register(clientId: effectiveGoogleOauthClientId);
-    } catch (e) {
-      _debugCloud('GoogleSignInDart register skipped/failed: $e');
-    }
-    _desktopGoogleSignInRegistered = true;
-  }
+  // MASAÜSTÜ GOOGLE_SIGN_IN_DARTIO KAYDI KALDIRILDI (ÖZEL AKIŞ KULLANILIYOR)
 
   Future<void> _migrateOAuthTokensToSecureStorage() async {
     // If older versions stored OAuth tokens in SharedPreferences (plaintext),
@@ -331,16 +321,22 @@ class CloudStorageService {
     required String redirectUri,
   }) async {
     final tokenUri = Uri.https('oauth2.googleapis.com', '/token');
-    final resp = await http.post(
-      tokenUri,
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
+final Map<String, String> requestBody = {
         'code': code,
         'client_id': effectiveGoogleOauthClientId,
         'redirect_uri': redirectUri,
         'grant_type': 'authorization_code',
         'code_verifier': codeVerifier,
-      },
+      };
+
+      if (effectiveGoogleOauthClientSecret.isNotEmpty) {
+        requestBody['client_secret'] = effectiveGoogleOauthClientSecret;
+      }
+
+      final resp = await http.post(
+        tokenUri,
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: requestBody,
     );
 
     if (resp.statusCode != 200) {
@@ -378,14 +374,20 @@ class CloudStorageService {
     required String refreshToken,
   }) async {
     final tokenUri = Uri.https('oauth2.googleapis.com', '/token');
-    final resp = await http.post(
-      tokenUri,
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {
+final Map<String, String> requestBody = {
         'grant_type': 'refresh_token',
         'refresh_token': refreshToken,
         'client_id': effectiveGoogleOauthClientId,
-      },
+      };
+
+      if (effectiveGoogleOauthClientSecret.isNotEmpty) {
+        requestBody['client_secret'] = effectiveGoogleOauthClientSecret;
+      }
+
+      final resp = await http.post(
+        tokenUri,
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: requestBody,
     );
 
     if (resp.statusCode != 200) {
@@ -457,15 +459,12 @@ class CloudStorageService {
       'openid',
       'email',
       'profile',
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive.appdata',
-      'https://www.googleapis.com/auth/drive.readonly',
     ];
 
     final callbackServer =
         await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final callbackUri =
-        Uri.parse('http://127.0.0.1:${callbackServer.port}/oauth2redirect');
+        Uri.parse('http://127.0.0.1:${callbackServer.port}');
 
     final authUri = Uri.https(
       'accounts.google.com',
@@ -564,6 +563,46 @@ class CloudStorageService {
       'lastSignIn': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    try {
+      String currentPlatform = 'unknown';
+      if (kIsWeb) {
+        currentPlatform = 'web';
+      } else {
+        switch (defaultTargetPlatform) {
+          case TargetPlatform.android:
+            currentPlatform = 'android';
+            break;
+          case TargetPlatform.windows:
+            currentPlatform = 'windows';
+            break;
+          case TargetPlatform.iOS:
+            currentPlatform = 'ios';
+            break;
+          case TargetPlatform.macOS:
+            currentPlatform = 'macos';
+            break;
+          case TargetPlatform.linux:
+            currentPlatform = 'linux';
+            break;
+          default:
+            currentPlatform = 'unknown';
+        }
+      }
+
+      await _firestore.collection('google_users').doc(signedInUser.uid).set({
+        'email': signedInUser.email,
+        'displayName': signedInUser.displayName,
+        'photoUrl': signedInUser.photoURL,
+        'uid': signedInUser.uid,
+        'provider': 'google.com',
+        'lastSignIn': FieldValue.serverTimestamp(),
+        'lastPlatform': currentPlatform,
+        'platforms': FieldValue.arrayUnion([currentPlatform]),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      onLog?.call('log_google_users_db_write_error', jsonEncode({'error': e.toString()}));
+    }
+
     if (onGoogleSignInSuccess != null) {
       await onGoogleSignInSuccess(signedInUser.uid);
     }
@@ -589,40 +628,29 @@ class CloudStorageService {
       final currentUser = auth.currentUser;
 
       if (_isDesktop) {
-        // Desktop: GoogleSignIn eklentisi ile giriş yap, ardından
-        // Firebase Auth'a credential ile bağlan.
-        // NOT: PKCE akışı client_secret gerektirdiği için devre dışı.
-        await _ensureDesktopGoogleSignInRegistered();
-        final account = await _googleSignIn.signIn();
-        if (account == null) return;
+        // Desktop: Özel localhost web sunucusu ile PKCE akışı kullanıyoruz.
+        // Bu akış offline (kalıcı) refresh_token sağlar, böylece uygulama
+        // kapatılıp açıldığında oturum korunur.
+        final accessToken = await _ensureDesktopGoogleAccessToken(interactive: true);
+        if (accessToken == null) return;
 
-        final googleAuth = await account.authentication;
-        if (googleAuth.idToken != null && googleAuth.idToken!.isNotEmpty) {
-          // Token'ları secure storage'a kaydet (kısa süreli restore için)
-          if (googleAuth.accessToken != null) {
-            await _secureWrite(
-                _prefsGoogleAccessToken, googleAuth.accessToken!);
-            await _secureWriteInt(
-              _prefsGoogleExpiresAtMs,
-              DateTime.now()
-                  .add(const Duration(minutes: 55))
-                  .millisecondsSinceEpoch,
-            );
-          }
-          await _secureWrite(_prefsGoogleIdToken, googleAuth.idToken!);
-
-          final credential = GoogleAuthProvider.credential(
-            accessToken: googleAuth.accessToken,
-            idToken: googleAuth.idToken,
-          );
-
-          await _signInWithGoogleCredential(
-            currentUser: currentUser,
-            credential: credential,
-            onGoogleSignInSuccess: onGoogleSignInSuccess,
-            connectedIdentity: account.email,
-          );
+        final idToken = await _secureRead(_prefsGoogleIdToken);
+        if (idToken == null || idToken.isEmpty) {
+          throw Exception('Google auth sign in missing idToken for Firebase');
         }
+
+        final credential = GoogleAuthProvider.credential(
+          accessToken: accessToken,
+          idToken: idToken,
+        );
+
+        await _signInWithGoogleCredential(
+          currentUser: currentUser,
+          credential: credential,
+          onGoogleSignInSuccess: onGoogleSignInSuccess,
+          connectedIdentity: null,
+        );
+
         return;
       }
 
@@ -658,30 +686,7 @@ class CloudStorageService {
   Future<void> restoreGoogleSession() async {
     try {
       if (_isDesktop) {
-        // 1) Eklenti üzerinden sessiz oturum açmayı dene
-        try {
-          await _ensureDesktopGoogleSignInRegistered();
-          final account = await _googleSignIn.signInSilently();
-          if (account != null) {
-            final googleAuth = await account.authentication;
-            final credential = GoogleAuthProvider.credential(
-              accessToken: googleAuth.accessToken,
-              idToken: googleAuth.idToken,
-            );
-            await FirebaseAuth.instance.signInWithCredential(credential);
-            await _persistGDriveConnected(true);
-            _debugCloud('Session restored via plugin signInSilently');
-            return;
-          }
-        } catch (e) {
-          _debugCloud('Plugin signInSilently failed: $e');
-          onLog?.call(
-            'log_gdrive_restore_error',
-            jsonEncode({'desktopPlugin': true, 'error': e.toString()}),
-          );
-        }
-
-        // 2) Saklı token (refresh token dahil) ile kontrol et
+        // Desktop: Saklı token (refresh token dahil) ile kontrol et
         final accessToken =
             await _ensureDesktopGoogleAccessToken(interactive: false);
         if (accessToken != null && accessToken.isNotEmpty) {
@@ -781,44 +786,10 @@ class CloudStorageService {
   Future<GoogleSignInAccount?> ensureGDriveAccount(
       {bool interactive = true}) async {
     if (_isDesktop) {
-      try {
-        await _ensureDesktopGoogleSignInRegistered();
-        GoogleSignInAccount? account = _googleSignIn.currentUser;
-        account ??= await _googleSignIn.signInSilently();
-        if (account == null && interactive) {
-          account = await _googleSignIn.signIn();
-        }
-
-        if (account != null && interactive) {
-          final granted = await _googleSignIn.requestScopes([
-            'https://www.googleapis.com/auth/drive.file',
-            'https://www.googleapis.com/auth/drive.readonly',
-          ]);
-          if (!granted) {
-            await _googleSignIn.signOut();
-            account = null;
-          }
-        }
-
-        if (account != null) {
-          _cloudStateManager.setIsGDriveConnected(true);
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('is_gdrive_connected', true);
-          return account;
-        }
-
-        final token =
-            await _ensureDesktopGoogleAccessToken(interactive: interactive);
-        final connected = token != null && token.isNotEmpty;
-        _cloudStateManager.setIsGDriveConnected(connected);
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_gdrive_connected', connected);
-        return null;
-      } catch (e) {
-        onLog?.call(
-            'log_gdrive_auth_error', jsonEncode({'error': e.toString()}));
-        return null;
-      }
+      // Desktop'ta kalıcı token sağlamak için kendi localhost akışımızı (PKCE+refresh) kullanıyoruz.
+      // Eklentiye ihtiyaç kalmadığı için `null` dönüyoruz.
+      // Gerekli yetkiler _ensureDesktopGoogleAccessToken tarafından sağlanacaktır.
+      return null;
     }
 
     GoogleSignInAccount? account;
@@ -879,7 +850,7 @@ class CloudStorageService {
 
   // ============ CONFIG ============
 
-  static String _sanitizeOAuthValue(String value) {
+  String _sanitizeOAuthValue(String value) {
     final v = value.trim().replaceAll(RegExp(r'\s+'), '');
     if (v.isEmpty) return '';
     final upper = v.toUpperCase();
@@ -905,10 +876,25 @@ class CloudStorageService {
     return _sanitizeOAuthValue(CloudOAuthConfig.yandexClientSecret);
   }
 
-  String get effectiveGoogleOauthClientId =>
-      _sanitizeOAuthValue(_overrideGoogleOauthClientId).isNotEmpty
-        ? _sanitizeOAuthValue(_overrideGoogleOauthClientId)
+  String get effectiveGoogleOauthClientId {
+    if (_isDesktop) {
+      return _sanitizeOAuthValue(CloudOAuthConfig.googleOauthClientId);
+    }
+    final override = _sanitizeOAuthValue(_overrideGoogleOauthClientId);
+    return override.isNotEmpty
+        ? override
         : _sanitizeOAuthValue(CloudOAuthConfig.googleOauthClientId);
+  }
+
+  String get effectiveGoogleOauthClientSecret {
+    if (_isDesktop) {
+      return _sanitizeOAuthValue(CloudOAuthConfig.googleOauthClientSecret);
+    }
+    final override = _sanitizeOAuthValue(_overrideGoogleOauthClientSecret);
+    return override.isNotEmpty
+        ? override
+        : _sanitizeOAuthValue(CloudOAuthConfig.googleOauthClientSecret);
+  }
 
   bool get hasDropboxOAuthConfig => effectiveDropboxClientId.trim().isNotEmpty;
   bool get hasGoogleOAuthConfig =>
@@ -968,17 +954,17 @@ class CloudStorageService {
 
   // ============ DROPBOX AUTH ============
 
-  static String _base64UrlNoPadding(List<int> bytes) {
+  String _base64UrlNoPadding(List<int> bytes) {
     return base64Url.encode(bytes).replaceAll('=', '');
   }
 
-  static String _generateCodeVerifier() {
+  String _generateCodeVerifier() {
     final random = Random.secure();
     final bytes = List<int>.generate(64, (_) => random.nextInt(256));
     return _base64UrlNoPadding(bytes);
   }
 
-  static String _codeChallengeS256(String verifier) {
+  String _codeChallengeS256(String verifier) {
     final digest = sha256.convert(utf8.encode(verifier));
     return _base64UrlNoPadding(digest.bytes);
   }

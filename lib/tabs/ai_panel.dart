@@ -10,9 +10,11 @@ import 'package:flutter/services.dart';
 import 'package:locale_names/locale_names.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../app_settings.dart';
 import '../constants/ai_language_options.dart';
@@ -20,12 +22,10 @@ import '../controllers/translation_controller.dart';
 import '../models/batch_file_item.dart';
 import '../utils/background_runner.dart';
 import '../utils/string_utils.dart';
+import '../utils/language_heuristic.dart';
 import '../widgets/batch_save_dialog.dart';
 import '../widgets/cloud_source_sheet.dart';
-import '../widgets/dropbox_picker_sheet.dart';
-import '../widgets/gdrive_picker_sheet.dart';
 import '../widgets/ai_panel/credit_card_section.dart';
-import '../widgets/ai_panel/batch_processing_banner.dart';
 import '../widgets/ai_panel/english_source_tip_banner.dart';
 import '../widgets/ai_panel/file_picker_section.dart';
 import '../widgets/ai_panel/header_section.dart';
@@ -38,7 +38,6 @@ import '../widgets/ai_panel/selected_files_section.dart';
 import '../widgets/ai_panel/target_language_picker_bottom_sheet.dart';
 import '../widgets/ai_panel/file_content_dialog.dart';
 import '../widgets/purchase_dialog.dart';
-import '../widgets/yandex_picker_sheet.dart';
 import 'history_tab.dart';
 
 class AITranslationPanel extends StatefulWidget {
@@ -48,8 +47,18 @@ class AITranslationPanel extends StatefulWidget {
   State<AITranslationPanel> createState() => _AITranslationPanelState();
 }
 
-class _AITranslationPanelState extends State<AITranslationPanel> {
-  bool? _lastTickerModeEnabled;
+class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBindingObserver, WindowListener {
+  bool _pendingConfetti = false;
+  final GlobalKey _languageSelectorTapKey = GlobalKey();
+
+  Rect? _getLanguageSelectorRect() {
+    final ctx = _languageSelectorTapKey.currentContext;
+    if (ctx == null) return null;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    final pos = box.localToGlobal(Offset.zero);
+    return pos & box.size;
+  }
 
   bool _isDropZoneActive = false;
   late ConfettiController _confettiController;
@@ -64,28 +73,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   final Map<String, String> _originalPaths = {};
   bool _isBulkProcessing = false;
   String _estimatedTime = "0 min";
-  final GlobalKey _languageSelectorTapKey = GlobalKey();
-  final GlobalKey _desktopCreditCardKey = GlobalKey();
-  final GlobalKey _desktopHistoryButtonKey = GlobalKey();
-  final GlobalKey _desktopLeftTopControlsKey = GlobalKey();
-  final GlobalKey _desktopLeftTopBandContentKey = GlobalKey();
-  final GlobalKey _desktopPrimaryActionsKey = GlobalKey();
-  final GlobalKey _desktopActionButtonsBlockKey = GlobalKey();
-  final GlobalKey _desktopBatchBannerKey = GlobalKey();
-  final GlobalKey _desktopFilePickerKey = GlobalKey();
-  bool _desktopTopBandSyncQueued = false;
-  bool _desktopCreditBandSyncQueued = false;
-  bool _desktopTopControlsSyncQueued = false;
-  bool _desktopPrimaryActionsSyncQueued = false;
-  bool _desktopActionButtonsBlockSyncQueued = false;
-  bool _desktopBatchBannerSyncQueued = false;
-  double _desktopTopBandHeight = 136.0;
-  double _desktopCreditCardTopOffset = 8.0;
-  double _desktopCreditCardBandHeight = 120.0;
-  double _desktopTopControlsHeight = 280.0;
-  double _desktopPrimaryActionsTopOffset = 120.0;
-  double _desktopBatchBannerTopOffset = 90.0;
-  double _desktopFilePickerBottomOffset = 240.0;
+
   String? _desktopPreviewFilePath;
   String? _desktopPreviewFileName;
 
@@ -94,55 +82,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   List<Map<String, String>>? _cachedLanguageOptions;
   String? _cachedLocale;
 
-  void _resetDesktopLayoutSyncMeasurements() {
-    _desktopTopBandSyncQueued = false;
-    _desktopCreditBandSyncQueued = false;
-    _desktopTopControlsSyncQueued = false;
-    _desktopPrimaryActionsSyncQueued = false;
-    _desktopActionButtonsBlockSyncQueued = false;
-    _desktopBatchBannerSyncQueued = false;
 
-    // Reset to safe defaults (avoid a visible "0px" broken layout) and then
-    // re-measure on subsequent frames.
-    _desktopTopBandHeight = 136.0;
-    _desktopCreditCardTopOffset = 8.0;
-    _desktopCreditCardBandHeight = 120.0;
-    _desktopTopControlsHeight = 280.0;
-    _desktopPrimaryActionsTopOffset = 120.0;
-    _desktopBatchBannerTopOffset = 90.0;
-    _desktopFilePickerBottomOffset = 240.0;
-  }
 
-  void _onBecameActiveTab() {
-    if (!mounted) return;
-
-    setState(_resetDesktopLayoutSyncMeasurements);
-
-    // Trigger a fresh sync once the first active frame is laid out.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _scheduleDesktopTopBandHeightSync();
-      _scheduleDesktopCreditBandSync();
-      _scheduleDesktopTopControlsHeightSync();
-      _scheduleDesktopPrimaryActionsTopSync();
-      _scheduleDesktopActionButtonsBlockHeightSync();
-      _scheduleDesktopBatchBannerTopSync();
-    });
-  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    final enabled = TickerMode.valuesOf(context).enabled;
-    final previous = _lastTickerModeEnabled;
-    _lastTickerModeEnabled = enabled;
-
-    // TabBarView/PageView toggles TickerMode; use this to detect when the
-    // translation tab becomes visible again after being offstage.
-    if (previous == false && enabled == true) {
-      _onBecameActiveTab();
-    }
   }
 
   Future<void> _openHistoryPage() async {
@@ -155,10 +100,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       // If History dialog fails to build for any reason, don't crash the app.
       debugPrint('Failed to open History sheet: $e\n$st');
       if (!mounted) return;
+      final trans = context.read<AppSettings>().trans;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Geçmiş açılamadı. Lütfen tekrar deneyin.',
+            trans['history_open_error'] ??
+                'Could not open history. Please try again.',
           ),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 3),
@@ -194,228 +141,64 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     );
   }
 
-  Rect? _resolveGlobalRect(GlobalKey key) {
-    final context = key.currentContext;
-    if (context == null) return null;
-    final renderObject = context.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
-    final topLeft = renderObject.localToGlobal(Offset.zero);
-    return topLeft & renderObject.size;
-  }
 
-  void _scheduleDesktopTopBandHeightSync({int attempt = 0}) {
-    if (_desktopTopBandSyncQueued) return;
-    _desktopTopBandSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopTopBandSyncQueued = false;
-      if (!mounted) return;
-
-      final topBandRect = _resolveGlobalRect(_desktopLeftTopBandContentKey);
-      if (topBandRect == null) {
-        // When returning to this tab, the subtree can be present but not laid
-        // out yet for 1-2 frames. Retry a few times to avoid stale offsets.
-        if (attempt < 8) {
-          _scheduleDesktopTopBandHeightSync(attempt: attempt + 1);
-        }
-        return;
-      }
-
-      final targetHeight = topBandRect.height.clamp(96.0, 260.0);
-      if ((targetHeight - _desktopTopBandHeight).abs() < 0.5) return;
-      setState(() {
-        _desktopTopBandHeight = targetHeight;
-      });
-    });
-  }
-
-  void _scheduleDesktopCreditBandSync({int attempt = 0}) {
-    if (_desktopCreditBandSyncQueued) return;
-    _desktopCreditBandSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopCreditBandSyncQueued = false;
-      if (!mounted) return;
-
-      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
-      final historyCtx = _desktopHistoryButtonKey.currentContext;
-      final selectorCtx = _languageSelectorTapKey.currentContext;
-      if (controlsCtx == null || historyCtx == null || selectorCtx == null) {
-        if (attempt < 8) {
-          _scheduleDesktopCreditBandSync(attempt: attempt + 1);
-        }
-        return;
-      }
-      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
-      final historyBox = historyCtx.findRenderObject()! as RenderBox;
-      final selectorBox = selectorCtx.findRenderObject()! as RenderBox;
-      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
-      final targetTop = controlsBox
-          .globalToLocal(historyBox.localToGlobal(Offset.zero))
-          .dy
-          .clamp(0.0, 120.0);
-      final targetBottom = controlsBox
-          .globalToLocal(
-              selectorBox.localToGlobal(Offset(0, selectorBox.size.height)))
-          .dy
-          .clamp(80.0, 260.0);
-      final targetHeight = (targetBottom - targetTop).clamp(88.0, 220.0);
-
-      final topChanged =
-          (targetTop - _desktopCreditCardTopOffset).abs() >= 0.5;
-      final heightChanged =
-          (targetHeight - _desktopCreditCardBandHeight).abs() >= 0.5;
-      if (!topChanged && !heightChanged) return;
-
-      setState(() {
-        _desktopCreditCardTopOffset = targetTop;
-        _desktopCreditCardBandHeight = targetHeight;
-      });
-    });
-  }
-
-  void _scheduleDesktopTopControlsHeightSync({int attempt = 0}) {
-    if (_desktopTopControlsSyncQueued) return;
-    _desktopTopControlsSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopTopControlsSyncQueued = false;
-      if (!mounted) return;
-
-      final controlsRect = _resolveGlobalRect(_desktopLeftTopControlsKey);
-      if (controlsRect == null) {
-        if (attempt < 8) {
-          _scheduleDesktopTopControlsHeightSync(attempt: attempt + 1);
-        }
-        return;
-      }
-
-      final targetHeight = controlsRect.height.clamp(180.0, 520.0);
-      if ((targetHeight - _desktopTopControlsHeight).abs() < 0.5) return;
-      setState(() {
-        _desktopTopControlsHeight = targetHeight;
-      });
-    });
-  }
-
-  void _scheduleDesktopPrimaryActionsTopSync({int attempt = 0}) {
-    if (_desktopPrimaryActionsSyncQueued) return;
-    _desktopPrimaryActionsSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopPrimaryActionsSyncQueued = false;
-      if (!mounted) return;
-
-      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
-      final primaryCtx = _desktopPrimaryActionsKey.currentContext;
-      if (controlsCtx == null || primaryCtx == null) {
-        if (attempt < 8) {
-          _scheduleDesktopPrimaryActionsTopSync(attempt: attempt + 1);
-        }
-        return;
-      }
-      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
-      final primaryBox = primaryCtx.findRenderObject()! as RenderBox;
-      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
-      final targetOffset = controlsBox
-          .globalToLocal(primaryBox.localToGlobal(Offset.zero))
-          .dy
-          .clamp(8.0, 800.0);
-      if ((targetOffset - _desktopPrimaryActionsTopOffset).abs() < 0.5) return;
-      setState(() {
-        _desktopPrimaryActionsTopOffset = targetOffset;
-      });
-    });
-  }
-
-  void _scheduleDesktopActionButtonsBlockHeightSync({int attempt = 0}) {
-    if (_desktopActionButtonsBlockSyncQueued) return;
-    _desktopActionButtonsBlockSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopActionButtonsBlockSyncQueued = false;
-      if (!mounted) return;
-
-      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
-      final filePickerCtx = _desktopFilePickerKey.currentContext;
-      if (controlsCtx == null || filePickerCtx == null) {
-        if (attempt < 8) {
-          _scheduleDesktopActionButtonsBlockHeightSync(attempt: attempt + 1);
-        }
-        return;
-      }
-      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
-      final filePickerBox = filePickerCtx.findRenderObject()! as RenderBox;
-      // "Dosya Ekle" butonunun alt kenarını (trailing gap háriç) sol panel
-      // kontrolleri başlangıcına göre sanal koordinatta ölç.
-      // globalToLocal FittedBox ölçeğini iptal eder → ölçekten bağımsız.
-      final filePickerLocalTop = controlsBox
-          .globalToLocal(filePickerBox.localToGlobal(Offset.zero))
-          .dy;
-      // filePickerSection içindeki trailing SizedBox(16) hariç buton alt kenarı:
-      // renderObject.size.height = toplam yükseklik (buton + trailing gap).
-      // "Dosya Ekle" face bottom = filePickerLocalTop + height - kAiPanelSectionGap
-      final filePickerFaceBottom =
-          filePickerLocalTop + filePickerBox.size.height - kAiPanelSectionGap;
-      if ((filePickerFaceBottom - _desktopFilePickerBottomOffset).abs() < 0.5) {
-        return;
-      }
-      setState(() {
-        _desktopFilePickerBottomOffset = filePickerFaceBottom;
-      });
-    });
-  }
-
-  void _scheduleDesktopBatchBannerTopSync({int attempt = 0}) {
-    if (_desktopBatchBannerSyncQueued) return;
-    _desktopBatchBannerSyncQueued = true;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _desktopBatchBannerSyncQueued = false;
-      if (!mounted) return;
-
-      final controlsCtx = _desktopLeftTopControlsKey.currentContext;
-      final bannerCtx = _desktopBatchBannerKey.currentContext;
-      if (controlsCtx == null || bannerCtx == null) {
-        if (attempt < 8) {
-          _scheduleDesktopBatchBannerTopSync(attempt: attempt + 1);
-        }
-        return;
-      }
-      final controlsBox = controlsCtx.findRenderObject()! as RenderBox;
-      final bannerBox = bannerCtx.findRenderObject()! as RenderBox;
-      // globalToLocal dönüşümü FittedBox ölçeğini iptal eder → sanal koordinat.
-      final targetOffset = controlsBox
-          .globalToLocal(bannerBox.localToGlobal(Offset.zero))
-          .dy
-          .clamp(8.0, 800.0);
-      if ((targetOffset - _desktopBatchBannerTopOffset).abs() < 0.5) return;
-      setState(() {
-        _desktopBatchBannerTopOffset = targetOffset;
-      });
-    });
-  }
 
   String _localizedTargetLanguageLabel(
     String code,
     Locale uiLocale,
     String fallbackLabel,
   ) {
+    final normalizedCode = normalizeAiPanelLanguageCode(code);
     final targetLocale = _localeFromLanguageOptionCode(code);
 
+    final compositeLabel = _compositeLocalizedLanguageLabel(
+      targetLocale,
+      uiLocale,
+    );
+    if (compositeLabel.isNotEmpty) {
+      return compositeLabel;
+    }
+
     final localized = targetLocale.displayLanguageIn(uiLocale).trim();
-    if (localized.isEmpty) return fallbackLabel;
+    if (localized.isEmpty) {
+      return fallbackLabel.trim().isNotEmpty ? fallbackLabel : normalizedCode;
+    }
 
     // Prevent implicit English fallback when UI language isn't English.
     if (uiLocale.languageCode.toLowerCase() != 'en') {
       final english = targetLocale.defaultDisplayLanguage.trim();
       final nativeName = targetLocale.nativeDisplayLanguage.trim();
-      final looksLikeEnglishFallback =
-          localized == english && nativeName.isNotEmpty && nativeName != english;
+      final looksLikeEnglishFallback = localized == english &&
+          nativeName.isNotEmpty &&
+          nativeName != english;
       if (looksLikeEnglishFallback) return nativeName;
     }
 
     return localized;
+  }
+
+  String _compositeLocalizedLanguageLabel(Locale targetLocale, Locale uiLocale) {
+    var languageLabel = (targetLocale.scriptCode?.isNotEmpty ?? false)
+        ? targetLocale.displayLanguageScriptIn(uiLocale).trim()
+        : targetLocale.displayLanguageIn(uiLocale).trim();
+
+    if (languageLabel.isEmpty) {
+      languageLabel = targetLocale.nativeDisplayLanguage.trim();
+    }
+
+    final countryCode = targetLocale.countryCode?.trim() ?? '';
+    if (countryCode.isEmpty) {
+      return languageLabel;
+    }
+
+    var countryLabel = targetLocale.displayCountryIn(uiLocale).trim();
+    if (countryLabel.isEmpty) {
+      countryLabel = targetLocale.nativeDisplayCountry.trim();
+    }
+
+    if (languageLabel.isEmpty) return countryLabel;
+    if (countryLabel.isEmpty) return languageLabel;
+    return '$languageLabel ($countryLabel)';
   }
 
   Locale _uiLocaleFromAppLanguage(String appLanguageCode) {
@@ -434,6 +217,27 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   Locale _localeFromLanguageOptionCode(String optionCode) {
     final normalized = optionCode.trim().replaceAll('_', '-');
     if (normalized.isEmpty) return const Locale('en');
+
+    switch (normalizeAiPanelLanguageCode(normalized)) {
+      case 'ZH-CN':
+        return const Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hans',
+          countryCode: 'CN',
+        );
+      case 'ZH-TW':
+        return const Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hant',
+          countryCode: 'TW',
+        );
+      case 'ZH-HK':
+        return const Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hant',
+          countryCode: 'HK',
+        );
+    }
 
     final parts = normalized.split('-').where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return const Locale('en');
@@ -653,9 +457,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   }
 
   String _stripDiacriticsExceptEnye(String input) {
-    return _stripDiacritics(input)
-        .replaceAll('Ñ', 'ñ')
-        .replaceAll('ñ', 'ñ');
+    return _stripDiacritics(input).replaceAll('Ñ', 'ñ').replaceAll('ñ', 'ñ');
   }
 
   String _stripDiacritics(String input) {
@@ -926,15 +728,18 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, 0),
-                child: Text(trans['battery_opt_continue_anyway'] ?? 'Şimdilik Devam'),
+                child: Text(
+                    trans['battery_opt_continue_anyway'] ?? 'Şimdilik Devam'),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, 1),
-                child: Text(trans['battery_opt_app_settings'] ?? 'Uygulama Ayarları'),
+                child: Text(
+                    trans['battery_opt_app_settings'] ?? 'Uygulama Ayarları'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, 2),
-                child: Text(trans['battery_opt_open_settings'] ?? 'Ayarlara Git'),
+                child:
+                    Text(trans['battery_opt_open_settings'] ?? 'Ayarlara Git'),
               ),
             ],
           );
@@ -967,9 +772,19 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   @override
   void initState() {
     super.initState();
-    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
-    _lastSeenBatchFilesRevision = context.read<AppSettings>().batchFilesRevision;
+    _confettiController =
+        ConfettiController(duration: const Duration(seconds: 3));
+    _lastSeenBatchFilesRevision =
+        context.read<AppSettings>().batchFilesRevision;
     _loadSavedFiles(); // Kaydedilmiş dosyaları yükle
+
+    WidgetsBinding.instance.addObserver(this);
+    try {
+      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+        windowManager.addListener(this);
+      }
+    } catch (_) {}
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialConnection();
       if (mounted) {
@@ -977,10 +792,22 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         _controllerRef = controller;
         _lastKnownStatus = controller.status;
         controller.addListener(_onControllerStatusChanged);
-        _purchaseSubscription = controller.purchaseSuccessStream.listen((_) {
-          _confettiController.play();
+        _purchaseSubscription = controller.purchaseSuccessStream.listen((_) async {
+          bool isFocused = true;
+          try {
+            if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+              isFocused = await windowManager.isFocused();
+            }
+          } catch (_) {}
+
+          if (isFocused) {
+            _confettiController.play();
+          } else {
+            _pendingConfetti = true;
+          }
         });
-        _batchCompleteSubscription = controller.batchCompleteStream.listen((results) {
+        _batchCompleteSubscription =
+            controller.batchCompleteStream.listen((results) {
           _showBatchSaveDialog(results);
         });
       }
@@ -997,7 +824,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     final currentStatus = controller.status;
     final wasNotRunning = _lastKnownStatus != TranslationStatus.running;
     final wasRunning = _lastKnownStatus == TranslationStatus.running ||
-                       _lastKnownStatus == TranslationStatus.paused;
+        _lastKnownStatus == TranslationStatus.paused;
     final isNowComplete = currentStatus == TranslationStatus.completed;
 
     // Translation starts: prefer live view over file preview automatically.
@@ -1012,6 +839,13 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     }
 
     if (wasRunning && isNowComplete && !_isBulkProcessing) {
+      // Cloud batch bitişi mi kontrol et
+      if (controller.isCloudBatchMode) {
+        // Cloud batch bitişinde _showSingleCompletionDialogAndReset ÇAĞIRMIYORUZ.
+        // Çünkü zaten _batchCompleteSubscription -> _showBatchSaveDialog(results) çağrılacak.
+        _lastKnownStatus = currentStatus;
+          return;
+      }
       if (_selectedFiles.length <= 1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || _isBulkProcessing) return;
@@ -1042,7 +876,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
       if (!mounted) return;
 
-      final controller = _controllerRef ?? context.read<TranslationController>();
+      final controller =
+          _controllerRef ?? context.read<TranslationController>();
       controller.clearAfterCompletion();
       await _clearAllFiles();
     }();
@@ -1071,6 +906,37 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     await _clearAllFiles();
   }
 
+  @override
+  void onWindowFocus() {
+    if (_pendingConfetti) {
+      _pendingConfetti = false;
+      _confettiController.play();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _pendingConfetti) {
+      _pendingConfetti = false;
+      _confettiController.play();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    try {
+      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+        windowManager.removeListener(this);
+      }
+    } catch (_) {}
+    _controllerRef?.removeListener(_onControllerStatusChanged);
+    _purchaseSubscription?.cancel();
+    _batchCompleteSubscription?.cancel();
+    _confettiController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkInitialConnection() async {
     final settings = context.read<AppSettings>();
     final colorScheme = Theme.of(context).colorScheme;
@@ -1078,7 +944,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     if (mounted && settings.isOffline) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(settings.trans['internet_error'] ?? 'İnternet bağlantısı yok! AI özellikleri çalışmayabilir.'),
+          content: Text(settings.trans['internet_error'] ??
+              'İnternet bağlantısı yok! AI özellikleri çalışmayabilir.'),
           backgroundColor: colorScheme.errorContainer,
           duration: const Duration(seconds: 6),
           action: SnackBarAction(
@@ -1093,14 +960,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     }
   }
 
-  @override
-  void dispose() {
-    _controllerRef?.removeListener(_onControllerStatusChanged);
-    _purchaseSubscription?.cancel();
-    _batchCompleteSubscription?.cancel();
-    _confettiController.dispose();
-    super.dispose();
-  }
 
   String _normalizePathForCompare(String rawPath) {
     return rawPath.trim().replaceAll('\\', '/').toLowerCase();
@@ -1110,6 +969,40 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     final normalized = _normalizePathForCompare(rawPath);
     return _selectedFiles.any(
       (file) => _normalizePathForCompare(file.path) == normalized,
+    );
+  }
+
+  Future<String?> _extractStableMd5FromPath(String path) async {
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      final bytes = await file.readAsBytes();
+      return md5.convert(bytes).toString();
+    } catch (e) {
+      debugPrint('Error calculating hash for $path: $e');
+      return null;
+    }
+  }
+
+  bool _isHashAlreadySelected(String hash) {
+    return _selectedFiles.any((file) => file.hash == hash);
+  }
+
+  void _showDuplicateSkippedWarning() {
+    if (!mounted) return;
+    final settings = context.read<AppSettings>();
+    final trans = settings.trans;
+
+    // Default fallback text if translation is missing
+    final message =
+        trans['file_duplicate_skipped'] ?? 'Duplicate files were skipped.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
@@ -1153,7 +1046,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filesJson = prefs.getStringList('batch_files') ?? [];
-      
+
       final List<BatchFileItem> loadedFiles = [];
       final Set<String> seenPaths = <String>{};
       for (var jsonStr in filesJson) {
@@ -1183,7 +1076,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
           debugPrint('Orijinal yollar yüklenirken hata: $e');
         }
       }
-      
+
       if (loadedFiles.isNotEmpty && mounted) {
         setState(() {
           _selectedFiles.clear();
@@ -1264,7 +1157,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   Future<void> _saveFilesList() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final filesJson = _selectedFiles.map((f) => jsonEncode(f.toJson())).toList();
+      final filesJson =
+          _selectedFiles.map((f) => jsonEncode(f.toJson())).toList();
       await prefs.setStringList('batch_files', filesJson);
       await prefs.setString('batch_original_paths', jsonEncode(_originalPaths));
     } catch (e) {
@@ -1424,14 +1318,15 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
     if (ignoredNames.isNotEmpty && mounted) {
       final shown = ignoredNames.take(3).join(', ');
-      final more = ignoredNames.length > 3
-          ? ' (+${ignoredNames.length - 3})'
-          : '';
+      final more =
+          ignoredNames.length > 3 ? ' (+${ignoredNames.length - 3})' : '';
       final colorScheme = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            (settings.trans['only_srt_vtt_skipped'] ?? 'Only .srt / .vtt supported. Skipped: {files}').replaceAll('{files}', '$shown$more'),
+            (settings.trans['only_srt_vtt_skipped'] ??
+                    'Only .srt / .vtt supported. Skipped: {files}')
+                .replaceAll('{files}', '$shown$more'),
           ),
           backgroundColor: colorScheme.tertiaryContainer,
         ),
@@ -1445,11 +1340,23 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
     final toEnqueue = <BatchFile>[];
     final addedItems = <BatchFileItem>[];
+    bool hasDuplicateSkipped = false;
+
     for (final sourcePath in acceptedPaths) {
       final fileName = path.basename(sourcePath);
       try {
-        final permanentPath = await _copyFileToPermanentStorage(File(sourcePath));
-        if (_containsSelectedPath(permanentPath)) {
+        final permanentPath =
+            await _copyFileToPermanentStorage(File(sourcePath));
+        final fileHash = await _extractStableMd5FromPath(permanentPath);
+
+        final isDuplicate = _containsSelectedPath(permanentPath) ||
+            (fileHash != null && _isHashAlreadySelected(fileHash));
+
+        if (isDuplicate) {
+          hasDuplicateSkipped = true;
+          try {
+            await File(permanentPath).delete();
+          } catch (_) {}
           continue;
         }
 
@@ -1457,6 +1364,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
           name: fileName,
           path: permanentPath,
           source: CloudSource.device.name,
+          hash: fileHash,
         );
 
         addedItems.add(item);
@@ -1475,6 +1383,10 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       }
     }
 
+    if (hasDuplicateSkipped) {
+      _showDuplicateSkippedWarning();
+    }
+
     if (addedItems.isNotEmpty) {
       _preloadPreviewForItems(addedItems);
     }
@@ -1490,7 +1402,9 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       );
     }
 
-    if (!_isBulkProcessing && !controller.isLoading && _selectedFiles.isNotEmpty) {
+    if (!_isBulkProcessing &&
+        !controller.isLoading &&
+        _selectedFiles.isNotEmpty) {
       final lastPath = _selectedFiles.last.path;
       unawaited(controller.handlePickedFile(File(lastPath)));
     }
@@ -1498,39 +1412,24 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     unawaited(_updateEstimatedTime());
   }
 
-  Future<void> _handleMultipleFileSelection(TranslationController controller) async {
+  Future<void> _handleMultipleFileSelection(
+      TranslationController controller) async {
     final settings = context.read<AppSettings>();
     final trans = settings.trans;
 
     try {
-      // Kaynak Seçim Menüsü
-      final source = await showCloudSourceSheet(
-        context: context,
-        trans: trans,
-        isSave: false,
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'vtt'],
+        allowMultiple: true,
+        dialogTitle:
+            cloudSourceDialogTitle(CloudSource.device, trans, isSave: false),
       );
 
-      if (source == null) return;
-
-      if (source == CloudSource.device) {
-        // Yerel Dosya Seçimi
-        FilePickerResult? result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: ['srt', 'vtt'],
-          allowMultiple: true,
-          dialogTitle: cloudSourceDialogTitle(source, trans, isSave: false),
-        );
-
-        if (result != null) {
-          final paths = result.files
-              .map((file) => file.path)
-              .whereType<String>()
-              .toList();
-          await _enqueueLocalSubtitlePaths(controller, paths);
-        }
-      } else {
-        // Bulut Dosya Seçimi
-        await _handleCloudPick(settings, controller, source);
+      if (result != null) {
+        final paths =
+            result.files.map((file) => file.path).whereType<String>().toList();
+        await _enqueueLocalSubtitlePaths(controller, paths);
       }
     } catch (e) {
       if (mounted) {
@@ -1540,148 +1439,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
             content: Text(
               (settings.trans['error_with_details'] ?? 'Error: {error}')
                   .replaceAll('{error}', e.toString()),
-            ),
-            backgroundColor: colorScheme.errorContainer,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleCloudPick(
-    AppSettings settings,
-    TranslationController controller,
-    CloudSource source,
-  ) async {
-    final trans = settings.trans;
-
-    // Seçilen dosyaları tutacak geçici liste
-    List<({String name, String idOrPath})> selectedCloudFiles = [];
-
-    try {
-      if (source == CloudSource.googleDrive) {
-        final files = await showGoogleDriveSubtitleMultiPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        );
-        if (files != null) {
-          selectedCloudFiles = files.map((f) => (name: f.name, idOrPath: f.id)).toList();
-        }
-      } else if (source == CloudSource.dropbox) {
-        final files = await showDropboxSubtitleMultiPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        );
-        if (files != null) {
-          selectedCloudFiles = files.map((f) => (name: f.name, idOrPath: f.path)).toList();
-        }
-      } else if (source == CloudSource.yandexDisk) {
-        final files = await showYandexDiskSubtitleMultiPickerSheet(
-          context,
-          settings: settings,
-          trans: trans,
-        );
-        if (files != null) {
-          selectedCloudFiles = files.map((f) => (name: f.name, idOrPath: f.path)).toList();
-        }
-      }
-
-      if (selectedCloudFiles.isNotEmpty) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => const Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        try {
-          final tempDir = await getTemporaryDirectory();
-
-          final toEnqueue = <BatchFile>[];
-          final addedItems = <BatchFileItem>[];
-
-          for (var fileInfo in selectedCloudFiles) {
-            String? content;
-            if (source == CloudSource.googleDrive) {
-              final res = await settings.cloudStorage.downloadGDriveFileWithEncoding(fileInfo.idOrPath);
-              content = res['content'];
-            } else if (source == CloudSource.dropbox) {
-              final res = await settings.cloudStorage.downloadDropboxFileWithEncoding(fileInfo.idOrPath);
-              content = res['content'];
-            } else if (source == CloudSource.yandexDisk) {
-              final res = await settings.cloudStorage.downloadYandexDiskFileWithEncoding(fileInfo.idOrPath);
-              content = res['content'];
-            }
-
-            if (content != null) {
-              final tempFile = File('${tempDir.path}/${fileInfo.name}');
-              await tempFile.writeAsString(content);
-              
-              // Kalıcı storage'a kopyala
-              final permanentPath = await _copyFileToPermanentStorage(tempFile);
-              
-              // Temp dosyayı sil
-              await tempFile.delete();
-
-              // Eğer liste boşsa, ilk dosyayı önizleme için yükle
-              if (_selectedFiles.isEmpty && selectedCloudFiles.first == fileInfo) {
-                if (!_isBulkProcessing && !controller.isLoading) {
-                  await controller.handlePickedFile(File(permanentPath));
-                }
-              }
-
-              final alreadyExists = _containsSelectedPath(permanentPath);
-
-              if (!alreadyExists) {
-                addedItems.add(
-                  BatchFileItem(
-                    name: fileInfo.name,
-                    path: permanentPath,
-                    source: source.name,
-                  ),
-                );
-              }
-
-              if (!alreadyExists) {
-                toEnqueue.add(BatchFile(name: fileInfo.name, path: permanentPath));
-              }
-            }
-          }
-
-          if (addedItems.isNotEmpty && mounted) {
-            setState(() {
-              _selectedFiles.addAll(addedItems);
-            });
-            _preloadPreviewForItems(addedItems);
-          }
-          await _saveFilesList(); // Dosya listesini kaydet
-
-          if ((controller.isBatchProcessing || controller.isLoading) && toEnqueue.isNotEmpty) {
-            controller.enqueueBatchFiles(
-              files: toEnqueue,
-              clearSdh: settings.sdhClear,
-              targetLanguage: settings.targetLanguage,
-            );
-          }
-
-          _updateEstimatedTime();
-        } finally {
-          if (mounted) Navigator.pop(context); // Loading'i kapat
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        final colorScheme = Theme.of(context).colorScheme;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              (settings.trans['cloud_error_with_details'] ??
-                      'Cloud error: {error}')
-                  .replaceAll('{error}', e.toString()),
-              style: TextStyle(color: colorScheme.onErrorContainer),
             ),
             backgroundColor: colorScheme.errorContainer,
           ),
@@ -1700,109 +1457,26 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     if (!context.mounted) return;
 
     final trans = settings.trans;
-    final source = await showCloudSourceSheet(
-      context: context,
-      trans: trans,
-      isSave: true,
-    );
-    if (source == null || !context.mounted) return;
-
     final content = export.content;
     final fileName = export.name;
 
-    if (source == CloudSource.device) {
-      final bytes = Uint8List.fromList(utf8.encode(content));
-      final isAndroidIos = Platform.isAndroid || Platform.isIOS;
-      final dialogTitle = cloudSourceDialogTitle(source, trans, isSave: true);
-      final savedPath = await FilePicker.platform.saveFile(
-        dialogTitle: dialogTitle,
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['srt', 'vtt'],
-        bytes: isAndroidIos ? bytes : null,
-      );
-      if (!context.mounted) return;
-      if (savedPath != null && !isAndroidIos) {
-        await File(savedPath).writeAsBytes(bytes, flush: true);
-      }
-      if (savedPath != null) {
-        settings.addLog('log_saved', isAndroidIos ? fileName : savedPath);
-      }
-      return;
+    final bytes = Uint8List.fromList(utf8.encode(content));
+    final isAndroidIos = Platform.isAndroid || Platform.isIOS;
+    final dialogTitle =
+        cloudSourceDialogTitle(CloudSource.device, trans, isSave: true);
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: dialogTitle,
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['srt', 'vtt'],
+      bytes: isAndroidIos ? bytes : null,
+    );
+    if (!context.mounted) return;
+    if (savedPath != null && !isAndroidIos) {
+      await File(savedPath).writeAsBytes(bytes, flush: true);
     }
-
-    if (source == CloudSource.googleDrive) {
-      final folderId = await showGoogleDriveFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderId == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToGDrive(
-        fileName: fileName,
-        content: content,
-        folderId: folderId,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_drive'] ?? 'Google Drive',
-            'name': fileName,
-          },
-        ),
-      );
-      return;
-    }
-
-    if (source == CloudSource.dropbox) {
-      final folderPath = await showDropboxFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderPath == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToDropbox(
-        fileName: fileName,
-        content: content,
-        folderPath: folderPath,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_dropbox'] ?? 'Dropbox',
-            'name': fileName,
-          },
-        ),
-      );
-      return;
-    }
-
-    if (source == CloudSource.yandexDisk) {
-      final folderPath = await showYandexDiskFolderPickerSheet(
-        context,
-        settings: settings,
-        trans: trans,
-      );
-      if (folderPath == null || !context.mounted) return;
-      await settings.cloudStorage.uploadTextFileToYandexDisk(
-        fileName: fileName,
-        content: content,
-        folderPath: folderPath,
-      );
-      settings.addLog(
-        'log_saved',
-        StringUtils.fillTemplate(
-          trans['log_saved_to_provider'] ?? '{provider}: {name}',
-          {
-            'provider': trans['cloud_source_yandex'] ?? 'Yandex Disk',
-            'name': fileName,
-          },
-        ),
-      );
+    if (savedPath != null) {
+      settings.addLog('log_saved', isAndroidIos ? fileName : savedPath);
     }
   }
 
@@ -1814,10 +1488,10 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       _syncDesktopPreviewWithSelectedFilesUnsafe();
     });
     await _saveFilesList();
-    
+
     // Kalıcı dosyayı da sil (helper fonksiyonu kullan)
     await _deleteLocalFile(fileToRemove.path);
-    
+
     _updateEstimatedTime();
   }
 
@@ -1828,7 +1502,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     for (var fileInfo in _selectedFiles) {
       await _deleteLocalFile(fileInfo.path);
     }
-    
+
     setState(() {
       _selectedFiles.clear();
       _originalPaths.clear();
@@ -1875,12 +1549,13 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
   void _showAddCreditDialog(BuildContext context) {
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) => const PurchaseDialog(),
     );
   }
 
-  Future<bool> _confirmPauseTranslation(BuildContext context, Map<String, String> trans) async {
+  Future<bool> _confirmPauseTranslation(
+      BuildContext context, Map<String, String> trans) async {
     final bool? shouldPause = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -1894,11 +1569,13 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(trans['pause_warning_cancel'] ?? (trans['cancel'] ?? 'İptal')),
+              child: Text(trans['pause_warning_cancel'] ??
+                  (trans['cancel'] ?? 'İptal')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(trans['pause_warning_pause'] ?? (trans['pause'] ?? 'Duraklat')),
+              child: Text(trans['pause_warning_pause'] ??
+                  (trans['pause'] ?? 'Duraklat')),
             ),
           ],
         );
@@ -1907,7 +1584,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     return shouldPause == true;
   }
 
-  Future<bool> _confirmStopTranslationWarning(BuildContext context, Map<String, String> trans) async {
+  Future<bool> _confirmStopTranslationWarning(
+      BuildContext context, Map<String, String> trans) async {
     final bool? shouldStop = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -1921,17 +1599,52 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(trans['stop_warning_cancel'] ?? (trans['cancel'] ?? 'İptal')),
+              child: Text(
+                  trans['stop_warning_cancel'] ?? (trans['cancel'] ?? 'İptal')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(trans['stop_warning_stop'] ?? (trans['stop'] ?? 'Durdur')),
+              child: Text(
+                  trans['stop_warning_stop'] ?? (trans['stop'] ?? 'Durdur')),
             ),
           ],
         );
       },
     );
     return shouldStop == true;
+  }
+
+  
+  Future<bool> _checkSameLanguage(TranslationController controller, List<File> files, AppSettings settings) async {
+    final isSame = await LanguageHeuristic.isLikelyTargetLanguage(files, settings.targetLanguage);
+    if (!isSame) return true; // Continuing
+    
+    if (!mounted) return false;
+    
+    // Show dialog
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(settings.trans['same_language_title'] ?? 'Uyarı: Aynı Dil Algılandı'),
+        content: Text(settings.trans['same_language_desc'] ?? 'Seçtiğiniz dosyaların dili, çevirmek istediğiniz hedef dil ile aynı gibi görünüyor. Yine de çeviri işlemine başlayıp kredinizi kullanmak istiyor musunuz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(settings.trans['cancel'] ?? 'İptal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: Text(settings.trans['convert_anyway'] ?? 'Yine de Çevir'),
+          ),
+        ],
+      ),
+    );
+    
+    return result == true;
   }
 
   Future<void> _startBulkProcess(TranslationController controller) async {
@@ -1942,6 +1655,15 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
     final messenger = ScaffoldMessenger.of(context);
     final settings = context.read<AppSettings>();
+
+    // --- LANGUAGE WARNING CHECK ---
+    final List<File> currentFiles = _selectedFiles.map((f) => File(f.path)).where((f) => f.existsSync()).toList();
+    if (currentFiles.isNotEmpty) {
+      final shouldContinue = await _checkSameLanguage(controller, currentFiles, settings);
+      if (!shouldContinue) return;
+      if (!mounted) return;
+    }
+    // ------------------------------
     final colorScheme = Theme.of(context).colorScheme;
 
     // Batch başlamadan önce geçersiz dosyaları temizle
@@ -1977,7 +1699,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     if (completedNames.isNotEmpty) {
       setState(() {
         _selectedFiles.removeWhere((file) {
-          final shouldSkip = completedNames.contains(normalizeHistoryName(file.name));
+          final shouldSkip =
+              completedNames.contains(normalizeHistoryName(file.name));
           if (shouldSkip) {
             skippedCompleted.add(file);
           }
@@ -1987,7 +1710,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         if (skippedCompleted.isNotEmpty) {
           final skippedPaths = skippedCompleted.map((e) => e.path).toSet();
           _originalPaths.removeWhere(
-            (key, value) => skippedPaths.contains(key) || skippedPaths.contains(value),
+            (key, value) =>
+                skippedPaths.contains(key) || skippedPaths.contains(value),
           );
           _syncDesktopPreviewWithSelectedFilesUnsafe();
         }
@@ -1996,7 +1720,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       if (skippedCompleted.isNotEmpty) {
         await _saveFilesList();
         if (mounted) {
-          final shownNames = skippedCompleted.take(3).map((e) => e.name).join(', ');
+          final shownNames =
+              skippedCompleted.take(3).map((e) => e.name).join(', ');
           final extraCount = skippedCompleted.length - 3;
           final extra = extraCount > 0 ? ' +$extraCount' : '';
           messenger.showSnackBar(
@@ -2020,7 +1745,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     if (_selectedFiles.isEmpty) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(settings.trans['no_valid_files_found'] ?? 'No valid file found.'),
+          content: Text(
+              settings.trans['no_valid_files_found'] ?? 'No valid file found.'),
           backgroundColor: colorScheme.tertiaryContainer,
         ),
       );
@@ -2062,8 +1788,10 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         // Hata alan dosyaları listenin sonuna taşı
         if (summary.errors.isNotEmpty) {
           final errorFileNames = summary.errors.map((e) => e.fileName).toSet();
-          final failedFiles = _selectedFiles.where((f) => errorFileNames.contains(f.name)).toList();
-          
+          final failedFiles = _selectedFiles
+              .where((f) => errorFileNames.contains(f.name))
+              .toList();
+
           if (failedFiles.isNotEmpty) {
             _selectedFiles.removeWhere((f) => errorFileNames.contains(f.name));
             _selectedFiles.addAll(failedFiles);
@@ -2073,7 +1801,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         _isBulkProcessing = false;
         _syncDesktopPreviewWithSelectedFilesUnsafe();
       });
-      
+
       await _saveFilesList(); // Listeyi kaydet
 
       if (!mounted) return;
@@ -2083,58 +1811,89 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
-              settings.trans['out_of_credits_stopped'] ?? 'Insufficient credits, operation stopped.',
+              settings.trans['out_of_credits_stopped'] ??
+                  'Insufficient credits, operation stopped.',
               style: TextStyle(color: colorScheme.onErrorContainer),
             ),
             backgroundColor: colorScheme.errorContainer,
           ),
         );
       }
-
       // Hata Raporu Gösterimi
       if (summary.errors.isNotEmpty) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
-            title: Text(
-              settings.trans['process_report_title'] ?? 'Process Report',
-              style: TextStyle(color: Theme.of(ctx).colorScheme.tertiary),
+        if (files.length == 1) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
+              title: Text(
+                settings.trans['error_prefix'] ?? 'Hata',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+              ),
+              content: Text(summary.errors.first.message.replaceAll('Exception: ', '')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(settings.trans['ok'] ?? 'OK'),
+                ),
+              ],
             ),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text((settings.trans['batch_files_translated_count'] ?? '{count} files translated successfully.').replaceAll('{count}', summary.successCount.toString())),
-                  const SizedBox(height: 10),
-                  Text((settings.trans['batch_files_error_count'] ?? '{count} files had errors:').replaceAll('{count}', summary.errors.length.toString()),
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const Divider(),
-                  Expanded(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: summary.errors.length,
-                      itemBuilder: (c, i) => Text(
-                        "• ${summary.errors[i].fileName}: ${summary.errors[i].message}",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(c).colorScheme.error,
+          );
+        } else {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: Theme.of(ctx).colorScheme.surface,
+              title: Text(
+                settings.trans['process_report_title'] ?? 'Process Report',
+                style: TextStyle(color: Theme.of(ctx).colorScheme.tertiary),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      StringUtils.fillTemplate(
+                        settings.trans['batch_success_count'] ??
+                            '{count} dosya başarıyla çevrildi.',
+                        {'count': summary.successCount.toString()},
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                        StringUtils.fillTemplate(
+                          settings.trans['batch_error_count'] ??
+                              '{count} dosya hata aldı:',
+                          {'count': summary.errors.length.toString()},
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: summary.errors.length,
+                        itemBuilder: (c, i) => Text(
+                          "• ${summary.errors[i].fileName}: ${summary.errors[i].message.replaceAll('Exception: ', '')}",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(c).colorScheme.error,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(settings.trans['ok'] ?? 'OK')),
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: Text(settings.trans['ok'] ?? 'OK')),
-            ],
-          ),
-        );
+          );
+        }
       }
     }
   }
@@ -2161,7 +1920,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     await _startBulkProcess(controller);
   }
 
-  Widget _buildFooter(BuildContext context, AppSettings settings, TranslationController controller) {
+  Widget _buildFooter(BuildContext context, AppSettings settings,
+      TranslationController controller) {
     return AiPanelFooter(
       settings: settings,
       controller: controller,
@@ -2197,7 +1957,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
           ),
         );
       },
-      historyLabel: settings.trans['history'] ?? 'History',
+        historyLabel: settings.trans['tour_credit_history_title'] ??
+          'Translation/Credit History',
       onOpenHistory: _openHistoryPage,
       historyButtonKey: historyButtonKey,
       colorScheme: colorScheme,
@@ -2254,16 +2015,15 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     }();
 
     return AiPanelLanguageSelectorSection(
-      displayText: displayText,
       selectorTapKey: _languageSelectorTapKey,
+      displayText: displayText,
       balancedTopBand: balancedTopBand,
       onTap: () {
         () async {
-          final anchorRect = _resolveGlobalRect(_languageSelectorTapKey);
           final picked = await _showTargetLanguagePickerBottomSheet(
             settings: settings,
             currentCode: settings.targetLanguage,
-            anchorRect: anchorRect,
+            anchorRect: _getLanguageSelectorRect(),
           );
           if (picked != null && picked.isNotEmpty) {
             settings.setTranslationConfig(lang: picked);
@@ -2278,23 +2038,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
     required TranslationController controller,
     required ColorScheme colorScheme,
   }) {
-    if (!(controller.isBatchProcessing || _isBulkProcessing)) {
-      return const SizedBox.shrink();
-    }
-
-    final queueTotal = controller.batchQueueLength > 0
-        ? controller.batchQueueLength
-        : _selectedFiles.length;
-    final message =
-        '${settings.trans['batch_processing'] ?? 'Toplu çeviri sürüyor'}: '
-        '${controller.batchSuccessCount + controller.batchErrorCount}'
-        '/$queueTotal ${settings.trans['completed'] ?? 'tamamlandı'} '
-        '• ${settings.trans['error'] ?? 'Hata'}: ${controller.batchErrorCount}';
-
-    return AiPanelBatchProcessingBanner(
-      message: message,
-      colorScheme: colorScheme,
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildPrimaryActionsSection(
@@ -2317,6 +2061,144 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         unawaited(_clearAllFiles());
       },
       onStartTranslation: () => _startBulkProcess(controller),
+      onStartBatchTranslation: () async {
+        if (controller.userCredits <= 0) {
+          _showAddCreditDialog(context);
+          return;
+        }
+
+        final pendingSelected = _selectedFiles
+            .where((f) => !controller.activeBatchFilePaths.contains(f.path))
+            .toList();
+        
+          if (pendingSelected.isNotEmpty) {
+            final filesToProcess = pendingSelected.map((f) => File(f.path)).toList();
+            final shouldContinue = await _checkSameLanguage(controller, filesToProcess, settings);
+            if (!shouldContinue) return;
+            if (!context.mounted) return;
+
+          if (!settings.hideBatchTranslationInfo) {
+            bool dontShowAgain = false;
+            await showDialog(
+                context: context,
+                builder: (ctx) {
+                  return StatefulBuilder(builder: (context, setState) {
+                    return AlertDialog(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      title: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              settings.trans['batch_info_dialog_title'] ??
+                                  'Bilgilendirme',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            settings.trans['batch_info_dialog_message'] ??
+                                'Çeviriniz sunucuda arka planda gerçekleştirilmektedir. Tamamlandığında bildirim ile haber verilecektir.\n\nDilerseniz diğer işlerinize devam edebilirsiniz.',
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: dontShowAgain,
+                                onChanged: (val) {
+                                  setState(() {
+                                    dontShowAgain = val ?? false;
+                                  });
+                                },
+                              ),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      dontShowAgain = !dontShowAgain;
+                                    });
+                                  },
+                                  child: Text(
+                                      settings.trans['dont_show_again'] ??
+                                          'Bir daha gösterme'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: Text(settings.trans['hide'] ?? 'Gizle'),
+                        ),
+                      ],
+                    );
+                  });
+                });
+            if (dontShowAgain) {
+              await settings.setHideBatchTranslationInfo(true);
+            }
+          }
+
+          if (!context.mounted) return;
+
+          final files = pendingSelected.map((f) => BatchFile(name: f.name, path: f.path)).toList();
+          final snackMsg = (settings.trans['batch_starting_snackbar'] ??
+                  '{count} dosya için Toplu Çeviri başlatılıyor...')
+              .replaceAll('{count}', files.length.toString());
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color:
+                          Theme.of(context).colorScheme.onSecondaryContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      snackMsg,
+                      style: TextStyle(
+                        color:
+                            Theme.of(context).colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 4,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          controller.startBatchTranslationTest(
+            inputSrtFiles: files,
+            targetLanguage: settings.targetLanguage,
+            clearSdh: settings.sdhClear,
+            onFileCompleted: (file) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _removeFileByPath(file.path);
+                if (mounted) setState(() {});
+              });
+            },
+          );
+          _saveFilesList();
+        }
+      },
       onPauseOrResume: () async {
         if (controller.status == TranslationStatus.paused) {
           controller.resumeTranslation();
@@ -2410,7 +2292,9 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       colorScheme: colorScheme,
       selectedFiles: _selectedFiles,
       activeIndex: activeIndex,
-      isTranslationRunning: controller.status == TranslationStatus.running,
+      isTranslationRunning: controller.status == TranslationStatus.running ||
+          controller.isBatchProcessing,
+      activeBatchPaths: controller.activeBatchFilePaths,
       onClearAll: () => unawaited(_clearAllFiles()),
       onRemoveByPath: _removeFileByPath,
       scrollableList: scrollableList,
@@ -2447,7 +2331,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
               final shifted = idx + delta;
               final crossesActive =
                   (idx < activeIndex && shifted >= activeIndex) ||
-                  (idx > activeIndex && shifted <= activeIndex);
+                      (idx > activeIndex && shifted <= activeIndex);
               if (crossesActive) return;
             }
           }
@@ -2465,9 +2349,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
             }
           }
 
-          final shiftedSelectedIndices = selectedIndices
-              .map((idx) => idx + delta)
-              .toSet();
+          final shiftedSelectedIndices =
+              selectedIndices.map((idx) => idx + delta).toSet();
 
           final reordered = <BatchFileItem>[];
           var selectedCursor = 0;
@@ -2508,7 +2391,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
         });
       },
       onTapPreview: (index) => unawaited(_showFileContentDialog(index)),
-      onStartTranslation: (index) => _startTranslationForSelectedFile(controller, index),
+      onStartTranslation: (index) =>
+          _startTranslationForSelectedFile(controller, index),
     );
   }
 
@@ -2530,12 +2414,14 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       target: controller.translatedBlocks,
       followEnabled: controller.status == TranslationStatus.running,
       fillHeight: fillHeight,
-      showStartingSoonOverlay:
-          isRunningOrPaused &&
-              controller.sourceBlocks.isNotEmpty &&
-              controller.translatedBlocks.isEmpty,
-      startingSoonText: settings.trans['translation_starting_soon'] ??
-          'Çeviri birkaç saniye içinde başlayacak',
+      showStartingSoonOverlay: isRunningOrPaused &&
+          controller.sourceBlocks.isNotEmpty &&
+          controller.translatedBlocks.isEmpty,
+        startingSoonText: controller.isCloudBatchMode
+          ? (settings.trans['batch_cloud_processing_info'] ??
+              'Çeviri sunucuda devam ediyor...')
+          : (settings.trans['translation_starting_soon'] ??
+              'Çeviri birkaç saniye içinde başlayacak'),
       colorScheme: colorScheme,
     );
   }
@@ -2619,10 +2505,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
 
     // Fallback: controller may be working on a copied file under another
     // directory but with same <name>_<md5>.<ext>.
-    
+
     String stripHash(String p) {
       final name = path.basename(p);
-      final base = path.basenameWithoutExtension(name).replaceFirst(RegExp(r'_[a-fA-F0-9]{32}$'), '');
+      final base = path
+          .basenameWithoutExtension(name)
+          .replaceFirst(RegExp(r'_[a-fA-F0-9]{32}$'), '');
       return _normalizeForMatch(base + path.extension(name));
     }
 
@@ -2688,8 +2576,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
               for (final f in toRemove) {
                 unawaited(_deleteLocalFile(f.path));
               }
-              _selectedFiles
-                  .removeWhere((f) => completedSet.contains(f.path));
+              _selectedFiles.removeWhere((f) => completedSet.contains(f.path));
               _originalPaths.removeWhere((k, v) => completedSet.contains(k));
               _syncDesktopPreviewWithSelectedFilesUnsafe();
               unawaited(_saveFilesList());
@@ -2774,461 +2661,354 @@ class _AITranslationPanelState extends State<AITranslationPanel> {
       child: Focus(
         autofocus: true,
         child: Consumer<TranslationController>(
-      builder: (context, controller, child) {
-        final activeIndex = _computeActiveIndex(controller);
-        _syncSelectedFilesWithController(controller);
-        _bindControllerCallbacks(
-          context: context,
-          settings: settings,
-          controller: controller,
-          colorScheme: colorScheme,
-        );
+          builder: (context, controller, child) {
+            final activeIndex = _computeActiveIndex(controller);
+            _syncSelectedFilesWithController(controller);
+            _bindControllerCallbacks(
+              context: context,
+              settings: settings,
+              controller: controller,
+              colorScheme: colorScheme,
+            );
 
-        return DropRegion(
-          formats: const [Formats.fileUri],
-          onDropOver: (event) {
-            if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-              return DropOperation.none;
-            }
-            if (!_isDropZoneActive && mounted) {
-              setState(() => _isDropZoneActive = true);
-            }
-            if (event.session.allowedOperations.contains(DropOperation.copy)) {
-              return DropOperation.copy;
-            }
-            if (event.session.allowedOperations.contains(DropOperation.move)) {
-              return DropOperation.move;
-            }
-            return DropOperation.none;
-          },
-          onDropLeave: (_) {
-            if (_isDropZoneActive && mounted) {
-              setState(() => _isDropZoneActive = false);
-            }
-          },
-          onDropEnded: (_) {
-            if (_isDropZoneActive && mounted) {
-              setState(() => _isDropZoneActive = false);
-            }
-          },
-          onPerformDrop: (event) async {
-            if (_isDropZoneActive && mounted) {
-              setState(() => _isDropZoneActive = false);
-            }
-            if (!(Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-              return;
-            }
-            final droppedPaths = await _extractDroppedPaths(event);
-            unawaited(_enqueueLocalSubtitlePaths(controller, droppedPaths));
-          },
-          child: Stack(
-            children: [
-              Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isDesktop =
-                        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-                    final useSplitLayout = isDesktop;
+            return DropRegion(
+              formats: const [Formats.fileUri],
+              onDropOver: (event) {
+                if (!(Platform.isWindows ||
+                    Platform.isLinux ||
+                    Platform.isMacOS)) {
+                  return DropOperation.none;
+                }
+                if (!_isDropZoneActive && mounted) {
+                  setState(() => _isDropZoneActive = true);
+                }
+                if (event.session.allowedOperations
+                    .contains(DropOperation.copy)) {
+                  return DropOperation.copy;
+                }
+                if (event.session.allowedOperations
+                    .contains(DropOperation.move)) {
+                  return DropOperation.move;
+                }
+                return DropOperation.none;
+              },
+              onDropLeave: (_) {
+                if (_isDropZoneActive && mounted) {
+                  setState(() => _isDropZoneActive = false);
+                }
+              },
+              onDropEnded: (_) {
+                if (_isDropZoneActive && mounted) {
+                  setState(() => _isDropZoneActive = false);
+                }
+              },
+              onPerformDrop: (event) async {
+                if (_isDropZoneActive && mounted) {
+                  setState(() => _isDropZoneActive = false);
+                }
+                if (!(Platform.isWindows ||
+                    Platform.isLinux ||
+                    Platform.isMacOS)) {
+                  return;
+                }
+                final droppedPaths = await _extractDroppedPaths(event);
+                unawaited(_enqueueLocalSubtitlePaths(controller, droppedPaths));
+              },
+              child: Stack(
+                children: [
+                  Container(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isDesktop = Platform.isWindows ||
+                            Platform.isLinux ||
+                            Platform.isMacOS;
+                        final useSplitLayout = isDesktop;
 
-                    Widget buildLeftContent() {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!useSplitLayout) ...[
-                            _buildCreditCardSection(
-                              context,
-                              settings: settings,
-                              controller: controller,
-                              colorScheme: colorScheme,
-                            ),
-                            const SizedBox(height: kAiPanelSectionGap),
-                            _buildHeaderSection(
-                              context,
-                              settings: settings,
-                              colorScheme: colorScheme,
-                            ),
-                            const SizedBox(height: kAiPanelSectionGap),
-                          ],
-                          if (!settings.hideInfoButtons &&
-                              controller.status == TranslationStatus.idle) ...[
-                            _buildEnglishSourceTipBanner(settings),
-                            const SizedBox(height: kAiPanelSectionGap),
-                          ],
-                          _buildLanguageSelectorSection(
-                            context,
-                            settings: settings,
-                            colorScheme: colorScheme,
-                          ),
-                          const SizedBox(height: kAiPanelSectionGap),
-                          _maybeBuildBatchProcessingBanner(
-                            settings: settings,
-                            controller: controller,
-                            colorScheme: colorScheme,
-                          ),
-                          _buildPrimaryActionsSection(
-                            context,
-                            settings: settings,
-                            controller: controller,
-                          ),
-                          _buildFilePickerSection(
-                            context,
-                            settings: settings,
-                            controller: controller,
-                          ),
-                          _maybeBuildSelectedFilesSection(
-                            settings: settings,
-                            controller: controller,
-                            colorScheme: colorScheme,
-                            activeIndex: activeIndex,
-                          ),
-                          if (!useSplitLayout) ...[
-                            const SizedBox(height: kAiPanelSectionGap),
-                            _maybeBuildLiveSubtitleSection(
-                              settings: settings,
-                              controller: controller,
-                              colorScheme: colorScheme,
-                            ),
-                          ],
-                          _buildBottomSpacer(context),
-                        ],
-                      );
-                    }
-
-                    if (!useSplitLayout) {
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
-                        child: buildLeftContent(),
-                      );
-                    }
-
-                    final isCompactDesktopWidth = constraints.maxWidth < 980;
-                    final leftPaneMinWidth = isCompactDesktopWidth
-                        ? 300.0
-                        : 420.0;
-                    final leftPaneMaxWidth = isCompactDesktopWidth
-                        ? 520.0
-                        : 560.0;
-                    final leftPaneWidth =
-                        (constraints.maxWidth * 0.5).clamp(
-                          leftPaneMinWidth,
-                          leftPaneMaxWidth,
-                        );
-                    final hasFooterFileNameRow =
-                      (controller.status == TranslationStatus.running ||
-                        controller.status == TranslationStatus.paused) &&
-                      controller.currentFileName != null;
-                    final isCompactDesktopHeight = constraints.maxHeight < 420;
-                    // Footer artık sadece ilerleme çubuğu (log main.dart'ta ortak).
-                    // Bu yüzden split layout'ta alttan sadece footer'ın üstüne binmemek
-                    // için küçük, sabit bir inset ayırıyoruz.
-                    final desktopBottomInset =
-                        (isCompactDesktopHeight ? 44.0 : 44.0) +
-                        (hasFooterFileNameRow ? 28.0 : 0.0);
-
-                    _scheduleDesktopTopBandHeightSync();
-                    _scheduleDesktopCreditBandSync();
-                    _scheduleDesktopTopControlsHeightSync();
-                    _scheduleDesktopPrimaryActionsTopSync();
-                    _scheduleDesktopActionButtonsBlockHeightSync();
-                    _scheduleDesktopBatchBannerTopSync();
-                    const desktopSectionGap = kAiPanelSectionGap;
-                    final showInfoBanner =
-                        !settings.hideInfoButtons &&
-                        controller.status == TranslationStatus.idle;
-                    final creditCardTopOffset =
-                      _desktopCreditCardTopOffset > 0
-                        ? _desktopCreditCardTopOffset
-                        : 8.0;
-                    final creditCardHeight =
-                      _desktopCreditCardBandHeight > 0
-                        ? _desktopCreditCardBandHeight
-                        : 120.0;
-                    final infoBoxTopOffset =
-                      _desktopPrimaryActionsTopOffset > 0
-                        ? _desktopPrimaryActionsTopOffset
-                        : 120.0;
-                    // infoBoxHeight = "Çeviriyi Başlat" üst kenarından
-                    // "Dosya Ekle" alt kenarına kadar tam mesafe.
-                    // Her ikisi de globalToLocal ile ölçüldüğünden
-                    // hiçbir ölçekte hiza bozulmaz.
-                    final infoBoxHeight = (_desktopFilePickerBottomOffset - infoBoxTopOffset)
-                        .clamp(88.0, 400.0);
-                    final rightAlignedTopHeight = showInfoBanner
-                      ? (_desktopTopControlsHeight > 0
-                        ? _desktopTopControlsHeight
-                        : (infoBoxTopOffset + infoBoxHeight).clamp(
-                          220.0,
-                          520.0,
-                        ))
-                      : (_desktopPrimaryActionsTopOffset > 0
-                          ? _desktopPrimaryActionsTopOffset
-                          : (creditCardTopOffset + creditCardHeight));
-
-                    Widget buildDesktopCreditCard() {
-                      return SizedBox(
-                        height: creditCardHeight,
-                        child: KeyedSubtree(
-                          key: _desktopCreditCardKey,
-                          child: _buildCreditCardSection(
-                            context,
-                            settings: settings,
-                            controller: controller,
-                            colorScheme: colorScheme,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return SizedBox(
-                      height: constraints.maxHeight,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: leftPaneWidth,
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                0,
-                                0,
-                                8,
-                                desktopBottomInset,
+                        Widget buildLeftContent() {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!useSplitLayout) ...[
+                                _buildCreditCardSection(
+                                  context,
+                                  settings: settings,
+                                  controller: controller,
+                                  colorScheme: colorScheme,
+                                ),
+                                const SizedBox(height: kAiPanelSectionGap),
+                                _buildHeaderSection(
+                                  context,
+                                  settings: settings,
+                                  colorScheme: colorScheme,
+                                ),
+                                const SizedBox(height: kAiPanelSectionGap),
+                              ],
+                              if (!settings.hideInfoButtons &&
+                                  controller.status ==
+                                      TranslationStatus.idle) ...[
+                                _buildEnglishSourceTipBanner(settings),
+                                const SizedBox(height: kAiPanelSectionGap),
+                              ],
+                              _buildLanguageSelectorSection(
+                                context,
+                                settings: settings,
+                                colorScheme: colorScheme,
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  KeyedSubtree(
-                                    key: _desktopLeftTopControlsKey,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        KeyedSubtree(
-                                          key: _desktopLeftTopBandContentKey,
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              _buildHeaderSection(
-                                                context,
-                                                settings: settings,
-                                                colorScheme: colorScheme,
-                                                balancedTopBand: true,
-                                                historyButtonKey:
-                                                    _desktopHistoryButtonKey,
-                                              ),
-                                              const SizedBox(
-                                                height: desktopSectionGap,
-                                              ),
-                                              _buildLanguageSelectorSection(
-                                                context,
-                                                settings: settings,
-                                                colorScheme: colorScheme,
-                                                balancedTopBand: true,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: desktopSectionGap),
-                                        KeyedSubtree(
-                                          key: _desktopBatchBannerKey,
-                                          child: _maybeBuildBatchProcessingBanner(
+                              const SizedBox(height: kAiPanelSectionGap),
+                              _maybeBuildBatchProcessingBanner(
+                                settings: settings,
+                                controller: controller,
+                                colorScheme: colorScheme,
+                              ),
+                              _buildPrimaryActionsSection(
+                                context,
+                                settings: settings,
+                                controller: controller,
+                              ),
+                              _buildFilePickerSection(
+                                context,
+                                settings: settings,
+                                controller: controller,
+                              ),
+                              _maybeBuildSelectedFilesSection(
+                                settings: settings,
+                                controller: controller,
+                                colorScheme: colorScheme,
+                                activeIndex: activeIndex,
+                              ),
+                              if (!useSplitLayout) ...[
+                                const SizedBox(height: kAiPanelSectionGap),
+                                _maybeBuildLiveSubtitleSection(
+                                  settings: settings,
+                                  controller: controller,
+                                  colorScheme: colorScheme,
+                                ),
+                              ],
+                              _buildBottomSpacer(context),
+                            ],
+                          );
+                        }
+
+                        if (!useSplitLayout) {
+                          return SingleChildScrollView(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 60),
+                            child: buildLeftContent(),
+                          );
+                        }
+
+                        final hasFooterFileNameRow =
+                            (controller.status == TranslationStatus.running ||
+                                    controller.status ==
+                                        TranslationStatus.paused) &&
+                                controller.currentFileName != null &&
+                                  !controller.isBatchProcessing;
+                        // Footer yüksekliği: üst padding (10) + progress bar (28) + alt padding (10) = 48px.
+                        // inset = 48 → panel alt kenarı footer başlangıcıyla aynı hizada,
+                        // hem üstte hem altta eşit 10px boşluk kalır.
+                        final desktopBottomInset =
+                            48.0 + (hasFooterFileNameRow ? 28.0 : 0.0);
+
+                        const desktopSectionGap = kAiPanelSectionGap;
+                        final showInfoBanner = !settings.hideInfoButtons &&
+                            controller.status == TranslationStatus.idle;
+
+                        return SizedBox(
+                          height: constraints.maxHeight,
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(4, 0, 4, desktopBottomInset),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: _buildLanguageSelectorSection(
+                                        context,
+                                        settings: settings,
+                                        colorScheme: colorScheme,
+                                        balancedTopBand: false,
+                                      ),
+                                    ),
+                                    const SizedBox(width: desktopSectionGap),
+                                    Expanded(
+                                      child: _buildHeaderSection(
+                                        context,
+                                        settings: settings,
+                                        colorScheme: colorScheme,
+                                        balancedTopBand: false,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: desktopSectionGap),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          _maybeBuildBatchProcessingBanner(
                                             settings: settings,
                                             controller: controller,
                                             colorScheme: colorScheme,
                                           ),
-                                        ),
-                                        KeyedSubtree(
-                                          key: _desktopPrimaryActionsKey,
-                                          child: KeyedSubtree(
-                                            key: _desktopActionButtonsBlockKey,
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.stretch,
-                                              children: [
-                                                _buildPrimaryActionsSection(
-                                                  context,
-                                                  settings: settings,
-                                                  controller: controller,
-                                                ),
-                                                KeyedSubtree(
-                                                  key: _desktopFilePickerKey,
-                                                  child: _buildFilePickerSection(
-                                                    context,
-                                                    settings: settings,
-                                                    controller: controller,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                          _buildPrimaryActionsSection(
+                                            context,
+                                            settings: settings,
+                                            controller: controller,
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _maybeBuildSelectedFilesSection(
-                                      settings: settings,
-                                      controller: controller,
-                                      colorScheme: colorScheme,
-                                      activeIndex: activeIndex,
-                                      scrollableList: true,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                8,
-                                0,
-                                0,
-                                desktopBottomInset,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (showInfoBanner)
-                                    SizedBox(
-                                      height: rightAlignedTopHeight,
-                                      child: Stack(
-                                        children: [
-                                          Positioned(
-                                            top: creditCardTopOffset,
-                                            left: 0,
-                                            right: 0,
-                                            height: creditCardHeight,
-                                            child: buildDesktopCreditCard(),
-                                          ),
-                                          Positioned(
-                                            top: infoBoxTopOffset,
-                                            left: 0,
-                                            right: 0,
-                                            height: infoBoxHeight,
-                                            child: _buildEnglishSourceTipBanner(
-                                              settings,
-                                              fillHeight: true,
-                                              fontSize: 15,
-                                            ),
+                                          _buildFilePickerSection(
+                                            context,
+                                            settings: settings,
+                                            controller: controller,
                                           ),
                                         ],
                                       ),
-                                    )
-                                  else ...[
-                                    buildDesktopCreditCard(),
-                                    const SizedBox(height: desktopSectionGap),
+                                    ),
+                                    const SizedBox(width: desktopSectionGap),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          _buildCreditCardSection(
+                                            context,
+                                            settings: settings,
+                                            controller: controller,
+                                            colorScheme: colorScheme,
+                                          ),
+                                          if (showInfoBanner) ...[
+                                            const SizedBox(height: desktopSectionGap),
+                                            _buildEnglishSourceTipBanner(
+                                              settings,
+                                              fillHeight: false,
+                                              fontSize: 15,
+                                            ),
+                                          ]
+                                        ],
+                                      ),
+                                    ),
                                   ],
-                                  Expanded(
-                                    child: _selectedFiles.isEmpty
-                                        ? _buildDesktopEmptyPreviewState(
-                                            settings,
-                                            colorScheme,
-                                          )
-                                        : (_desktopPreviewFilePath != null &&
-                                                _desktopPreviewFileName != null
-                                            ? AiPanelFileContentPreviewPanel(
-                                                trans: settings.trans,
-                                                filePath:
-                                                    _desktopPreviewFilePath!,
-                                                fileName:
-                                                    _desktopPreviewFileName!,
-                                                onClose: () {
-                                                  setState(() {
-                                                    _desktopPreviewFilePath =
-                                                        null;
-                                                    _desktopPreviewFileName =
-                                                        null;
-                                                  });
-                                                },
+                                ),
+                                const SizedBox(height: desktopSectionGap),
+                                Expanded(
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: _maybeBuildSelectedFilesSection(
+                                          settings: settings,
+                                          controller: controller,
+                                          colorScheme: colorScheme,
+                                          activeIndex: activeIndex,
+                                          scrollableList: true,
+                                        ),
+                                      ),
+                                      const SizedBox(width: desktopSectionGap),
+                                      Expanded(
+                                        child: _selectedFiles.isEmpty
+                                            ? _buildDesktopEmptyPreviewState(
+                                                settings,
+                                                colorScheme,
                                               )
-                                            : ((controller.status ==
-                                                            TranslationStatus
-                                                                .running ||
-                                                        controller.status ==
-                                                            TranslationStatus
-                                                                .paused) &&
-                                                    controller
-                                                        .sourceBlocks.isNotEmpty
-                                                ? _maybeBuildLiveSubtitleSection(
-                                                    settings: settings,
-                                                    controller: controller,
-                                                    colorScheme: colorScheme,
-                                                    forceVisible: true,
-                                                    fillHeight: true,
+                                            : (_desktopPreviewFilePath != null &&
+                                                    _desktopPreviewFileName != null
+                                                ? AiPanelFileContentPreviewPanel(
+                                                    trans: settings.trans,
+                                                    filePath:
+                                                        _desktopPreviewFilePath!,
+                                                    fileName:
+                                                        _desktopPreviewFileName!,
+                                                    onClose: () {
+                                                      setState(() {
+                                                        _desktopPreviewFilePath = null;
+                                                        _desktopPreviewFileName = null;
+                                                      });
+                                                    },
                                                   )
-                                                : _buildDesktopIdlePreviewState(
-                                                    settings,
-                                                    colorScheme,
-                                                  ))),
+                                                : ((controller.status == TranslationStatus.running ||
+                                                            controller.status == TranslationStatus.paused) &&
+                                                        controller.sourceBlocks.isNotEmpty
+                                                    ? _maybeBuildLiveSubtitleSection(
+                                                        settings: settings,
+                                                        controller: controller,
+                                                        colorScheme: colorScheme,
+                                                        forceVisible: true,
+                                                        fillHeight: true,
+                                                      )
+                                                    : _buildDesktopIdlePreviewState(
+                                                        settings,
+                                                        colorScheme,
+                                                      ))),
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  if (_isDropZoneActive)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          color: colorScheme.primary.withValues(alpha: 0.08),
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: colorScheme.primary,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              settings.trans['add_file'] ?? 'DOSYA EKLE',
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            if (_isDropZoneActive)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Container(
-                    color: colorScheme.primary.withValues(alpha: 0.08),
-                    alignment: Alignment.center,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: colorScheme.primary,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Text(
-                        settings.trans['add_file'] ?? 'DOSYA EKLE',
-                        style: TextStyle(
-                          color: colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: _buildFooter(context, settings, controller),
                   ),
-                ),
-              ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _buildFooter(context, settings, controller),
-            ),
-            Align(
-              alignment: Alignment.topCenter,
-              child: ConfettiWidget(
-                confettiController: _confettiController,
-                blastDirectionality: BlastDirectionality.explosive,
-                shouldLoop: false,
-                colors: [
-                  colorScheme.primary,
-                  colorScheme.secondary,
-                  colorScheme.tertiary,
-                  colorScheme.error,
-                  colorScheme.inversePrimary,
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: ConfettiWidget(
+                      confettiController: _confettiController,
+                      blastDirectionality: BlastDirectionality.explosive,
+                      shouldLoop: false,
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.secondary,
+                        colorScheme.tertiary,
+                        colorScheme.error,
+                        colorScheme.inversePrimary,
+                      ],
+                    ),
+                  ),
                 ],
               ),
-            ),
-            ],
-          ),
-        );
-      },
-    ),
-    ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

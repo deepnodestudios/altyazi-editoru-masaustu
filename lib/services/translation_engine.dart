@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import '../constants/ai_language_options.dart';
 import '../services/gemini_service.dart';
 import '../services/subtitle_parser.dart';
 import '../services/subtitle_builder.dart';
@@ -27,7 +28,7 @@ class TranslationResumeState {
   TranslationResumeState({
     required this.hash,
     required this.filePath,
-    required this.targetLanguage,
+    required String targetLanguage,
     required this.clearSdh,
     required this.sourceContent,
     this.sourceEncoding,
@@ -39,7 +40,7 @@ class TranslationResumeState {
     required this.totalLines,
     required this.totalBlocks,
     this.chargeKey,
-  });
+  }) : targetLanguage = normalizeAiPanelLanguageCode(targetLanguage);
 
   // JSON serialization
   Map<String, dynamic> toJson() => {
@@ -81,9 +82,11 @@ class TranslationResumeState {
       chunks: List<String>.from(json['chunks'] ?? []),
       nextChunkIndex: json['nextChunkIndex'] ?? 0,
       translatedText: json['translatedText'] ?? '',
-      translatedBlocks: (json['translatedBlocks'] as List?)
-        ?.map((b) => SubtitleBlock.fromJson(b))
-        .toList() ?? [],
+      translatedBlocks:
+          (json['translatedBlocks'] as List?)
+              ?.map((b) => SubtitleBlock.fromJson(b))
+              .toList() ??
+          [],
       processedLines: json['processedLines'] ?? 0,
       totalLines: json['totalLines'] ?? 0,
       totalBlocks: totalBlocks,
@@ -97,7 +100,7 @@ class TranslationResumeState {
 class TranslationEngine {
   final GeminiService _geminiService;
   final SubtitleRepository _subtitleRepository = SubtitleRepository();
-  
+
   // Progress Events
   Function(int current, int total, {bool isComplete})? onProgress;
   Function(String key, [String? param])? onLog;
@@ -110,22 +113,30 @@ class TranslationEngine {
   /// Optional hook invoked right after a chunk is translated and persisted.
   /// Use this for side effects that must happen only after first real output.
   Future<void> Function(int chunkIndex, int totalChunks)? onAfterChunkSuccess;
-  
+
   bool _isCancelled = false;
   bool _isPaused = false;
   Completer<void>? _pauseCompleter;
   String? _lastDetectedEncoding;
   String? _lastError;
+  List<SubtitleBlock> _latestRealBlocks = [];
+  StringBuffer fullTranslation = StringBuffer();
 
   String? get lastDetectedEncoding => _lastDetectedEncoding;
   String? get lastError => _lastError;
-  
+  List<SubtitleBlock> get latestRealBlocks => _latestRealBlocks;
+
+  /// Mirrors mobile engine: usage tracked inside [GeminiService].
+  Map<String, dynamic> get usageSnapshot => _geminiService.usageSnapshot;
+  void resetUsage() => _geminiService.resetUsage();
+
   TranslationEngine(this._geminiService);
 
   Future<bool> _hasInternetConnection() async {
     try {
-      final result = await InternetAddress.lookup('example.com')
-          .timeout(const Duration(seconds: 3));
+      final result = await InternetAddress.lookup(
+        'example.com',
+      ).timeout(const Duration(seconds: 3));
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
     } catch (_) {
       return false;
@@ -154,8 +165,20 @@ class TranslationEngine {
     s = s.replaceAll('-', ' ');
 
     // Remove very common quality tags and language suffixes (best-effort).
-    s = s.replaceAll(RegExp(r'\b(480p|720p|1080p|2160p|bluray|brrip|webrip|webdl|x264|x265|h264|h265|yts|dvdrip)\b', caseSensitive: false), ' ');
-    s = s.replaceAll(RegExp(r'\b(greek|turkish|english|french|spanish|arabic|persian|russian)\b', caseSensitive: false), ' ');
+    s = s.replaceAll(
+      RegExp(
+        r'\b(480p|720p|1080p|2160p|bluray|brrip|webrip|webdl|x264|x265|h264|h265|yts|dvdrip)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+    s = s.replaceAll(
+      RegExp(
+        r'\b(greek|turkish|english|french|spanish|arabic|persian|russian)\b',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
 
     s = s.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (s.isEmpty) return '';
@@ -173,14 +196,17 @@ class TranslationEngine {
 
   static String? _guessSourceLanguageHint(String content) {
     // Very lightweight: if Greek letters are present, hint Greek.
-    final sample = content.length > 12000 ? content.substring(0, 12000) : content;
+    final sample = content.length > 12000
+        ? content.substring(0, 12000)
+        : content;
     if (_containsGreekLetters(sample)) return 'Greek';
     return null;
   }
 
   static bool _containsGreekLetters(String text) {
     for (final rune in text.runes) {
-      if ((rune >= 0x0370 && rune <= 0x03FF) || (rune >= 0x1F00 && rune <= 0x1FFF)) {
+      if ((rune >= 0x0370 && rune <= 0x03FF) ||
+          (rune >= 0x1F00 && rune <= 0x1FFF)) {
         return true;
       }
     }
@@ -190,7 +216,9 @@ class TranslationEngine {
   static bool _containsCyrillicLetters(String text) {
     for (final rune in text.runes) {
       // Cyrillic block + Cyrillic Supplement
-      if ((rune >= 0x0400 && rune <= 0x052F) || (rune >= 0x2DE0 && rune <= 0x2DFF) || (rune >= 0xA640 && rune <= 0xA69F)) {
+      if ((rune >= 0x0400 && rune <= 0x052F) ||
+          (rune >= 0x2DE0 && rune <= 0x2DFF) ||
+          (rune >= 0xA640 && rune <= 0xA69F)) {
         return true;
       }
     }
@@ -200,7 +228,8 @@ class TranslationEngine {
   static int _countGreekLetters(String text) {
     int count = 0;
     for (final rune in text.runes) {
-      if ((rune >= 0x0370 && rune <= 0x03FF) || (rune >= 0x1F00 && rune <= 0x1FFF)) {
+      if ((rune >= 0x0370 && rune <= 0x03FF) ||
+          (rune >= 0x1F00 && rune <= 0x1FFF)) {
         count++;
       }
     }
@@ -210,7 +239,9 @@ class TranslationEngine {
   static int _countCyrillicLetters(String text) {
     int count = 0;
     for (final rune in text.runes) {
-      if ((rune >= 0x0400 && rune <= 0x052F) || (rune >= 0x2DE0 && rune <= 0x2DFF) || (rune >= 0xA640 && rune <= 0xA69F)) {
+      if ((rune >= 0x0400 && rune <= 0x052F) ||
+          (rune >= 0x2DE0 && rune <= 0x2DFF) ||
+          (rune >= 0xA640 && rune <= 0xA69F)) {
         count++;
       }
     }
@@ -220,17 +251,32 @@ class TranslationEngine {
   static bool _containsAnyLikelyLetter(String text) {
     for (final rune in text.runes) {
       // Basic Latin letters
-      if ((rune >= 0x41 && rune <= 0x5A) || (rune >= 0x61 && rune <= 0x7A)) return true;
+      if ((rune >= 0x41 && rune <= 0x5A) || (rune >= 0x61 && rune <= 0x7A)) {
+        return true;
+      }
       // Latin-1 Supplement + Latin Extended-A/B (covers many European alphabets)
-      if (rune >= 0x00C0 && rune <= 0x024F) return true;
+      if (rune >= 0x00C0 && rune <= 0x024F) {
+        return true;
+      }
       // Greek
-      if ((rune >= 0x0370 && rune <= 0x03FF) || (rune >= 0x1F00 && rune <= 0x1FFF)) return true;
+      if ((rune >= 0x0370 && rune <= 0x03FF) ||
+          (rune >= 0x1F00 && rune <= 0x1FFF)) {
+        return true;
+      }
       // Cyrillic
-      if ((rune >= 0x0400 && rune <= 0x052F) || (rune >= 0x2DE0 && rune <= 0x2DFF) || (rune >= 0xA640 && rune <= 0xA69F)) return true;
+      if ((rune >= 0x0400 && rune <= 0x052F) ||
+          (rune >= 0x2DE0 && rune <= 0x2DFF) ||
+          (rune >= 0xA640 && rune <= 0xA69F)) {
+        return true;
+      }
       // Arabic
-      if (rune >= 0x0600 && rune <= 0x06FF) return true;
+      if (rune >= 0x0600 && rune <= 0x06FF) {
+        return true;
+      }
       // Hebrew
-      if (rune >= 0x0590 && rune <= 0x05FF) return true;
+      if (rune >= 0x0590 && rune <= 0x05FF) {
+        return true;
+      }
     }
     return false;
   }
@@ -245,10 +291,7 @@ class TranslationEngine {
   }
 
   static String _normalizeForCompare(String text) {
-    return text
-        .replaceAll('\r', '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    return text.replaceAll('\r', '').replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   Future<List<SubtitleBlock>> _fixLikelyUntranslatedBlocks({
@@ -267,7 +310,11 @@ class TranslationEngine {
     const maxFixesPerChunk = 20;
     int fixes = 0;
 
-    for (int i = 0; i < sourceBlocks.length && i < translatedBlocks.length; i++) {
+    for (
+      int i = 0;
+      i < sourceBlocks.length && i < translatedBlocks.length;
+      i++
+    ) {
       if (fixes >= maxFixesPerChunk) break;
 
       final src = sourceBlocks[i];
@@ -285,7 +332,10 @@ class TranslationEngine {
       if (srcHasGreek) {
         final int srcGreek = _countGreekLetters(src.text);
         final int dstGreek = _countGreekLetters(dst.text);
-        stillMostlyGreek = dstGreek > 5 && srcGreek > 5 && dstGreek >= (srcGreek * 0.80).floor();
+        stillMostlyGreek =
+            dstGreek > 5 &&
+            srcGreek > 5 &&
+            dstGreek >= (srcGreek * 0.80).floor();
       } else {
         stillMostlyGreek = false;
       }
@@ -294,15 +344,21 @@ class TranslationEngine {
       if (srcHasCyrillic) {
         final int srcCyr = _countCyrillicLetters(src.text);
         final int dstCyr = _countCyrillicLetters(dst.text);
-        stillMostlyCyrillic = dstCyr > 5 && srcCyr > 5 && dstCyr >= (srcCyr * 0.80).floor();
+        stillMostlyCyrillic =
+            dstCyr > 5 && srcCyr > 5 && dstCyr >= (srcCyr * 0.80).floor();
       } else {
         stillMostlyCyrillic = false;
       }
 
       // General "unchanged" retry for sentence-like lines (works for Latin scripts too).
-      final bool shouldRetryBecauseUnchanged = unchanged && _isMeaningfulSentenceLike(src.text);
+      final bool shouldRetryBecauseUnchanged =
+          unchanged && _isMeaningfulSentenceLike(src.text);
 
-      if (!shouldRetryBecauseUnchanged && !stillMostlyGreek && !stillMostlyCyrillic) continue;
+      if (!shouldRetryBecauseUnchanged &&
+          !stillMostlyGreek &&
+          !stillMostlyCyrillic) {
+        continue;
+      }
 
       try {
         final singleSrt = SubtitleBuilder.buildSrt([src]);
@@ -323,16 +379,14 @@ class TranslationEngine {
     }
 
     if (fixes > 0) {
-      onLog?.call(
-        'log_retranslated_lines',
-        jsonEncode({'count': fixes}),
-      );
+      onLog?.call('log_retranslated_lines', jsonEncode({'count': fixes}));
     }
 
     return translatedBlocks;
   }
 
-  Future<({String srt, List<SubtitleBlock> blocks})> _translateSrtChunkResilient(
+  Future<({String srt, List<SubtitleBlock> blocks})>
+  _translateSrtChunkResilient(
     String chunk, {
     required String targetLanguage,
     String? contextHint,
@@ -355,15 +409,23 @@ class TranslationEngine {
       );
       parsed = SubtitleParser.parseSrt(translated);
     } catch (e) {
-      // Güvenlik filtresi (PROHIBITED) hatası alınırsa ve parça bölünebiliyorsa,
-      // hatayı yut ve 'forceSplit' bayrağını açarak parçalama mantığına git.
       final err = e.toString();
-      if ((err.contains('PROHIBITED') || err.contains('PromptFeedback') || err.contains('blockReason')) && expectedCount > 1 && depth < 5) {
-        onLog?.call(
-          'log_safety_filter_retry',
-          jsonEncode({'depth': depth}),
-        );
+      final isSafetyBlocked = err.contains('PROHIBITED') ||
+          err.contains('PromptFeedback') ||
+          err.contains('blockReason');
+
+      if (isSafetyBlocked && expectedCount > 1 && depth < 5) {
+        onLog?.call('log_safety_filter_retry', jsonEncode({'depth': depth}));
         forceSplit = true;
+      } else if (isSafetyBlocked) {
+        onLog?.call(
+          'log_safety_filter_fallback',
+          jsonEncode({'depth': depth, 'blocks': expectedCount}),
+        );
+        return (
+          srt: SubtitleBuilder.buildSrt(expectedBlocks),
+          blocks: expectedBlocks,
+        );
       } else {
         rethrow;
       }
@@ -383,7 +445,10 @@ class TranslationEngine {
           contextHint: contextHint,
           sourceLanguageHint: sourceLanguageHint,
         );
-        return (srt: SubtitleBuilder.buildSrt(fixedBlocks), blocks: fixedBlocks);
+        return (
+          srt: SubtitleBuilder.buildSrt(fixedBlocks),
+          blocks: fixedBlocks,
+        );
       }
     }
 
@@ -407,7 +472,10 @@ class TranslationEngine {
             contextHint: contextHint,
             sourceLanguageHint: sourceLanguageHint,
           );
-          return (srt: SubtitleBuilder.buildSrt(fixedBlocks), blocks: fixedBlocks);
+          return (
+            srt: SubtitleBuilder.buildSrt(fixedBlocks),
+            blocks: fixedBlocks,
+          );
         }
       } catch (_) {
         // ignore and fall back to splitting
@@ -439,8 +507,14 @@ class TranslationEngine {
         depth: depth + 1,
       );
 
-      final combinedBlocks = <SubtitleBlock>[...leftResult.blocks, ...rightResult.blocks];
-      return (srt: SubtitleBuilder.buildSrt(combinedBlocks), blocks: combinedBlocks);
+      final combinedBlocks = <SubtitleBlock>[
+        ...leftResult.blocks,
+        ...rightResult.blocks,
+      ];
+      return (
+        srt: SubtitleBuilder.buildSrt(combinedBlocks),
+        blocks: combinedBlocks,
+      );
     }
 
     // Last resort: don't lose content. If parsing returned something, use it; otherwise keep original.
@@ -450,13 +524,21 @@ class TranslationEngine {
     );
     if (parsed.isNotEmpty) {
       // Best-effort alignment even when counts mismatch.
-      final minLen = parsed.length < expectedBlocks.length ? parsed.length : expectedBlocks.length;
+      final minLen = parsed.length < expectedBlocks.length
+          ? parsed.length
+          : expectedBlocks.length;
       if (minLen > 0) {
-        _alignTranslatedBlocksToSource(expectedBlocks.sublist(0, minLen), parsed.sublist(0, minLen));
+        _alignTranslatedBlocksToSource(
+          expectedBlocks.sublist(0, minLen),
+          parsed.sublist(0, minLen),
+        );
       }
       return (srt: SubtitleBuilder.buildSrt(parsed), blocks: parsed);
     }
-    return (srt: SubtitleBuilder.buildSrt(expectedBlocks), blocks: expectedBlocks);
+    return (
+      srt: SubtitleBuilder.buildSrt(expectedBlocks),
+      blocks: expectedBlocks,
+    );
   }
 
   void _alignTranslatedBlocksToSource(
@@ -493,17 +575,26 @@ class TranslationEngine {
       }
 
       // Try to preserve the source line count per block.
-      final srcLineCount = src.text.split('\n').where((l) => l.trim().isNotEmpty).length;
+      final srcLineCount = src.text
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .length;
       if (srcLineCount <= 1) {
         // Normalize excessive newlines into single newline only when source is single-line.
         dst.text = dst.text.replaceAll(RegExp(r'\n{2,}'), '\n').trim();
         continue;
       }
 
-      final dstLines = dst.text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final dstLines = dst.text
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .toList();
       if (dstLines.length == srcLineCount) continue;
 
-      final flat = dst.text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      final flat = dst.text
+          .replaceAll('\n', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
       if (flat.isEmpty) continue;
 
       final words = flat.split(' ');
@@ -559,10 +650,7 @@ class TranslationEngine {
   }
 
   void _logResumeDebug(String message) {
-    onLog?.call(
-      'log_resume_debug',
-      jsonEncode({'message': message}),
-    );
+    onLog?.call('log_resume_debug', jsonEncode({'message': message}));
   }
 
   void pause() {
@@ -582,7 +670,7 @@ class TranslationEngine {
     _isCancelled = true;
     // Resume Pause if necessary to break loop
     if (_isPaused && _pauseCompleter != null && !_pauseCompleter!.isCompleted) {
-        _pauseCompleter!.complete();
+      _pauseCompleter!.complete();
     }
   }
 
@@ -596,26 +684,32 @@ class TranslationEngine {
     String? chargeKey,
   }) async {
     _isCancelled = false;
+    _geminiService.resetUsage();
 
     // 1. Prepare Content
     String content;
     List<SubtitleBlock> translatedBlocks = [];
     StringBuffer fullTranslation = StringBuffer();
-    
+
     // Check for Resume
     final filePath = _normalizePathForCompare(file.path);
-    final resumePath =
-        resumeState == null ? null : _normalizePathForCompare(resumeState.filePath);
-    final isResuming = resumeState != null &&
+    final resumePath = resumeState == null
+        ? null
+        : _normalizePathForCompare(resumeState.filePath);
+    final languageMatches =
+        resumeState != null &&
+        aiPanelLanguageCodesEqual(resumeState.targetLanguage, targetLanguage);
+    final isResuming =
+        resumeState != null &&
         resumeState.hash == hash &&
-        resumeState.targetLanguage == targetLanguage &&
+        languageMatches &&
         resumePath == filePath;
 
     if (resumeState != null && !isResuming) {
       _logResumeDebug(
         'engine mismatch '
         'hashMatch=${resumeState.hash == hash} '
-        'langMatch=${resumeState.targetLanguage == targetLanguage} '
+        'langMatch=$languageMatches '
         'pathMatch=${resumePath == filePath} '
         'fileRaw=${file.path} resumeRaw=${resumeState.filePath} '
         'fileNorm=$filePath resumeNorm=$resumePath',
@@ -623,9 +717,9 @@ class TranslationEngine {
     }
 
     if (isResuming) {
-       content = resumeState.sourceContent;
-       _lastDetectedEncoding = resumeState.sourceEncoding;
-       onLog?.call(
+      content = resumeState.sourceContent;
+      _lastDetectedEncoding = resumeState.sourceEncoding;
+      onLog?.call(
         'log_resume_continue',
         jsonEncode({
           'index': resumeState.nextChunkIndex,
@@ -633,15 +727,15 @@ class TranslationEngine {
           'done': resumeState.processedLines,
           'total': resumeState.totalLines,
         }),
-       );
+      );
     } else {
-       final result = await _subtitleRepository.readFileWithEncoding(file.path);
-       content = result.content;
-       _lastDetectedEncoding = result.encoding;
-       if (clearSdh) {
-         onLog?.call('log_sdh_cleaning');
-         content = SubtitleParser.clearSdh(content);
-       }
+      final result = await _subtitleRepository.readFileWithEncoding(file.path);
+      content = result.content;
+      _lastDetectedEncoding = result.encoding;
+      if (clearSdh) {
+        onLog?.call('log_sdh_cleaning');
+        content = SubtitleParser.clearSdh(content);
+      }
     }
 
     final contextHint = _buildContextHintFromFilePath(file.path);
@@ -653,7 +747,9 @@ class TranslationEngine {
     try {
       if (contextHint.isNotEmpty) {
         final blocks = SubtitleParser.parseSrt(content);
-        final sampleBlocks = blocks.length > 24 ? blocks.sublist(0, 24) : blocks;
+        final sampleBlocks = blocks.length > 24
+            ? blocks.sublist(0, 24)
+            : blocks;
         final sampleSrt = SubtitleBuilder.buildSrt(sampleBlocks);
         translationMemory = await _geminiService.buildTranslationMemory(
           fileTitleYearHint: contextHint,
@@ -685,10 +781,12 @@ class TranslationEngine {
 
     final contentBlockCount = SubtitleParser.parseSrt(content).length;
     final resumeTotalBlocks = isResuming ? resumeState.totalBlocks : 0;
-    final totalBlocksForProgress =
-      (resumeTotalBlocks > 0) ? resumeTotalBlocks : contentBlockCount;
-    final processedBlocksForProgress =
-      isResuming ? resumeState.translatedBlocks.length : 0;
+    final totalBlocksForProgress = (resumeTotalBlocks > 0)
+        ? resumeTotalBlocks
+        : contentBlockCount;
+    final processedBlocksForProgress = isResuming
+        ? resumeState.translatedBlocks.length
+        : 0;
 
     totalLines = totalBlocksForProgress;
     processedLines = processedBlocksForProgress;
@@ -698,31 +796,59 @@ class TranslationEngine {
     // 3. Prepare Chunks
     final List<String> chunks;
     int chunkIndex;
-    
+
     if (isResuming) {
+      final sourceBlocks = SubtitleParser.parseSrt(content);
+      final alreadyCount = resumeState.translatedBlocks.length;
+
+      // EĞER ÇEVİRİ YARIM KALMIŞSA MOBİL-MASAÜSTÜ FARK ETMEKSİZİN KALANLARI YENİDEN HESAPLA!
+      if (alreadyCount > 0 && alreadyCount < sourceBlocks.length) {
+        final remainingBlocks = sourceBlocks.sublist(alreadyCount);
+        final remainingSrt = SubtitleBuilder.buildSrt(remainingBlocks);
+
+        final isDesktop =
+            !kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+        chunks = await compute(
+          isDesktop
+              ? SubtitleParser.buildSrtChunksAdaptiveDesktop
+              : SubtitleParser.buildSrtChunksAdaptive,
+          remainingSrt,
+        );
+        chunkIndex = 0;
+
+        _logResumeDebug(
+          'cross-platform resume: alreadyBlocks=$alreadyCount totalBlocks=${sourceBlocks.length} remainingBlocks=${remainingBlocks.length} chunks=${chunks.length}',
+        );
+      } else {
         chunks = resumeState.chunks;
         chunkIndex = resumeState.nextChunkIndex;
-        fullTranslation.write(resumeState.translatedText);
-        translatedBlocks = List<SubtitleBlock>.from(resumeState.translatedBlocks);
-        // Ensure output file has current content
-        if (outputFile != null && !await outputFile.exists()) {
-             await outputFile.writeAsString(fullTranslation.toString());
-        }
+      }
+
+      fullTranslation.write(resumeState.translatedText);
+      translatedBlocks = List<SubtitleBlock>.from(resumeState.translatedBlocks);
+      _latestRealBlocks = List<SubtitleBlock>.from(translatedBlocks);
+      // Ensure output file has current content
+      if (outputFile != null && !await outputFile.exists()) {
+        await outputFile.writeAsString(fullTranslation.toString());
+      }
     } else {
       onLog?.call('log_translation_chunks_preparing');
       // İşlemi arka planda (isolate) yaparak arayüzün donmasını engelliyoruz
-      final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+      final isDesktop =
+          !kIsWeb &&
+          (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
       chunks = await compute(
         isDesktop
             ? SubtitleParser.buildSrtChunksAdaptiveDesktop
             : SubtitleParser.buildSrtChunksAdaptive,
         content,
       );
-        chunkIndex = 0;
-        // Clean output file
-        if (outputFile != null && await outputFile.exists()) {
-            await outputFile.delete();
-        }
+      chunkIndex = 0;
+      // Clean output file
+      if (outputFile != null && await outputFile.exists()) {
+        await outputFile.delete();
+      }
     }
 
     if (chunks.isNotEmpty) {
@@ -735,8 +861,8 @@ class TranslationEngine {
     TranslationResumeState buildResumeState(int nextChunkIndex) {
       final int totalBlocks = isResuming
           ? (resumeState.totalBlocks > 0
-              ? resumeState.totalBlocks
-              : SubtitleParser.parseSrt(content).length)
+                ? resumeState.totalBlocks
+                : SubtitleParser.parseSrt(content).length)
           : SubtitleParser.parseSrt(content).length;
       return TranslationResumeState(
         hash: hash,
@@ -757,165 +883,229 @@ class TranslationEngine {
     }
 
     // 4. Processing Loop
+    Future<void> displayAnimationFuture = Future.value();
+    List<SubtitleBlock> previewBlocks = List.from(translatedBlocks);
+    int previewProcessedLines = processedLines;
+
     for (; chunkIndex < chunks.length; chunkIndex++) {
+      if (_isCancelled) {
+        onLog?.call('log_translation_cancelled');
+        return null;
+      }
+
+      onLog?.call(
+        'log_translation_chunk_begin',
+        jsonEncode({'chunkIndex': chunkIndex + 1, 'chunkTotal': chunks.length}),
+      );
+
+      if (_isPaused) {
+        onLog?.call('log_translation_waiting_resume');
+        await _pauseCompleter?.future;
+      }
+
+      // Hard precondition checks (e.g., credits) before doing any network work.
+      if (onBeforeChunk != null) {
+        try {
+          onLog?.call(
+            'log_translation_before_chunk_hook_start',
+            jsonEncode({
+              'chunkIndex': chunkIndex + 1,
+              'chunkTotal': chunks.length,
+            }),
+          );
+          await onBeforeChunk!(chunkIndex, chunks.length);
+          onLog?.call(
+            'log_translation_before_chunk_hook_done',
+            jsonEncode({
+              'chunkIndex': chunkIndex + 1,
+              'chunkTotal': chunks.length,
+            }),
+          );
+        } catch (e) {
+          final msg = e.toString();
+          if (msg.contains('Yetersiz')) {
+            _lastError = 'Yetersiz bakiye';
+            onLog?.call('log_insufficient_credit_stop');
+            return buildResumeState(chunkIndex);
+          }
+          rethrow;
+        }
+      }
+
+      final chunk = chunks[chunkIndex];
+      const maxRetries = 8; // Bağlantı sorunları için daha fazla deneme
+      int attempt = 0;
+
+      while (true) {
         if (_isCancelled) {
-             onLog?.call('log_translation_cancelled');
-             return null;
+          onLog?.call('log_translation_cancelled');
+          return null;
         }
 
-        onLog?.call(
-          'log_translation_chunk_begin',
-          jsonEncode({'chunkIndex': chunkIndex + 1, 'chunkTotal': chunks.length}),
-        );
-        
-        if (_isPaused) {
-            onLog?.call('log_translation_waiting_resume');
-            await _pauseCompleter?.future;
-        }
+        try {
+          final startedAt = DateTime.now();
+          onLog?.call(
+            'log_translation_chunk_call_start',
+            jsonEncode({
+              'chunkIndex': chunkIndex + 1,
+              'chunkTotal': chunks.length,
+            }),
+          );
+          final result = await _translateSrtChunkResilient(
+            chunk,
+            targetLanguage: targetLanguage,
+            contextHint: combinedContextHint.isEmpty
+                ? null
+                : combinedContextHint,
+            sourceLanguageHint: sourceLanguageHint,
+          );
+          final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+          onLog?.call(
+            'log_translation_chunk_call_done',
+            jsonEncode({
+              'chunkIndex': chunkIndex + 1,
+              'chunkTotal': chunks.length,
+              'elapsedMs': elapsedMs,
+            }),
+          );
+          final newBlocks = result.blocks;
 
-        // Hard precondition checks (e.g., credits) before doing any network work.
-        if (onBeforeChunk != null) {
-          try {
-            onLog?.call(
-              'log_translation_before_chunk_hook_start',
-              jsonEncode({'chunkIndex': chunkIndex + 1, 'chunkTotal': chunks.length}),
+          // Adjust indices
+          for (int i = 0; i < newBlocks.length; i++) {
+            newBlocks[i].index = translatedBlocks.length + i + 1;
+          }
+          translatedBlocks.addAll(newBlocks);
+          _latestRealBlocks = List<SubtitleBlock>.from(translatedBlocks);
+
+          // IMPORTANT: When writing chunks incrementally, preserve the globally-adjusted
+          // indices. Otherwise each chunk will restart at 1 and the output SRT will have
+          // repeated sequence numbers.
+          final translatedChunkForOutput = SubtitleBuilder.buildSrt(
+            newBlocks,
+            resequence: false,
+          );
+
+          fullTranslation.write(translatedChunkForOutput);
+
+          if (outputFile != null) {
+            await outputFile.writeAsString(
+              translatedChunkForOutput,
+              mode: FileMode.append,
             );
-            await onBeforeChunk!(chunkIndex, chunks.length);
-            onLog?.call(
-              'log_translation_before_chunk_hook_done',
-              jsonEncode({'chunkIndex': chunkIndex + 1, 'chunkTotal': chunks.length}),
-            );
-          } catch (e) {
-            final msg = e.toString();
-            if (msg.contains('Yetersiz')) {
-              _lastError = 'Yetersiz bakiye';
-              onLog?.call('log_insufficient_credit_stop');
+          }
+
+          processedLines += newBlocks.length;
+
+          // UI animasyonunu asenkron yürüt:
+          // Bu sayede fonksiyon hemen 'break' yapıp sonraki chunk'ı indirmeye başlayacak.
+          // Blokların ekrana gelme süresi, api isteğinin uzunluğuna göre bekleme süresine (next chunk zamanına) yayılıyor.
+          final blocksToAnimate = List<SubtitleBlock>.from(newBlocks);
+          // elapsedMs o chunk'ın inme süresi. UI animasyonunu totalde bu süreye yay.
+          final chunkTotalDelayMs = (elapsedMs * 0.9).clamp(
+            2000,
+            15000,
+          ); // çok uzarsa da en fazla 15sn'ye böl
+          final defaultDelayMs = blocksToAnimate.isNotEmpty
+              ? (chunkTotalDelayMs ~/ blocksToAnimate.length)
+              : 0;
+
+          displayAnimationFuture = displayAnimationFuture.then((_) async {
+            for (final block in blocksToAnimate) {
+              if (_isCancelled) break;
+              previewBlocks.add(block);
+              previewProcessedLines++;
+
+              // Önizleme için indeksleri hep sıralı tutalım
+              for (int j = 0; j < previewBlocks.length; j++) {
+                previewBlocks[j].index = j + 1;
+              }
+
+              onTranslatedBlocksUpdate?.call(
+                List<SubtitleBlock>.from(previewBlocks),
+              );
+              onProgress?.call(
+                previewProcessedLines,
+                totalLines,
+                isComplete: false,
+              );
+
+              await Future.delayed(
+                Duration(milliseconds: defaultDelayMs.toInt()),
+              );
+            }
+          });
+
+          if (onAfterChunkSuccess != null) {
+            try {
+              await onAfterChunkSuccess!(chunkIndex, chunks.length);
+            } catch (e) {
+              final msg = e.toString();
+              _lastError = msg;
+              if (msg.contains('Yetersiz')) {
+                onLog?.call('log_insufficient_credit_stop');
+              }
+              onLog?.call('log_error_state_saving');
+              return buildResumeState(chunkIndex + 1);
+            }
+          }
+          break; // Success, move to next chunk
+        } catch (e) {
+          attempt++;
+          final isTransient = _isTransientNetworkError(e);
+
+          if (isTransient) {
+            final online = await _hasInternetConnection();
+            if (!online) {
+              _lastError = 'İnternet bağlantısı yok';
+              onLog?.call('log_no_internet_stop');
+              onLog?.call('log_error_state_saving');
               return buildResumeState(chunkIndex);
             }
-            rethrow;
           }
+
+          final exceededRetries = attempt > maxRetries;
+
+          if (exceededRetries || !isTransient) {
+            // Return State to Controller for saving
+            final raw = e.toString();
+            final errorMsg = raw.length > 700
+                ? '${raw.substring(0, 700)}…'
+                : raw;
+            _lastError = '${e.runtimeType}: $errorMsg';
+            onLog?.call(
+              exceededRetries
+                  ? 'log_max_retry_state_saving'
+                  : 'log_error_state_saving',
+            );
+            onLog?.call('log_error_detail', jsonEncode({'error': _lastError}));
+            return buildResumeState(chunkIndex);
+          }
+
+          final waitSeconds =
+              3 + (attempt * 2); // Artan bekleme süresi: 5s, 7s, 9s...
+          onLog?.call(
+            'log_retrying_after_error',
+            jsonEncode({
+              'type': e.runtimeType.toString(),
+              'seconds': waitSeconds,
+              'attempt': attempt,
+              'max': maxRetries,
+            }),
+          );
+          await Future.delayed(Duration(seconds: waitSeconds));
         }
-
-        final chunk = chunks[chunkIndex];
-        const maxRetries = 8; // Bağlantı sorunları için daha fazla deneme
-        int attempt = 0;
-
-        while (true) {
-            if (_isCancelled) {
-                onLog?.call('log_translation_cancelled');
-                 return null;
-            }
-
-            try {
-                final startedAt = DateTime.now();
-                onLog?.call(
-                  'log_translation_chunk_call_start',
-                  jsonEncode({'chunkIndex': chunkIndex + 1, 'chunkTotal': chunks.length}),
-                );
-                final result = await _translateSrtChunkResilient(
-                  chunk,
-                  targetLanguage: targetLanguage,
-                  contextHint: combinedContextHint.isEmpty ? null : combinedContextHint,
-                  sourceLanguageHint: sourceLanguageHint,
-                );
-                final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
-                onLog?.call(
-                  'log_translation_chunk_call_done',
-                  jsonEncode({
-                    'chunkIndex': chunkIndex + 1,
-                    'chunkTotal': chunks.length,
-                    'elapsedMs': elapsedMs,
-                  }),
-                );
-              final newBlocks = result.blocks;
-
-                // Adjust indices
-                for (int i = 0; i < newBlocks.length; i++) {
-                  newBlocks[i].index = translatedBlocks.length + i + 1;
-                }
-                translatedBlocks.addAll(newBlocks);
-
-                // IMPORTANT: When writing chunks incrementally, preserve the globally-adjusted
-                // indices. Otherwise each chunk will restart at 1 and the output SRT will have
-                // repeated sequence numbers.
-                final translatedChunkForOutput =
-                    SubtitleBuilder.buildSrt(newBlocks, resequence: false);
-
-                fullTranslation.write(translatedChunkForOutput);
-                
-                if (outputFile != null) {
-                    await outputFile.writeAsString(translatedChunkForOutput, mode: FileMode.append);
-                }
-                
-                // Update progress based on translated subtitle blocks.
-                processedLines += newBlocks.length;
-                
-                // Notify controller with updated blocks for live view
-                onTranslatedBlocksUpdate?.call(List<SubtitleBlock>.from(translatedBlocks));
-                
-                onProgress?.call(processedLines, totalLines, isComplete: false);
-
-                if (onAfterChunkSuccess != null) {
-                  try {
-                    await onAfterChunkSuccess!(chunkIndex, chunks.length);
-                  } catch (e) {
-                    final msg = e.toString();
-                    _lastError = msg;
-                    if (msg.contains('Yetersiz')) {
-                      onLog?.call('log_insufficient_credit_stop');
-                    }
-                    onLog?.call('log_error_state_saving');
-                    return buildResumeState(chunkIndex + 1);
-                  }
-                }
-                break; // Success, move to next chunk
-            } catch (e) {
-                 attempt++;
-                 final isTransient = _isTransientNetworkError(e);
-
-                 if (isTransient) {
-                   final online = await _hasInternetConnection();
-                   if (!online) {
-                     _lastError = 'İnternet bağlantısı yok';
-                     onLog?.call('log_no_internet_stop');
-                     onLog?.call('log_error_state_saving');
-                     return buildResumeState(chunkIndex);
-                   }
-                 }
-
-                 final exceededRetries = attempt > maxRetries;
-
-                 if (exceededRetries || !isTransient) {
-                     // Return State to Controller for saving
-                   final raw = e.toString();
-                   final errorMsg = raw.length > 700 ? '${raw.substring(0, 700)}…' : raw;
-                     _lastError = '${e.runtimeType}: $errorMsg';
-                     onLog?.call(exceededRetries ? 'log_max_retry_state_saving' : 'log_error_state_saving');
-                     onLog?.call('log_error_detail', jsonEncode({'error': _lastError}));
-                     return buildResumeState(chunkIndex);
-                 }
-                 
-                 final waitSeconds = 3 + (attempt * 2); // Artan bekleme süresi: 5s, 7s, 9s...
-                 onLog?.call(
-                   'log_retrying_after_error',
-                   jsonEncode({
-                     'type': e.runtimeType.toString(),
-                     'seconds': waitSeconds,
-                     'attempt': attempt,
-                     'max': maxRetries,
-                   }),
-                 );
-                 await Future.delayed(Duration(seconds: waitSeconds));
-            }
-        }
+      }
     }
-    
+
     if (_isCancelled) return null;
+
+    // Wait for any remaining UI animation to finish smoothly
+    await displayAnimationFuture;
 
     onProgress?.call(totalLines, totalLines, isComplete: true);
     return null; // Completed successfully, no resume state needed
   }
-  
+
   bool _isTransientNetworkError(Object e) {
     final errorString = e.toString().toLowerCase();
     return e is SocketException ||
