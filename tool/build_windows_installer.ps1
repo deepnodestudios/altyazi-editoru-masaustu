@@ -100,6 +100,20 @@ function Get-SignToolPath {
     "$env:ProgramFiles\Windows Kits\10\bin\x64\signtool.exe"
   )
 
+  # SDK versioned directories (e.g. 10.0.26100.0)
+  foreach ($base in @("$env:ProgramFiles (x86)\Windows Kits\10\bin", "$env:ProgramFiles\Windows Kits\10\bin")) {
+    if (Test-Path $base) {
+      $versioned = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1
+      if ($null -ne $versioned) {
+        $path = Join-Path $versioned.FullName 'x64\signtool.exe'
+        if (Test-Path $path) { $candidates += $path }
+      }
+    }
+  }
+
   foreach ($candidate in $candidates) {
     if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
       return $candidate
