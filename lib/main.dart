@@ -23,6 +23,7 @@ import 'widgets/adaptive_text.dart';
 import 'widgets/shared_system_log.dart';
 import 'translations.dart';
 import 'services/update_service.dart';
+import 'services/desktop_install_tracker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -200,6 +201,8 @@ Future<void> _deferredStartupWork(FirebaseAuth auth) async {
           'lastPlatform': Platform.operatingSystem,
         }, SetOptions(merge: true));
       } catch (_) {}
+
+      unawaited(DesktopInstallTracker.recordAppOpen());
     }
   } catch (e) {
     debugPrint("Firebase Auth failed: $e");
@@ -798,16 +801,16 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
 
     if (openNow != true) return;
 
+    final downloadTarget = Uri.tryParse(update.downloadUrl);
+    if (downloadTarget != null) {
+      await launchUrl(downloadTarget, mode: LaunchMode.externalApplication);
+      return;
+    }
+
     final folderTarget =
         update.folderUrl == null ? null : Uri.tryParse(update.folderUrl!);
     if (folderTarget != null) {
       await launchUrl(folderTarget, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    final fallback = Uri.tryParse(update.downloadUrl);
-    if (fallback != null) {
-      await launchUrl(fallback, mode: LaunchMode.externalApplication);
     }
   }
 

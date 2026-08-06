@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:crypto/crypto.dart';
-import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -37,23 +35,7 @@ import 'managers/editor_state_manager.dart';
 import 'managers/crash_report_manager.dart';
 import 'services/log_service.dart';
 import 'utils/string_utils.dart';
-import 'cloud_oauth_config.dart';
-
-class DesktopUpdateInfo {
-  final String currentVersion;
-  final String latestVersion;
-  final String fileName;
-  final String downloadUrl;
-  final String? folderUrl;
-
-  const DesktopUpdateInfo({
-    required this.currentVersion,
-    required this.latestVersion,
-    required this.fileName,
-    required this.downloadUrl,
-    this.folderUrl,
-  });
-}
+import 'services/update_service.dart' show DesktopUpdateInfo, UpdateService;
 
 // TranslationProject sınıfı artık managers/project_manager.dart'ta
 
@@ -218,101 +200,10 @@ class AppSettings extends ChangeNotifier {
   bool get isDesktopPlatform =>
       !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
-  static final RegExp _versionRegex = RegExp(
-    r'(\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?)',
-    caseSensitive: false,
-  );
-
-  int _compareVersions(String a, String b) {
-    List<int> parseCore(String value) {
-      final core = value.split(RegExp(r'[-+]')).first.trim();
-      return core
-          .split('.')
-          .map((part) => int.tryParse(part) ?? 0)
-          .toList(growable: false);
-    }
-
-    final pa = parseCore(a);
-    final pb = parseCore(b);
-    final maxLen = pa.length > pb.length ? pa.length : pb.length;
-    for (var i = 0; i < maxLen; i++) {
-      final ai = i < pa.length ? pa[i] : 0;
-      final bi = i < pb.length ? pb[i] : 0;
-      if (ai != bi) return ai.compareTo(bi);
-    }
-    return 0;
-  }
-
-  String? _extractVersionFromFileName(String fileName) {
-    final dot = fileName.lastIndexOf('.');
-    final baseName = dot > 0 ? fileName.substring(0, dot) : fileName;
-    final matches = _versionRegex.allMatches(baseName).toList(growable: false);
-    if (matches.isEmpty) return null;
-    return matches.last.group(0);
-  }
-
-  String _resolveUpdateFolderId() {
-    final direct = CloudOAuthConfig.googleDriveUpdateFolderId.trim();
-    if (direct.isNotEmpty) return direct;
-
-    final url = CloudOAuthConfig.googleDriveUpdateFolderUrl.trim();
-    if (url.isEmpty) return '';
-
-    final match = RegExp(r'/folders/([^/?#]+)', caseSensitive: false)
-        .firstMatch(url);
-    return (match?.group(1) ?? '').trim();
-  }
-
-  String _resolveUpdateFolderUrl(String folderId) {
-    final configured = CloudOAuthConfig.googleDriveUpdateFolderUrl.trim();
-    if (configured.isNotEmpty) return configured;
-    if (folderId.isEmpty) return '';
-    return 'https://drive.google.com/drive/folders/$folderId?usp=sharing';
-  }
-
-  List<String> _extractInstallerNamesFromDriveHtml(String html) {
-    final result = <String>[];
-    final seen = <String>{};
-
-    final pattern = RegExp(
-      r'([A-Za-z0-9 _+&().-]{3,}\.(?:exe|msi|zip))',
-      caseSensitive: false,
-    );
-
-    void collectFrom(String source) {
-      for (final match in pattern.allMatches(source)) {
-        final name = (match.group(1) ?? '').trim();
-        if (name.isEmpty) continue;
-        final key = name.toLowerCase();
-        if (seen.add(key)) result.add(name);
-      }
-    }
-
-    collectFrom(html);
-    try {
-      collectFrom(Uri.decodeFull(html));
-    } catch (_) {}
-
-    return result;
-  }
-
-  Future<DesktopUpdateInfo?> checkDesktopUpdateFromGoogleDrive({
+  Future<DesktopUpdateInfo?> checkDesktopUpdate({
     Duration minimumCheckInterval = const Duration(hours: 4),
   }) async {
     if (!isDesktopPlatform || !(Platform.isWindows)) return null;
-
-    final folderId = _resolveUpdateFolderId();
-    if (folderId.isEmpty) return null;
-    final folderUrl = _resolveUpdateFolderUrl(folderId);
-    if (folderUrl.isEmpty) return null;
-
-    final folderUri = Uri.tryParse(folderUrl);
-    if (folderUri == null ||
-        (folderUri.scheme != 'http' && folderUri.scheme != 'https')) {
-      // Defensive: avoid accidentally passing file:/// (or other) URIs into
-      // the HTTP client, which throws "No host specified".
-      return null;
-    }
 
     final prefs = await SharedPreferences.getInstance();
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -325,40 +216,22 @@ class AppSettings extends ChangeNotifier {
 
     try {
       addLog('log_update_check_started');
-      final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version.trim();
-
-      final response = await http
-          .get(folderUri)
-          .timeout(const Duration(seconds: 20));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      final update = await UpdateService.fetchLatestRelease();
+      if (update == null) {
         addLog(
           'log_update_check_failed_param',
-          jsonEncode({'error': 'HTTP ${response.statusCode}'}),
+          jsonEncode({'error': 'No release info'}),
         );
         return null;
       }
 
-      final installerNames =
-          _extractInstallerNamesFromDriveHtml(response.body);
-
-      String? bestFileName;
-      String? bestVersion;
-      for (final name in installerNames) {
-        final version = _extractVersionFromFileName(name);
-        if (version == null || version.isEmpty) continue;
-        if (_compareVersions(version, currentVersion) <= 0) continue;
-
-        if (bestVersion == null || _compareVersions(version, bestVersion) > 0) {
-          bestVersion = version;
-          bestFileName = name;
-        }
-      }
-
-      if (bestFileName == null || bestVersion == null) {
+      if (!UpdateService.isUpdateAvailable(
+        update.currentVersion,
+        update.latestVersion,
+      )) {
         addLog(
           'log_update_not_available_param',
-          jsonEncode({'current': currentVersion}),
+          jsonEncode({'current': update.currentVersion}),
         );
         return null;
       }
@@ -366,19 +239,12 @@ class AppSettings extends ChangeNotifier {
       addLog(
         'log_update_available_param',
         jsonEncode({
-          'current': currentVersion,
-          'latest': bestVersion,
-          'file': bestFileName,
+          'current': update.currentVersion,
+          'latest': update.latestVersion,
+          'file': update.fileName,
         }),
       );
-
-      return DesktopUpdateInfo(
-        currentVersion: currentVersion,
-        latestVersion: bestVersion,
-        fileName: bestFileName,
-        downloadUrl: folderUrl,
-        folderUrl: folderUrl,
-      );
+      return update;
     } catch (e) {
       addLog(
         'log_update_check_failed_param',
@@ -387,6 +253,11 @@ class AppSettings extends ChangeNotifier {
       return null;
     }
   }
+
+  Future<DesktopUpdateInfo?> checkDesktopUpdateFromGoogleDrive({
+    Duration minimumCheckInterval = const Duration(hours: 4),
+  }) =>
+      checkDesktopUpdate(minimumCheckInterval: minimumCheckInterval);
 
   bool _hasGoogleProvider(User user) {
     return user.providerData.any((info) => info.providerId == 'google.com');

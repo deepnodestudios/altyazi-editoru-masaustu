@@ -988,7 +988,7 @@ Future<void> _checkForUpdatesFromSettings(BuildContext context) async {
 
   if (openNow != true || !context.mounted) return;
 
-  final target = update.folderUrl ?? update.downloadUrl;
+  final target = update.downloadUrl;
   final uri = Uri.tryParse(target);
   if (uri == null) return;
 

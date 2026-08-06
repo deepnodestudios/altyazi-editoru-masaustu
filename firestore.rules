@@ -130,6 +130,33 @@ service cloud.firestore {
         && (!('purchasedCredits' in request.resource.data) || request.resource.data.purchasedCredits == resource.data.purchasedCredits);
     }
 
+    // Desktop install telemetry (anonymous auth OK)
+    match /desktop_installs/{installId} {
+      allow read: if false;
+
+      allow create: if isSignedIn()
+        && request.resource.data.installId == installId
+        && request.resource.data.installId is string
+        && request.resource.data.installId.size() >= 8
+        && request.resource.data.platform is string
+        && request.resource.data.appVersion is string;
+
+      allow update: if isSignedIn()
+        && resource.data.installId == installId
+        && request.resource.data.installId == installId
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'lastSeenAt',
+          'appVersion',
+          'buildNumber',
+          'osVersion',
+          'uid',
+          'sessionCount',
+          'platform'
+        ]);
+
+      allow delete: if false;
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;
