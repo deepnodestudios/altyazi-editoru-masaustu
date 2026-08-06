@@ -10,7 +10,6 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import 'package:url_launcher/url_launcher.dart';
 import 'utils/single_instance_win.dart' as single_instance;
 import 'app_settings.dart';
 import 'managers/theme_manager.dart';
@@ -770,48 +769,11 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     _desktopUpdatePromptShown = true;
     if (!context.mounted || _navigatorKey.currentContext == null) return;
 
-    final trans = settings.trans;
-    final openLabel = trans['update_action'] ?? 'Update';
-    final laterLabel = trans['update_later'] ?? 'Later';
-    final newVersionLabel = trans['update_new_version'] ?? 'New version';
-    final currentVersionLabel =
-      trans['update_current_version'] ?? 'Current version';
-
-    final openNow = await showDialog<bool>(
-      context: _navigatorKey.currentContext!,
-      builder: (ctx) => AlertDialog(
-        title: Text(trans['update_title'] ?? 'Yeni sürüm bulundu'),
-        content: Text(
-          '$newVersionLabel: ${update.latestVersion}\n'
-          '$currentVersionLabel: ${update.currentVersion}\n\n'
-          '${update.fileName}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(laterLabel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(openLabel),
-          ),
-        ],
-      ),
+    await UpdateService.promptAndApplyUpdate(
+      _navigatorKey.currentContext!,
+      update: update,
+      trans: settings.trans,
     );
-
-    if (openNow != true) return;
-
-    final downloadTarget = Uri.tryParse(update.downloadUrl);
-    if (downloadTarget != null) {
-      await launchUrl(downloadTarget, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    final folderTarget =
-        update.folderUrl == null ? null : Uri.tryParse(update.folderUrl!);
-    if (folderTarget != null) {
-      await launchUrl(folderTarget, mode: LaunchMode.externalApplication);
-    }
   }
 
   void _ensureTrayReadyOnStartup({int attempt = 0}) {

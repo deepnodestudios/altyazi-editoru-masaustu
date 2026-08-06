@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_settings.dart';
+import 'services/update_service.dart';
 import 'managers/theme_manager.dart';
 import 'widgets/adaptive_text.dart';
 
@@ -953,53 +954,16 @@ Future<void> _checkForUpdatesFromSettings(BuildContext context) async {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          trans['update_not_found'] ?? 'Yeni sürüm bulunamadı.',
+          trans['update_not_found'] ?? 'No update found.',
         ),
       ),
     );
     return;
   }
 
-  final newVersionLabel = trans['update_new_version'] ?? 'New version';
-  final currentVersionLabel =
-      trans['update_current_version'] ?? 'Current version';
-
-  final openNow = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(trans['update_title'] ?? 'Yeni sürüm bulundu'),
-      content: Text(
-        '$newVersionLabel: ${update.latestVersion}\n'
-        '$currentVersionLabel: ${update.currentVersion}\n\n'
-        '${update.fileName}',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text(trans['update_later'] ?? 'Later'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: Text(trans['update_action'] ?? 'Güncelle'),
-        ),
-      ],
-    ),
+  await UpdateService.promptAndApplyUpdate(
+    context,
+    update: update,
+    trans: trans,
   );
-
-  if (openNow != true || !context.mounted) return;
-
-  final target = update.downloadUrl;
-  final uri = Uri.tryParse(target);
-  if (uri == null) return;
-
-  final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-  if (!launched && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          trans['log_error'] ?? 'Bağlantı açılamadı.',
-        ),
-      ),
-    );
-  }
 }

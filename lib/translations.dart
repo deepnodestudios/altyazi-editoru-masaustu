@@ -45,6 +45,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Daha sonra',
         'update_new_version': 'Yeni sürüm',
         'update_current_version': 'Mevcut sürüm',
+        'update_not_found': 'Yeni sürüm bulunamadı.',
+        'update_downloading': 'Güncelleme indiriliyor',
+        'update_download_failed':
+            'Güncelleme indirilemedi. Tarayıcıda açılıyor.',
     },
     'EN': {
         'window_close_title': 'Close Application',
@@ -55,6 +59,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Later',
         'update_new_version': 'New version',
         'update_current_version': 'Current version',
+        'update_not_found': 'No update found.',
+        'update_downloading': 'Downloading update',
+        'update_download_failed':
+            'Could not download the update. Opening in browser.',
     },
     'FR': {
         'window_close_title': 'Fermer l\'application',
@@ -65,6 +73,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Plus tard',
         'update_new_version': 'Nouvelle version',
         'update_current_version': 'Version actuelle',
+        'update_downloading': 'Téléchargement de la mise à jour',
+        'update_download_failed':
+            'Impossible de télécharger la mise à jour. Ouverture dans le navigateur.',
+        'update_not_found': 'Aucune mise à jour trouvée.',
     },
     'DE': {
         'window_close_title': 'Anwendung schliessen',
@@ -75,6 +87,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Später',
         'update_new_version': 'Neue Version',
         'update_current_version': 'Aktuelle Version',
+        'update_downloading': 'Update wird heruntergeladen',
+        'update_download_failed':
+            'Update konnte nicht heruntergeladen werden. Wird im Browser geöffnet.',
+        'update_not_found': 'Kein Update gefunden.',
     },
     'IT': {
         'window_close_title': 'Chiudi applicazione',
@@ -85,6 +101,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Più tardi',
         'update_new_version': 'Nuova versione',
         'update_current_version': 'Versione corrente',
+        'update_downloading': 'Download dell\'aggiornamento in corso',
+        'update_download_failed':
+            'Impossibile scaricare l\'aggiornamento. Apertura nel browser.',
+        'update_not_found': 'Nessun aggiornamento trovato.',
     },
     'ES': {
         'window_close_title': 'Cerrar aplicacion',
@@ -95,6 +115,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Más tarde',
         'update_new_version': 'Nueva versión',
         'update_current_version': 'Versión actual',
+        'update_downloading': 'Descargando actualización',
+        'update_download_failed':
+            'No se pudo descargar la actualización. Abriendo en el navegador.',
+        'update_not_found': 'No se encontró ninguna actualización.',
     },
     'RU': {
         'window_close_title': 'Закрыть приложение',
@@ -105,6 +129,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Позже',
         'update_new_version': 'Новая версия',
         'update_current_version': 'Текущая версия',
+        'update_downloading': 'Загрузка обновления',
+        'update_download_failed':
+            'Не удалось загрузить обновление. Открывается в браузере.',
+        'update_not_found': 'Обновление не найдено.',
     },
     'EL': {
         'window_close_title': 'Κλεισιμο εφαρμογης',
@@ -115,6 +143,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Αργότερα',
         'update_new_version': 'Νέα έκδοση',
         'update_current_version': 'Τρέχουσα έκδοση',
+        'update_downloading': 'Λήψη ενημέρωσης',
+        'update_download_failed':
+            'Αποτυχία λήψης ενημέρωσης. Άνοιγμα στο πρόγραμμα περιήγησης.',
+        'update_not_found': 'Δεν βρέθηκε ενημέρωση.',
     },
     'PT': {
         'window_close_title': 'Fechar a aplicacao',
@@ -125,6 +157,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Mais tarde',
         'update_new_version': 'Nova versão',
         'update_current_version': 'Versão atual',
+        'update_downloading': 'A transferir atualização',
+        'update_download_failed':
+            'Não foi possível transferir a atualização. A abrir no navegador.',
+        'update_not_found': 'Nenhuma atualização encontrada.',
     },
     'AR': {
         'window_close_title': 'إغلاق التطبيق',
@@ -135,6 +171,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'لاحقاً',
         'update_new_version': 'الإصدار الجديد',
         'update_current_version': 'الإصدار الحالي',
+        'update_downloading': 'جارٍ تنزيل التحديث',
+        'update_download_failed':
+            'تعذر تنزيل التحديث. يتم الفتح في المتصفح.',
+        'update_not_found': 'لم يتم العثور على تحديث.',
     },
     'IN': {
         'window_close_title': 'ऐप बंद करें',
@@ -145,6 +185,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'बाद में',
         'update_new_version': 'नया संस्करण',
         'update_current_version': 'वर्तमान संस्करण',
+        'update_downloading': 'अपडेट डाउनलोड हो रहा है',
+        'update_download_failed':
+            'अपडेट डाउनलोड नहीं हो सका। ब्राउज़र में खोला जा रहा है।',
+        'update_not_found': 'कोई अपडेट नहीं मिला।',
     },
     'ID': {
         'window_close_title': 'Tutup aplikasi',
@@ -155,6 +199,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Nanti',
         'update_new_version': 'Versi baru',
         'update_current_version': 'Versi saat ini',
+        'update_downloading': 'Mengunduh pembaruan',
+        'update_download_failed':
+            'Pembaruan tidak dapat diunduh. Membuka di browser.',
+        'update_not_found': 'Pembaruan tidak ditemukan.',
     },
     'CN': {
         'window_close_title': '关闭应用',
@@ -165,6 +213,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': '稍后',
         'update_new_version': '新版本',
         'update_current_version': '当前版本',
+        'update_downloading': '正在下载更新',
+        'update_download_failed':
+            '无法下载更新，正在浏览器中打开。',
+        'update_not_found': '未找到更新。',
     },
     'JA': {
         'window_close_title': 'アプリを閉じる',
@@ -175,6 +227,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': '後で',
         'update_new_version': '新しいバージョン',
         'update_current_version': '現在のバージョン',
+        'update_downloading': 'アップデートをダウンロード中',
+        'update_download_failed':
+            'アップデートをダウンロードできませんでした。ブラウザで開きます。',
+        'update_not_found': 'アップデートが見つかりませんでした。',
     },
     'KO': {
         'window_close_title': '앱 닫기',
@@ -185,6 +241,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': '나중에',
         'update_new_version': '새 버전',
         'update_current_version': '현재 버전',
+        'update_downloading': '업데이트 다운로드 중',
+        'update_download_failed':
+            '업데이트를 다운로드할 수 없습니다. 브라우저에서 엽니다.',
+        'update_not_found': '업데이트를 찾을 수 없습니다.',
     },
     'NL': {
         'window_close_title': 'Applicatie sluiten',
@@ -195,6 +255,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Later',
         'update_new_version': 'Nieuwe versie',
         'update_current_version': 'Huidige versie',
+        'update_downloading': 'Update downloaden',
+        'update_download_failed':
+            'Update kon niet worden gedownload. Openen in browser.',
+        'update_not_found': 'Geen update gevonden.',
     },
     'SV': {
         'window_close_title': 'Stang appen',
@@ -205,6 +269,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Senare',
         'update_new_version': 'Ny version',
         'update_current_version': 'Aktuell version',
+        'update_downloading': 'Laddar ner uppdatering',
+        'update_download_failed':
+            'Kunde inte ladda ner uppdateringen. Öppnar i webbläsaren.',
+        'update_not_found': 'Ingen uppdatering hittades.',
     },
     'PL': {
         'window_close_title': 'Zamknij aplikacje',
@@ -215,6 +283,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Później',
         'update_new_version': 'Nowa wersja',
         'update_current_version': 'Aktualna wersja',
+        'update_downloading': 'Pobieranie aktualizacji',
+        'update_download_failed':
+            'Nie udało się pobrać aktualizacji. Otwieranie w przeglądarce.',
+        'update_not_found': 'Nie znaleziono aktualizacji.',
     },
     'TH': {
         'window_close_title': 'ปิดแอป',
@@ -225,6 +297,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'ภายหลัง',
         'update_new_version': 'เวอร์ชันใหม่',
         'update_current_version': 'เวอร์ชันปัจจุบัน',
+        'update_downloading': 'กำลังดาวน์โหลดการอัปเดต',
+        'update_download_failed':
+            'ไม่สามารถดาวน์โหลดการอัปเดตได้ กำลังเปิดในเบราว์เซอร์',
+        'update_not_found': 'ไม่พบการอัปเดต',
     },
     'VI': {
         'window_close_title': 'Dong ung dung',
@@ -235,6 +311,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Để sau',
         'update_new_version': 'Phiên bản mới',
         'update_current_version': 'Phiên bản hiện tại',
+        'update_downloading': 'Đang tải bản cập nhật',
+        'update_download_failed':
+            'Không thể tải bản cập nhật. Đang mở trong trình duyệt.',
+        'update_not_found': 'Không tìm thấy bản cập nhật.',
     },
     'HE': {
         'window_close_title': 'סגירת היישום',
@@ -245,6 +325,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'מאוחר יותר',
         'update_new_version': 'גרסה חדשה',
         'update_current_version': 'הגרסה הנוכחית',
+        'update_downloading': 'מוריד עדכון',
+        'update_download_failed':
+            'לא ניתן להוריד את העדכון. נפתח בדפדפן.',
+        'update_not_found': 'לא נמצא עדכון.',
     },
     'FA': {
         'window_close_title': 'بستن برنامه',
@@ -255,6 +339,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'بعداً',
         'update_new_version': 'نسخه جدید',
         'update_current_version': 'نسخه جاری',
+        'update_downloading': 'در حال دانلود به‌روزرسانی',
+        'update_download_failed':
+            'دانلود به‌روزرسانی ممکن نشد. در مرورگر باز می‌شود.',
+        'update_not_found': 'به‌روزرسانی یافت نشد.',
     },
     'TA': {
         'window_close_title': 'பயன்பாட்டை மூடு',
@@ -265,6 +353,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'பின்னர்',
         'update_new_version': 'புதிய பதிப்பு',
         'update_current_version': 'தற்போதைய பதிப்பு',
+        'update_downloading': 'புதுப்பிப்பு பதிவிறக்கப்படுகிறது',
+        'update_download_failed':
+            'புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை. உலாவியில் திறக்கப்படுகிறது.',
+        'update_not_found': 'புதுப்பிப்பு கண்டறியப்படவில்லை.',
     },
     'TE': {
         'window_close_title': 'యాప్‌ను మూసివేయి',
@@ -275,6 +367,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'తరువాత',
         'update_new_version': 'కొత్త సంచిక',
         'update_current_version': 'ప్రస్తుత సంచిక',
+        'update_downloading': 'అప్‌డేట్ డౌన్‌లోడ్ అవుతోంది',
+        'update_download_failed':
+            'అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం. బ్రౌజర్‌లో తెరుస్తోంది.',
+        'update_not_found': 'అప్‌డేట్ కనుగొనబడలేదు.',
     },
     'ML': {
         'window_close_title': 'ആപ്പ് അടയ്ക്കുക',
@@ -285,6 +381,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'പിന്നീട്',
         'update_new_version': 'പുതിയ പതിപ്പ്',
         'update_current_version': 'നിലവിലെ പതിപ്പ്',
+        'update_downloading': 'അപ്‌ഡേറ്റ് ഡൗൺലോഡ് ചെയ്യുന്നു',
+        'update_download_failed':
+            'അപ്‌ഡേറ്റ് ഡൗൺലോഡ് ചെയ്യാൻ കഴിഞ്ഞില്ല. ബ്രൗസറിൽ തുറക്കുന്നു.',
+        'update_not_found': 'അപ്‌ഡേറ്റ് കണ്ടെത്തിയില്ല.',
     },
     'KN': {
         'window_close_title': 'ಆಪ್ ಮುಚ್ಚಿ',
@@ -295,6 +395,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'ನಂತರ',
         'update_new_version': 'ಹೊಸ ಸಂಚಿಕೆ',
         'update_current_version': 'ಪ್ರಸ್ತುತ ಸಂಚಿಕೆ',
+        'update_downloading': 'ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ',
+        'update_download_failed':
+            'ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ಬ್ರೌಸರ್‌ನಲ್ಲಿ ತೆರೆಯಲಾಗುತ್ತಿದೆ.',
+        'update_not_found': 'ಅಪ್‌ಡೇಟ್ ಕಂಡುಬಂದಿಲ್ಲ.',
     },
     'PA': {
         'window_close_title': 'ਐਪ ਬੰਦ ਕਰੋ',
@@ -305,6 +409,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'ਬਾਅਦ ਵਿੱਚ',
         'update_new_version': 'ਨਵਾਂ ਵਰਜ਼ਨ',
         'update_current_version': 'ਮੌਜੂਦਾ ਵਰਜ਼ਨ',
+        'update_downloading': 'ਅਪਡੇਟ ਡਾਊਨਲੋਡ ਹੋ ਰਿਹਾ ਹੈ',
+        'update_download_failed':
+            'ਅਪਡੇਟ ਡਾਊਨਲੋਡ ਨਹੀਂ ਹੋ ਸਕਿਆ। ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਖੋਲ੍ਹਿਆ ਜਾ ਰਿਹਾ ਹੈ।',
+        'update_not_found': 'ਕੋਈ ਅਪਡੇਟ ਨਹੀਂ ਮਿਲੀ।',
     },
     'GU': {
         'window_close_title': 'એપ બંધ કરો',
@@ -315,6 +423,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'પછી',
         'update_new_version': 'નવું સંસ્કરણ',
         'update_current_version': 'વર્તમાન સંસ્કરણ',
+        'update_downloading': 'અપડેટ ડાઉનલોડ થઈ રહ્યું છે',
+        'update_download_failed':
+            'અપડેટ ડાઉનલોડ થઈ શક્યું નહીં. બ્રાઉઝરમાં ખોલી રહ્યા છીએ.',
+        'update_not_found': 'કોઈ અપડેટ મળ્યું નથી.',
     },
     'MR': {
         'window_close_title': 'अॅप बंद करा',
@@ -325,6 +437,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'नंतर',
         'update_new_version': 'नवीन आवृत्ती',
         'update_current_version': 'सध्याची आवृत्ती',
+        'update_downloading': 'अपडेट डाउनलोड होत आहे',
+        'update_download_failed':
+            'अपडेट डाउनलोड होऊ शकले नाही. ब्राउझरमध्ये उघडले जात आहे.',
+        'update_not_found': 'अपडेट सापडला नाही.',
     },
     'UK': {
         'window_close_title': 'Закрити застосунок',
@@ -335,6 +451,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Пізніше',
         'update_new_version': 'Нова версія',
         'update_current_version': 'Поточна версія',
+        'update_downloading': 'Завантаження оновлення',
+        'update_download_failed':
+            'Не вдалося завантажити оновлення. Відкривається в браузері.',
+        'update_not_found': 'Оновлення не знайдено.',
     },
     'CS': {
         'window_close_title': 'Zavrit aplikaci',
@@ -345,6 +465,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Později',
         'update_new_version': 'Nová verze',
         'update_current_version': 'Aktuální verze',
+        'update_downloading': 'Stahování aktualizace',
+        'update_download_failed':
+            'Aktualizaci se nepodařilo stáhnout. Otevírá se v prohlížeči.',
+        'update_not_found': 'Nebyla nalezena žádná aktualizace.',
     },
     'RO': {
         'window_close_title': 'Inchide aplicatia',
@@ -355,6 +479,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Mai târziu',
         'update_new_version': 'Versiune nouă',
         'update_current_version': 'Versiune curentă',
+        'update_downloading': 'Se descarcă actualizarea',
+        'update_download_failed':
+            'Actualizarea nu a putut fi descărcată. Se deschide în browser.',
+        'update_not_found': 'Nu a fost găsită nicio actualizare.',
     },
     'HU': {
         'window_close_title': 'Alkalmazas bezarasa',
@@ -365,6 +493,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Később',
         'update_new_version': 'Új verzió',
         'update_current_version': 'Jelenlegi verzió',
+        'update_downloading': 'Frissítés letöltése',
+        'update_download_failed':
+            'A frissítés letöltése nem sikerült. Megnyitás böngészőben.',
+        'update_not_found': 'Nem található frissítés.',
     },
     'DA': {
         'window_close_title': 'Luk appen',
@@ -375,6 +507,10 @@ const Map<String, Map<String, String>> _desktopDialogTranslations = {
         'update_later': 'Senere',
         'update_new_version': 'Ny version',
         'update_current_version': 'Nuværende version',
+        'update_downloading': 'Downloader opdatering',
+        'update_download_failed':
+            'Opdateringen kunne ikke downloades. Åbner i browseren.',
+        'update_not_found': 'Ingen opdatering fundet.',
     },
 };
 
@@ -752,6 +888,21 @@ class Translations {
             () => _desktopDialogTranslations['TR']?['update_current_version'] ??
                 _desktopDialogTranslations['EN']?['update_current_version'] ??
                 'Current version');
+        merged.putIfAbsent(
+            'update_downloading',
+            () => _desktopDialogTranslations['TR']?['update_downloading'] ??
+                _desktopDialogTranslations['EN']?['update_downloading'] ??
+                'Downloading update');
+        merged.putIfAbsent(
+            'update_download_failed',
+            () => _desktopDialogTranslations['TR']?['update_download_failed'] ??
+                _desktopDialogTranslations['EN']?['update_download_failed'] ??
+                'Could not download the update. Opening in browser.');
+        merged.putIfAbsent(
+            'update_not_found',
+            () => _desktopDialogTranslations['TR']?['update_not_found'] ??
+                _desktopDialogTranslations['EN']?['update_not_found'] ??
+                'No update found.');
         final view = _TranslationMapView(
             Map<String, String>.unmodifiable(merged), lang);
         _cache[lang] = view;
