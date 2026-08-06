@@ -3,8 +3,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from 'firebase-admin';
 import { meetsMinimumVersion, shouldUseV160ClientRules } from '../referral/referralUtils';
 import {
-    isFreeRewardsRestricted,
-    restrictedReason,
+    resolveFreeRewardsRestriction,
     RESTRICTED_STARTER_BONUS,
 } from './regionPolicy';
 
@@ -86,25 +85,22 @@ interface StarterCreditsData {
     platform?: string;
     appVersion?: string;
     timeZoneOffsetMinutes?: number;
+    countryCodes?: string[];
     languageCodes?: string[];
 }
 
 export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
 
-    const { deviceId, platform, appVersion, timeZoneOffsetMinutes, languageCodes } = request.data;
+    const { deviceId, platform, appVersion, timeZoneOffsetMinutes, countryCodes } = request.data;
     const resolvedPlatform = String(platform ?? '').trim().toLowerCase();
     const isMobilePlatform = resolvedPlatform === 'android' || resolvedPlatform === 'ios';
     const isWebPlatform = resolvedPlatform === 'web';
     const isDesktopPlatform = DESKTOP_PLATFORMS.has(resolvedPlatform);
     const normalizedDeviceId = String(deviceId ?? '').trim();
-    const freeRewardsRestricted = isFreeRewardsRestricted({
-        languageCodes,
+    const geoPolicyArgs = {
+        countryCodes,
         timeZoneOffsetMinutes,
-    });
-    const freeRewardsRestrictedReason = restrictedReason({
-        languageCodes,
-        timeZoneOffsetMinutes,
-    });
+    };
 
     // NOTE: Starter bonus is device-based and must not require Google sign-in.
     // However, we still require Firebase Auth (anonymous is OK) to reduce abuse
@@ -156,6 +152,13 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 : null;
             const userDoc = await transaction.get(userRef);
             const trackingDoc = trackingRef ? await transaction.get(trackingRef) : null;
+
+            const restriction = resolveFreeRewardsRestriction({
+                userData: userDoc.data(),
+                ...geoPolicyArgs,
+            });
+            const freeRewardsRestricted = restriction.restricted;
+            const freeRewardsRestrictedReason = restriction.reason;
 
             deviceBonusExisted = !!deviceBonusDoc?.exists;
 
@@ -373,11 +376,22 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 });
             }
 
-            if (freeRewardsRestricted) {
+            if (restriction.clearLegacyRestrictedFlag) {
+                transaction.set(
+                    userRef,
+                    {
+                        freeRewardsRestricted: admin.firestore.FieldValue.delete(),
+                        freeRewardsRestrictedReason: admin.firestore.FieldValue.delete(),
+                        freeRewardsRestrictedAt: admin.firestore.FieldValue.delete(),
+                    },
+                    { merge: true },
+                );
+            } else if (freeRewardsRestricted) {
                 transaction.set(
                     userRef,
                     {
                         freeRewardsRestricted: true,
+                        freeRewardsGeoLocked: restriction.geoLocked,
                         freeRewardsRestrictedReason: freeRewardsRestrictedReason ?? 'RESTRICTED',
                         freeRewardsRestrictedAt: admin.firestore.FieldValue.serverTimestamp(),
                     },
@@ -405,6 +419,9 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 starterBonusBlockedReason: starterBonusBlockedOnRootedDevice
                     ? 'ROOTED_DEVICE'
                     : null,
+                freeRewardsRestricted,
+                freeRewardsGeoLocked: restriction.geoLocked,
+                freeRewardsRestrictedReason,
             };
         });
 
@@ -418,8 +435,9 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             totalCredits: payload.totalCredits,
             bonusAmount: payload.bonusAmount,
             starterBonusBlockedReason: payload.starterBonusBlockedReason ?? null,
-            freeRewardsRestricted,
-            freeRewardsRestrictedReason,
+            freeRewardsRestricted: payload.freeRewardsRestricted,
+            freeRewardsGeoLocked: payload.freeRewardsGeoLocked,
+            freeRewardsRestrictedReason: payload.freeRewardsRestrictedReason,
         });
 
         return payload;

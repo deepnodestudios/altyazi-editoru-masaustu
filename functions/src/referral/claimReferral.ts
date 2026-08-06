@@ -1,11 +1,14 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { meetsVersionRequirement, grantFreeCredits, REFERRAL_REWARD } from './referralUtils';
+import { assertFreeRewardsAllowed } from '../billing/regionPolicy';
 
 interface ClaimReferralData {
   referralCode: string;
   deviceId: string;
   appVersion?: string;
+  countryCodes?: string[];
+  timeZoneOffsetMinutes?: number;
 }
 
 /**
@@ -19,7 +22,7 @@ export const claimReferral = onCall<ClaimReferralData>(
   { invoker: 'public', enforceAppCheck: false },
   async (request) => {
     const { auth, data } = request;
-    const { referralCode, deviceId, appVersion } = data;
+    const { referralCode, deviceId, appVersion, countryCodes, timeZoneOffsetMinutes } = data;
 
     if (!auth?.uid) {
       throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
@@ -47,6 +50,13 @@ export const claimReferral = onCall<ClaimReferralData>(
     }
 
     const db = admin.firestore();
+
+    await assertFreeRewardsAllowed({
+      db,
+      uid: auth.uid,
+      countryCodes,
+      timeZoneOffsetMinutes,
+    });
 
     // 1. Validate referral code exists
     const codeRef = db.collection('referral_codes').doc(trimmedCode);

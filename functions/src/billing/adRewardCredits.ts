@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 
 import { shouldUseV163AdRewardRules, shouldUseV169DeviceAdRewardRules } from '../referral/referralUtils';
+import { assertFreeRewardsAllowed } from './regionPolicy';
 
 const AD_REWARD_VIEWS_PER_CREDIT = 5;
 const DAILY_AD_REWARD_VIEW_LIMIT = 5;
@@ -11,6 +12,8 @@ interface AdRewardData {
   deviceId?: string;
   appVersion?: string;
   platform?: string;
+  countryCodes?: string[];
+  timeZoneOffsetMinutes?: number;
 }
 
 type RewardState = {
@@ -130,6 +133,13 @@ export const getAdRewardStatus = onCall<AdRewardData>(
     }
 
     const db = admin.firestore();
+    await assertFreeRewardsAllowed({
+      db,
+      uid: auth.uid,
+      countryCodes: data.countryCodes,
+      timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
+    });
+
     let stateData: Record<string, unknown> = {};
 
     if (useDeviceRules) {
@@ -178,6 +188,13 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
     }
 
     const db = admin.firestore();
+    await assertFreeRewardsAllowed({
+      db,
+      uid: auth.uid,
+      countryCodes: data.countryCodes,
+      timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
+    });
+
     const deviceId = (data.deviceId ?? '').trim();
     if (useDeviceRules && !deviceId) {
       throw new HttpsError('invalid-argument', 'DEVICE_ID_REQUIRED_FOR_V169');
