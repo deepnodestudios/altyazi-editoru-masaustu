@@ -35,6 +35,7 @@ import 'translations/translations_tr.dart';
 import 'translations/translations_uk.dart';
 import 'translations/translations_vi.dart';
 import 'translations/translations_maintenance.dart';
+import 'translations/translations_log_updates.dart';
 
 const Map<String, Map<String, String>> _desktopDialogTranslations = {
     'TR': {
@@ -909,6 +910,11 @@ class Translations {
                 translationsMaintenance['EN'] ??
                 const {};
         merged.addAll(maintenance);
+        final logUpdates =
+            translationsLogUpdates[lang] ??
+                translationsLogUpdates['EN'] ??
+                const {};
+        merged.addAll(logUpdates);
         final view = _TranslationMapView(
             Map<String, String>.unmodifiable(merged), lang);
         _cache[lang] = view;
