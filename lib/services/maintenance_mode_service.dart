@@ -31,15 +31,14 @@ class MaintenanceModeService {
         ),
       );
       final activated = await rc.fetchAndActivate();
-      if (kDebugMode) {
-        debugPrint(
-          'MaintenanceModeService fetchAndActivate=$activated '
-          'global=${_readBool(rc, keyGlobal)} '
-          'mobile=${_readBool(rc, keyMobile)} '
-          'desktop=${_readBool(rc, keyDesktop)} '
-          'web=${_readBool(rc, keyWeb)}',
-        );
-      }
+      debugPrint(
+        'MaintenanceModeService fetchAndActivate=$activated '
+        'global=${_readBool(rc, keyGlobal)} '
+        'mobile=${_readBool(rc, keyMobile)} '
+        'desktop=${_readBool(rc, keyDesktop)} '
+        'web=${_readBool(rc, keyWeb)} '
+        'active=${isActive()}',
+      );
     } catch (e) {
       debugPrint('MaintenanceModeService refresh failed: $e');
     }
