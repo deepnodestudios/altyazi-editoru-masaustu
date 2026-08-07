@@ -56,7 +56,8 @@ const Map<String, String> translationsEn = {
   'cloud_no_files_found': 'No files found.',
   'cloud_not_supported': 'This cloud provider is not supported yet.',
   'cloud_services': 'Cloud Services',
-  'cloud_source_device': 'This device',
+    'cloud_source_device': 'This device',
+    'cloud_source_device_zip_save': 'Save ZIP to This Device',
   'cloud_source_drive': 'Google Drive',
   'cloud_source_dropbox': 'Dropbox',
   'cloud_source_hint':
@@ -335,7 +336,7 @@ const Map<String, String> translationsEn = {
   'log_iap_consume_success':
       'IAP consumePurchase OK (productId {productId}, code {code})',
   'log_iap_credit_add_failed':
-      'Credits not added: package not found or server error (outcome {outcome})',
+      'Credits not added: {error}',
   'log_iap_packages_loaded': 'IAP packages loaded (count {count})',
   'log_iap_packages_loading': 'IAP packages loading (Remote Config)...',
   'log_iap_previous_purchase_unhandled':
@@ -527,6 +528,7 @@ const Map<String, String> translationsEn = {
   'select': 'Select',
   'select_folder': 'Select folder',
   'select_this_folder': 'Select this folder',
+    'save_here': 'Save here',
   'settings': 'Settings',
   'settings_confirm_deletes': 'Ask For Confirmation Before Deleting',
   'settings_hide_info': 'Hide Information',
@@ -574,7 +576,7 @@ const Map<String, String> translationsEn = {
   'trans_method_label': 'Translation Engine',
   'translation_preview_label': 'Translation preview:',
   'translation_starting_soon': 'Translation will start in a few seconds',
-  'translations': 'CREDİT',
+  'translations': 'CREDIT',
   'undo': 'Undo',
   'unsaved_changes_prompt':
       'Opening a new file will replace the current editor content. What would you like to do?',
@@ -629,7 +631,7 @@ const Map<String, String> translationsEn = {
   'batch_background_notification_tip':
       'You can leave the app, you will be notified when translation is finished.',
   'batch_save_all_zip': 'Save All as ZIP',
-  'batch_complete_title': 'Translation Completed',
+  'batch_complete_title': 'Batch Translation Complete',
   'batch_save_individual_prompt': 'Or save individually from the list:',
   'batch_translation_beta': 'Batch Translation (Beta)',
   'batch_timeout_log': 'Timeout exceeded, skipping to next file.',
@@ -653,7 +655,7 @@ const Map<String, String> translationsEn = {
       'You no longer have to keep the app open when translating multiple files!\n\nSend your files to the server at once, and let them translate safely in the background. You\'ll get a notification when it\'s finished.',
   'tour_welcome_title': 'Welcome Gift 🎁',
   'tour_welcome_desc':
-      'A welcome gift of 5 Credits has been added to your account! You can track your credit balance here or add more anytime. Sign in with your Google account to get +2 extra credits!',
+      'A welcome gift of 2 Credits has been added to your account! You can track your credit balance here or add more anytime. Sign in with your Google account to get +2 extra credits!',
   'tour_features_title': 'Features',
   'tour_features_desc':
       'Advanced AI Translation, Offline support, and much more are here! You can access all included features of the app from this section.',
@@ -677,6 +679,8 @@ const Map<String, String> translationsEn = {
   'batch_cloud_processing_text': 'Translation Continues on Server...',
   'batch_translation_complete_text': 'Translation Complete!',
   'website_purchase': 'Website Purchase',
+    'purchase_recovered_previous':
+            'Your credits were added from a previously completed purchase. No new charge was taken now.',
 
   'same_language_title': 'Warning: Same Language Detected',
   'same_language_desc': 'The language of the selected files appears to match the target translation language. Do you still want to proceed and consume your credits?',
@@ -689,24 +693,4 @@ const Map<String, String> translationsEn = {
   'error_multi_pack_detected': 'This file appears to contain multiple subtitle contents. Please split the file into parts for security and credit balance.',
   'batch_report_success': '{count} file(s) translated successfully.',
   'batch_report_failed_count': '{count} file(s) failed:',
-  'desktop_settings': 'Desktop Settings',
-  'desktop_minimize_to_tray': 'Minimize To System Tray',
-  'desktop_minimize_to_tray_desc': 'Hide Window To Tray Instead Of Closing',
-  'desktop_always_on_top': 'Always On Top',
-  'desktop_always_on_top_desc': 'Keep This Window Above Other Windows',
-    'update_downloading': 'Downloading update',
-  'update_download_failed': 'Could not download the update. Opening in browser.',
-  'update_not_found': 'No update found.',
-'check_updates': 'Check for Updates',
-  'log_update_check_started': 'Update check started',
-  'log_update_not_available_param': 'No update available (Current: {current})',
-  'log_update_check_failed_param': 'Update check failed: {error}',
-  'log_update_available_param': 'Update found! Current: {current}, Latest: {latest}',
-  'empty_translation_list_hint': 'You can drag and drop subtitle files here',
-  'delete_project_title': 'Delete Project',
-  'delete_project_confirm': 'This project will be deleted.',
-  'delete_permanent_warning': 'This action cannot be undone!',
-  'purchase_windows_web_or_mobile': 'You can buy credits from our mobile app or website and use them here (Windows) with the same account.',
-  'install_app_cta': 'Install App',
-  'buy_from_web': 'Buy from Web',
 };

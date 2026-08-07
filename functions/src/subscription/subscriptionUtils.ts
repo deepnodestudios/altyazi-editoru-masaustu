@@ -341,7 +341,12 @@ export async function applySubscriptionRenewal(args: {
         : (normalizedSubscriptionBucket + product.credits);
       const newExtraBucket = normalizedExtraBucket;
       const newPurchasedCredits = Math.max(0, newSubscriptionBucket + newExtraBucket);
-      const grantPurchaseBonus = shouldGrantPurchaseBonus(appVersion);
+      // History must reflect net wallet change, not the package face value.
+      // Same-token renewals reset leftover subscription credits, so logging +package
+      // would show credits that were never actually added to the balance.
+      const purchasedDelta = newPurchasedCredits - currentPurchasedCredits;
+      const useV175BonusPolicy = shouldGrantPurchaseBonus(appVersion);
+      const grantPurchaseBonus = useV175BonusPolicy;
       const purchaseBonusAmount = grantPurchaseBonus
         ? Math.max(1, Math.floor(product.credits * 0.10))
         : 0;
@@ -366,18 +371,59 @@ export async function applySubscriptionRenewal(args: {
           : {}),
       }, { merge: true });
 
-      const txLogRef = userRef.collection('credit_transactions').doc();
-      tx.set(txLogRef, {
-        type: 'add',
-        amount: product.credits,
-        reason: 'subscription_renewal',
-        source: 'subscription',
-        creditType: 'purchased',
-        productId,
-        tier: product.tier,
-        orderId,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      if (isRenewalOfSameSubscription && useV175BonusPolicy) {
+        const forfeitedSubscriptionCredits = Math.max(0, normalizedSubscriptionBucket);
+        if (forfeitedSubscriptionCredits > 0) {
+          const forfeitTxRef = userRef
+            .collection('credit_transactions')
+            .doc(`${orderId || purchaseToken}_subscription_forfeit`);
+          tx.set(forfeitTxRef, {
+            type: 'spend',
+            amount: forfeitedSubscriptionCredits,
+            reason: 'subscription_renewal_forfeit',
+            source: 'subscription',
+            creditType: 'purchased',
+            productId,
+            tier: product.tier,
+            orderId,
+            packageCredits: product.credits,
+            isRenewal: true,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        const renewalTxRef = userRef
+          .collection('credit_transactions')
+          .doc(`${orderId || purchaseToken}_subscription_renewal`);
+        tx.set(renewalTxRef, {
+          type: 'add',
+          amount: product.credits,
+          reason: 'subscription_renewal',
+          source: 'subscription',
+          creditType: 'purchased',
+          productId,
+          tier: product.tier,
+          orderId,
+          packageCredits: product.credits,
+          isRenewal: true,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else if (purchasedDelta > 0) {
+        const txLogRef = userRef.collection('credit_transactions').doc();
+        tx.set(txLogRef, {
+          type: 'add',
+          amount: purchasedDelta,
+          reason: 'subscription',
+          source: 'subscription',
+          creditType: 'purchased',
+          productId,
+          tier: product.tier,
+          orderId,
+          packageCredits: product.credits,
+          isRenewal: false,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
 
       if (purchaseBonusAmount > 0) {
         const purchaseBonusTxRef = userRef

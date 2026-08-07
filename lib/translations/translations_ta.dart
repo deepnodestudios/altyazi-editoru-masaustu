@@ -2,7 +2,7 @@
 // Language: TA
 
 const Map<String, String> translationsTa = {
-  'about_description': 'AI-இயக்கிய உபசரண மொழிபெยர்ப்புக் கருவி மற்றும் සංपादक',
+  'about_description': 'AI-இயக்கிய வசன மொழிபெயர்ப்புக் கருவி மற்றும் திருத்தி',
   'about_legalese': '© 2024 Mehmet Öz\nMIT License',
   'about_title': 'பற்றி',
   'account_title': 'கணக்கு',
@@ -40,7 +40,7 @@ const Map<String, String> translationsTa = {
   'clear_sdh_no_trans': 'SDH மட்டும் (மொழிபெயர்ப்பு இல்லை)',
   'clear_sdh_no_trans_info':
       'எதையும் மொழிபெயர்க்காமல் SDH வரிகளை சுத்தம் செய்கிறது.\n\n• ஒலி விளைவுகள் மற்றும் விளக்கங்களை மட்டுமே நீக்குகிறது.\n• மொழி அப்படியே இருக்கும்.\n\n• இது AI ஐப் பயன்படுத்தாது.\n\nநீங்கள் சுத்தம் செய்ய மட்டுமே விரும்பினால், மொழிபெயர்ப்பு அல்ல என்றால் இதைப் பயன்படுத்தவும்.',
-  'click_for_content_long': 'உள்ளடக்கத்தை பார்க்க உபதலைப்பைத் தட்டவும்',
+  'click_for_content_long': 'உள்ளடக்கத்தைப் பார்க்க வசன வரியைத் தட்டவும்',
   'client_id_label': 'கிளையன்ட் ஐடி',
   'client_secret_label': 'கிளையன்ட் சீக்ரெட்',
   'close': 'மூடு',
@@ -56,7 +56,8 @@ const Map<String, String> translationsTa = {
   'cloud_no_files_found': 'கோப்புகள் எதுவும் கிடைக்கவில்லை.',
   'cloud_not_supported': 'இந்த மேக வழங்குநர் இன்னும் ஆதரிக்கப்படவில்லை.',
   'cloud_services': 'மேக சேவைகள்',
-  'cloud_source_device': 'இந்த சாதனம்',
+    'cloud_source_device': 'இந்த சாதனம்',
+    'cloud_source_device_zip_save': 'இந்த சாதனத்தில் ZIP சேமி',
   'cloud_source_drive': 'கூகுள் டிரைவ்',
   'cloud_source_dropbox': 'ட்ராப் பாக்ஸ்',
   'cloud_source_hint':
@@ -132,7 +133,7 @@ const Map<String, String> translationsTa = {
   'editor_regex_tooltip': 'Regex (வழக்கமான வெளிப்பாடு)',
   'editor_replace_all_btn': 'எல்லாவற்றையும் மாற்று',
   'editor_replace_btn': 'மாற்று',
-  'editor_replace_hint': 'இதயால் மாற்று...',
+  'editor_replace_hint': 'இதனால் மாற்று...',
   'editor_replaced_count': '{count} மாற்றங்கள் செய்யப்பட்டன',
   'editor_save_tooltip': 'சேமி',
   'editor_search_hint': 'தேடு...',
@@ -183,7 +184,7 @@ const Map<String, String> translationsTa = {
       'நேர குறியீடுகளை திருத்தவும், Regex தேடல் மற்றும் மாற்றம் செய்யவும், ஒத்திசைவு நகர்த்தல் பயன்படுத்தவும். வரிவரியாக திருத்தம், எழுத்து வடிவ மாற்றம் மற்றும் பல.',
   'feature_editor_title': 'மேம்பட்ட வசன திருத்தி',
   'feature_history_desc':
-      'உங்கள் அனைத்து மொழிபெயர்ப்புகளும் தானாகவே சேமிக்கப்படும். முடிக்காத மொழிபெயர்ப்புகளை நீங்கள் நிறுத்திய இடத்திலிருந்து தொடரவும்.',
+      'உங்கள் அனைத்து மொழிபெயர்ப்புகளும் தானாகவே சேமிக்கப்படும். முடிக்காத மொழிபெயர்ப்புகளை நீங்கள் நிறுத்திய இடத்திலிருந்து தொடரவும், அல்லது முடிந்த கோப்புகளை பதிவிறக்கவும்.',
   'feature_history_title': 'மொழிபெயர்ப்பு வரலாறு மற்றும் தொடர்தல்',
   'feature_languages_desc':
       'பயன்பாட்டு இடைமுகம் 35க்கும் மேற்பட்ட மொழிகளில் கிடைக்கிறது. வசன மொழிபெயர்ப்புக்கு ஆதரிக்கப்படும் இலக்கு மொழிகள் இன்னும் அதிகம்.',
@@ -417,8 +418,8 @@ const Map<String, String> translationsTa = {
   'log_starter_credits_added': 'Starter credits added: {amount}',
   'log_starter_credits_failed': 'Starter credits check failed: {error}',
   'log_stop_resume_failed': 'Stop/resume preparation failed: {error}',
-  'log_subtitle_removed': 'Subtitle Removed',
-  'log_subtitle_selected': 'Subtitle Selected',
+  'log_subtitle_removed': 'வசனம் அகற்றப்பட்டது',
+  'log_subtitle_selected': 'வசனம் தேர்ந்தெடுக்கப்பட்டது',
   'log_theme_changed': 'Theme Changed',
   'log_translation_cancelled': 'Translation cancelled',
   'log_translation_chunks_preparing': 'Preparing chunks...',
@@ -530,7 +531,8 @@ const Map<String, String> translationsTa = {
   'search_language_hint': 'மொழியை தேடு...',
   'select': 'தேர்வு',
   'select_folder': 'கோப்புறையைத் தேர்வு செய்',
-  'select_this_folder': 'இந்த கோப்புறையைத் தேர்வு செய்',
+    'select_this_folder': 'இந்த கோப்புறையைத் தேர்வு செய்',
+    'save_here': 'இங்கே சேமி',
   'settings': 'Settings',
   'settings_confirm_deletes': 'நீக்குவதற்கு முன் உறுதிப்படுத்தலைக் கேட்கவும்',
   'settings_hide_info': 'தகவல்களை மறை',
@@ -565,8 +567,8 @@ const Map<String, String> translationsTa = {
       'நிறுத்துவது சூழல் ஒருமைப்பாட்டைக் குறைத்து தரத்தை பாதிக்கலாம். முடிந்தால் முடிக்க விடவும்.',
   'stop_warning_stop': 'நிறுத்து',
   'stop_warning_title': 'மொழிபெயர்ப்பை நிறுத்தலாமா?',
-  'subtitle': 'Subtitle',
-  'subtitle_archive': 'உபதலைப்பு காப்பகம்',
+  'subtitle': 'வசனம்',
+  'subtitle_archive': 'வசன காப்பகம்',
   'system_log': 'சிஸ்டம் பதிவு',
   'system_logs': 'சிஸ்டம் பதிவுகள்',
   'tab_editor': 'எடிட்டர்',
@@ -631,19 +633,19 @@ const Map<String, String> translationsTa = {
   'batch_background_notification_tip':
       'நீங்கள் பயன்பாட்டை மூடலாம், முடிந்ததும் அறிவிக்கப்படுவீர்கள்.',
   'batch_save_all_zip': 'அனைத்தையும் ZIP ஆக சேமி',
-  'batch_complete_title': 'மொழிபெயர்ப்பு முடிந்தது',
+  'batch_complete_title': 'தொகுதி மொழிபெயர்ப்பு முடிந்தது',
   'batch_save_individual_prompt':
       'அல்லது பட்டியலிலிருந்து தனித்தனியாக சேமிக்கவும்:',
   'batch_translation_beta': 'தொகுதி மொழிபெயர்ப்பு (Beta)',
   'batch_timeout_log': 'நேரம் முடிந்தது, அடுத்த கோப்பிற்குத் தாவுகிறது.',
   'batch_process_completed': 'தொகுதி செயலாக்கம் முடிந்தது.',
-  'tour_add_file_title': 'உபதலைப்பு கோப்பைச் சேர்',
+  'tour_add_file_title': 'வசனக் கோப்பைச் சேர்',
   'tour_add_file_desc':
       'நீங்கள் மொழிபெயர்க்க விரும்பும் SRT அல்லது VTT கோப்புகளை இங்கே சேர்க்கலாம்.\nஉங்கள் சாதனம், Google Drive, Dropbox அல்லது Yandex Disk ஆகியவற்றிலிருந்து ஒரே நேரத்தில் பல கோப்புகளைத் தேர்ந்தெடுக்கலாம்.',
   'tour_cloud_sources_label': 'Google Drive / Dropbox / Yandex',
   'tour_language_title': 'இலக்கு மொழியை அமை',
   'tour_language_desc':
-      'உங்கள் கோப்புகளை எந்த மொழியில் மொழிபெயர்க்க வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும். AI உபதலைப்புகளின் சூழலைப் புரிந்து கொண்டு துல்லியமான மொழிபெயர்ப்பை வழங்கும்.',
+      'உங்கள் கோப்புகளை எந்த மொழியில் மொழிபெயர்க்க வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும். AI வசனம்களின் சூழலைப் புரிந்து கொண்டு துல்லியமான மொழிபெயர்ப்பை வழங்கும்.',
   'tour_translate_title': 'மொழிபெயர்ப்பைத் தொடங்கு',
   'tour_translate_desc':
       'உங்கள் சாதனத்தில் ஒரு கோப்பு அல்லது தேர்ந்தெடுக்கப்பட்ட பட்டியலை வரிசையாக மொழிபெயர்க்க இந்தப் பொத்தானைப் பயன்படுத்தலாம். மொழிபெயர்ப்பு செயல்முறையை நேரலையில் கண்காணிக்கலாம்.',
@@ -666,7 +668,7 @@ const Map<String, String> translationsTa = {
   'tour_desktop_version_title': 'கணினி பதிப்பு',
   'tour_desktop_version_desc':
       'சப்டைட்டில் எடிட்டரில் விண்டோஸிற்கான டெஸ்க்டாப் மென்பொருளும் உள்ளது. உங்கள் மொழிபெயர்ப்புகள் உங்கள் தொலைபேசிக்கும் கணினிக்கும் இடையில் தானாகவே ஒத்திசைக்கப்படுகின்றன! உங்கள் கணினியில் தொடர விரும்பினால் இங்கிருந்து பதிவிறக்கவும்.',
-  'tour_editor_tab_title': 'மேம்பட்ட உபதலைப்பு ஆசிரியர்',
+  'tour_editor_tab_title': 'மேம்பட்ட வசன எடிட்டர்',
   'tour_editor_tab_desc':
       'உங்கள் மொழிபெயர்ப்பை முடித்த பிறகு, அல்லது எந்த SRT கோப்பையும் திருத்தவோ, நேரங்களை ஒத்திசைக்கவோ மற்றும் உரைகளை மாற்றவோ இந்த டேப்பைப் பயன்படுத்தலாம்.',
   'tour_sdh_key_title': 'காது கேளாதோர் குறியீடுகளை நீக்கு (SDH)',
@@ -680,6 +682,8 @@ const Map<String, String> translationsTa = {
   'batch_cloud_processing_text': 'சேவையகத்தில் மொழிபெயர்ப்பு தொடர்கிறது...',
   'batch_translation_complete_text': 'மொழிபெயர்ப்பு முடிந்தது!',
   'website_purchase': 'இணையதள கொள்முதல்',
+    'purchase_recovered_previous':
+            'உங்கள் கிரெடிட்கள் முன்பு நிறைவு பெற்ற வாங்குதலிலிருந்து சேர்க்கப்பட்டன. இப்போது புதிய கட்டணம் வசூலிக்கப்படவில்லை.',
 
   'same_language_title': 'எச்சரிக்கை: அதே மொழி கண்டறியப்பட்டது',
   'same_language_desc': 'தேர்ந்தெடுக்கப்பட்ட கோப்புகளின் மொழி இலக்கு மொழிபெயர்ப்பு மொழியுடன் பொருந்துவதாகத் தெரிகிறது. நீங்கள் இன்னும் தொடர விரும்புகிறீர்களா, உங்கள் கிரெடிட்களை செலவழிக்க விரும்புகிறீர்களா?',
@@ -692,24 +696,4 @@ const Map<String, String> translationsTa = {
   'error_multi_pack_detected': 'இந்தக் கோப்பில் பல வசன உள்ளடக்கங்கள் இருப்பதாகத் தெரிகிறது. பாதுகாப்பு மற்றும் கிரெடிட் இருப்பிற்காகத் தயவுசெய்து கோப்பைப் பகுதிகளாகப் பிரிக்கவும்.',
   'batch_report_success': '{count} கோப்பு(கள்) வெற்றிகரமாக மொழிபெயர்க்கப்பட்டன.',
   'batch_report_failed_count': '{count} கோப்பு(கள்) தோல்வியடைந்தன:',
-  'desktop_settings': 'டெஸ்க்டாப் அமைப்புகள்',
-  'desktop_minimize_to_tray': 'சிஸ்டம் ட்ரேக்குச் சுருக்கு',
-  'desktop_minimize_to_tray_desc': 'மூடுவதற்குப் பதில் விண்டோவை ட்ரேಯಲ್ಲಿ மறை',
-  'desktop_always_on_top': 'எப்போதும் மேலே',
-  'desktop_always_on_top_desc': 'இந்த விண்டோவை மற்ற விண்டோக்களுக்கு மேலே வை',
-    'update_downloading': 'புதுப்பிப்பு பதிவிறக்கப்படுகிறது',
-  'update_download_failed': 'புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை. உலாவியில் திறக்கப்படுகிறது.',
-  'update_not_found': 'புதுப்பிப்பு கண்டறியப்படவில்லை.',
-'check_updates': 'புதுப்பிப்புகளைச் சரிபார்க்கவும்',
-  'log_update_check_started': 'மேம்படுத்தல் சரிபார்ப்பு தொடங்கியது',
-  'log_update_not_available_param': 'புதிய மேம்படுத்தல்கள் இல்லை (தற்போதைய: {current})',
-  'log_update_check_failed_param': 'மேம்படுத்தல் சரிபார்ப்பு தோல்வியடைந்தது: {error}',
-  'log_update_available_param': 'புதிய மேம்படுத்தல் உள்ளது! தற்போதைய: {current}, சமீபத்திய: {latest}',
-  'empty_translation_list_hint': 'துணைத்தலைப்பு கோப்புகளை இங்கே இழுத்து விடலாம்',
-  'delete_project_title': 'திட்டத்தை நீக்கு',
-  'delete_project_confirm': 'இந்த திட்டம் நீக்கப்படும்.',
-  'delete_permanent_warning': 'இந்தச் செயலை மாற்ற முடியாது!',
-  'purchase_windows_web_or_mobile': 'எங்கள் மொபைல் செயலி அல்லது இணையதளத்தில் நீங்கள் கிரெடிட்களை வாங்கலாம் மற்றும் அதே கணக்கைப் பயன்படுத்தி இங்கே (Windows) பயன்படுத்தலாம்.',
-  'install_app_cta': 'செயலியை நிறுவு',
-  'buy_from_web': 'இணையதளத்தில் வாங்கவும்',
 };

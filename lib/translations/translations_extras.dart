@@ -15,6 +15,13 @@ const Map<String, Map<String, String>> translationsExtras = {
         'Translation request started for chunk {chunkIndex} of {chunkTotal}',
     'log_translation_chunk_call_done':
         'Translation request finished for chunk {chunkIndex} of {chunkTotal} in {elapsedMs} ms',
+    'log_ad_gate_before':
+        'Ad gate pre-check. Credits total={userCredits}, paid={purchasedCredits}, free={freeCredits}, serverFree={serverFreeCredits}, device={deviceCredits}',
+    'log_ad_gate_guard_failed':
+        'Ad gate failed: {error} (total={userCredits}, free={freeCredits}, serverFree={serverFreeCredits}, device={deviceCredits})',
+    'log_ad_gate_user_cancelled': 'Ad gate cancelled by user.',
+    'log_prepare_translation_access_failed':
+        'Translation access preparation failed: {error} (chargeKey={chargeKey}, platform={platform}, total={userCredits}, free={freeCredits}, serverFree={serverFreeCredits}, device={deviceCredits})',
     'purchase_generic_error': 'An error occurred during purchase.',
     'purchase_start_failed_retry':
         'Could not start purchase. Please try again.',
@@ -39,6 +46,13 @@ const Map<String, Map<String, String>> translationsExtras = {
         '{chunkTotal} parcadan {chunkIndex}. parca icin ceviri istegi basladi',
     'log_translation_chunk_call_done':
         '{chunkTotal} parcadan {chunkIndex}. parca icin ceviri istegi {elapsedMs} ms icinde tamamlandi',
+    'log_ad_gate_before':
+        'Reklam kapisi on kontrolu. Krediler toplam={userCredits}, ucretli={purchasedCredits}, bedava={freeCredits}, sunucuBedava={serverFreeCredits}, cihaz={deviceCredits}',
+    'log_ad_gate_guard_failed':
+        'Reklam kapisi hatasi: {error} (toplam={userCredits}, bedava={freeCredits}, sunucuBedava={serverFreeCredits}, cihaz={deviceCredits})',
+    'log_ad_gate_user_cancelled': 'Reklam kapisi kullanici tarafindan iptal edildi.',
+    'log_prepare_translation_access_failed':
+        'Ceviri erisim hazirligi basarisiz: {error} (chargeKey={chargeKey}, platform={platform}, toplam={userCredits}, bedava={freeCredits}, sunucuBedava={serverFreeCredits}, cihaz={deviceCredits})',
     'purchase_generic_error': 'Satin alma sirasinda bir hata olustu.',
     'purchase_start_failed_retry':
         'Satin alma baslatilamadi. Lutfen tekrar deneyin.',

@@ -11,6 +11,8 @@ const Map<String, String> translationsTr = {
   'api_required': 'Bu özellik şu an kullanılamıyor.',
   'app_name': 'AI Altyazı Çeviri & Editör',
   'back': 'Geri',
+  'best_seller': 'EN ÇOK SATAN',
+  'best_value': 'EN AVANTAJLI',
   'battery_opt_app_settings': 'Uygulama Ayarları',
   'battery_opt_continue_anyway': 'Şimdilik Devam',
   'battery_opt_message':
@@ -54,7 +56,8 @@ const Map<String, String> translationsTr = {
   'cloud_no_files_found': 'Dosya bulunamadı.',
   'cloud_not_supported': 'Bu bulut sağlayıcı henüz desteklenmiyor.',
   'cloud_services': 'Bulut Servisleri',
-  'cloud_source_device': 'Bu Cihaz',
+    'cloud_source_device': 'Bu Cihaz',
+    'cloud_source_device_zip_save': 'Bu Cihaza ZIP Olarak Kaydet',
   'cloud_source_drive': 'Google Drive (Bulut)',
   'cloud_source_dropbox': 'Dropbox (Bulut)',
   'cloud_source_hint':
@@ -336,7 +339,7 @@ const Map<String, String> translationsTr = {
   'log_iap_consume_success':
       'IAP consume başarılı (productId {productId}, code {code})',
   'log_iap_credit_add_failed':
-      'Kredi eklenemedi: paket yok veya sunucu hatası (outcome {outcome})',
+      'Kredi eklenemedi: {error}',
   'log_iap_packages_loaded': 'IAP paketleri alındı (adet {count})',
   'log_iap_packages_loading': 'IAP paketleri yükleniyor (Remote Config)...',
   'log_iap_previous_purchase_unhandled':
@@ -421,7 +424,7 @@ const Map<String, String> translationsTr = {
   'log_starter_credits_added': 'Başlangıç kredisi eklendi: {amount}',
   'log_starter_credits_failed': 'Başlangıç kredisi kontrolü hatası: {error}',
   'log_stop_resume_failed': 'Durdur/devam hazırlığı başarısız: {error}',
-  'log_subtitle_removed': 'Altyazı Dosyası Kaldırıldı',
+  'log_subtitle_removed': 'Altyazı Kaldırıldı',
   'log_subtitle_selected': 'Altyazı Seçildi',
   'log_theme_changed': 'Tema Değiştirildi',
   'log_translation_cancelled': 'Çeviri iptal edildi',
@@ -534,6 +537,7 @@ const Map<String, String> translationsTr = {
   'select': 'Seç',
   'select_folder': 'Klasör seç',
   'select_this_folder': 'Bu klasörü seç',
+    'save_here': 'Buraya kaydet',
   'settings': 'Ayarlar',
   'settings_confirm_deletes': 'Silmeden Önce Onay İste',
   'settings_hide_info': 'Bilgilendirmeleri Gizle',
@@ -635,7 +639,7 @@ const Map<String, String> translationsTr = {
   'batch_background_notification_tip':
       'Uygulamadan çıkış yapabilirsiniz, çeviri tamamlandığında bildirim alacaksınız.',
   'batch_save_all_zip': 'Tümünü ZIP Olarak Kaydet',
-  'batch_complete_title': 'Çeviri Tamamlandı',
+  'batch_complete_title': 'Toplu Çeviri Tamamlandı',
   'batch_save_individual_prompt': 'Veya listeden tek tek kaydedin:',
   'batch_translation_beta': 'Toplu Çeviri (Beta)',
   'batch_timeout_log': 'Zaman aşımı, sıradaki dosyaya geçiliyor.',
@@ -658,7 +662,7 @@ const Map<String, String> translationsTr = {
       'Artık birden fazla dosyayı çevirirken uygulamayı açık tutmak zorunda değilsiniz!\n\nDosyalarınızı sunucuya tek seferde gönderin, arka planda güvenle çevrilsin. İşlem bittiğinde bildirim alacaksınız.',
   'tour_welcome_title': 'Hoşgeldin Hediyesi 🎁',
   'tour_welcome_desc':
-      'İlk girişinize özel hediye edilen 5 Kredi hesabınıza tanımlandı! Kredi bakiyenizi buradan takip edebilir veya istediğiniz zaman yenilerini ekleyebilirsiniz. Google hesabınızla oturum açarsanız +2 kredi hediye!',
+      'İlk girişinize özel hediye edilen 2 Kredi hesabınıza tanımlandı! Kredi bakiyenizi buradan takip edebilir veya istediğiniz zaman yenilerini ekleyebilirsiniz. Google hesabınızla oturum açarsanız +2 kredi hediye!',
   'tour_features_title': 'Özellikler',
   'tour_features_desc':
       'Gelişmiş AI Çeviri, Çevrimdışı destek ve daha fazlası burada! Uygulamaya dahil olan özelliklere buradan ulaşabilirsiniz.',
@@ -682,6 +686,8 @@ const Map<String, String> translationsTr = {
   'batch_cloud_processing_text': 'Çeviri Sunucuda Devam Ediyor...',
   'batch_translation_complete_text': 'Çeviri Tamamlandı!',
   'website_purchase': 'Web Sitesi Alışverişi',
+    'purchase_recovered_previous':
+            'Kredileriniz önceki tamamlanmış bir satın alımdan eklendi. Şu an yeni bir ücret alınmadı.',
 
   'same_language_title': 'Uyarı: Aynı Dil Algılandı',
   'same_language_desc': 'Seçtiğiniz dosyaların dili, çevirmek istediğiniz hedef dil ile aynı gibi görünüyor. Yine de çeviri işlemine başlayıp kredinizi kullanmak istiyor musunuz?',
@@ -694,24 +700,4 @@ const Map<String, String> translationsTr = {
   'error_multi_pack_detected': 'Bu dosya birden fazla altyazı içeriği barındırıyor gibi görünüyor. Güvenlik ve kredi dengesi için lütfen dosyayı parçalara ayırın.',
   'batch_report_success': '{count} dosya başarıyla çevrildi.',
   'batch_report_failed_count': '{count} dosya hata aldı:',
-  'desktop_settings': 'Masaüstü Ayarları',
-  'desktop_minimize_to_tray': 'Sistem Tepsisine Küçült',
-  'desktop_minimize_to_tray_desc': 'Kapatmak Yerine Pencereyi Tepsiye Gizle',
-  'desktop_always_on_top': 'Her Zaman Üstte',
-  'desktop_always_on_top_desc': 'Bu Pencereyi Diğer Pencerelerin Üstünde Tut',
-    'update_downloading': 'Güncelleme indiriliyor',
-  'update_download_failed': 'Güncelleme indirilemedi. Tarayıcıda açılıyor.',
-  'update_not_found': 'Yeni sürüm bulunamadı.',
-'check_updates': 'Güncellemeleri Kontrol Et',
-  'log_update_check_started': 'Güncelleme kontrolü başlatıldı',
-  'log_update_not_available_param': 'Yeni güncelleme yok (Mevcut: {current})',
-  'log_update_check_failed_param': 'Güncelleme kontrolü başarısız: {error}',
-  'log_update_available_param': 'Güncelleme bulundu! Mevcut: {current}, En Yeni: {latest}',
-  'empty_translation_list_hint': 'Altyazı dosyalarını buraya sürükleyebilirsiniz',
-  'delete_project_title': 'Projeyi Sil',
-  'delete_project_confirm': 'Bu proje silinecek.',
-  'delete_permanent_warning': 'Bu işlem geri alınamaz!',
-  'purchase_windows_web_or_mobile': 'Kredinizi mobil uygulamamızdan veya web sitemizden alıp, burada (Windows) aynı hesabınızla kullanabilirsiniz.',
-  'install_app_cta': 'Uygulamayı Yükle',
-  'buy_from_web': 'Web\'den Al',
 };

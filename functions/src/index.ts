@@ -26,4 +26,6 @@ export { handleSubscription } from './subscription/handleSubscription';
 export { handleVoidedPurchase } from './subscription/handleVoidedPurchase';
 
 // ── Bonus & Notifications (v1.6.0+) ──
+// Keep monthlyGoogleBonus exported so deploy does not delete the live scheduled job.
+export { monthlyGoogleBonus } from './bonus/monthlyGoogleBonus';
 export { notifyExpiringCredits } from './bonus/notifyExpiringCredits';

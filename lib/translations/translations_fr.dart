@@ -58,7 +58,8 @@ const Map<String, String> translationsFr = {
   'cloud_not_supported':
       'Ce fournisseur cloud n’est pas encore pris en charge.',
   'cloud_services': 'Services cloud',
-  'cloud_source_device': 'Cet appareil',
+    'cloud_source_device': 'Cet appareil',
+    'cloud_source_device_zip_save': 'Enregistrer le ZIP sur cet appareil',
   'cloud_source_drive': 'Google Drive (nuage)',
   'cloud_source_dropbox': 'Dropbox (nuage)',
   'cloud_source_hint':
@@ -542,7 +543,8 @@ const Map<String, String> translationsFr = {
   'search_language_hint': 'Rechercher une langue...',
   'select': 'Sélectionner',
   'select_folder': 'Sélectionner un dossier',
-  'select_this_folder': 'Sélectionner ce dossier',
+    'select_this_folder': 'Sélectionner ce dossier',
+    'save_here': 'Enregistrer ici',
   'settings': 'Paramètres',
   'settings_confirm_deletes': 'Demander Confirmation Avant de Supprimer',
   'settings_hide_info': 'Masquer les Informations',
@@ -592,7 +594,7 @@ const Map<String, String> translationsFr = {
   'translation_preview_label': 'Aperçu de traduction :',
   'translation_starting_soon':
       'La traduction va démarrer dans quelques secondes',
-  'translations': 'CRÉDİT',
+  'translations': 'CRÉDIT',
   'undo': 'Annuler',
   'up_folder': 'Dossier parent',
   'view_licenses': 'Afficher les Licences',
@@ -645,7 +647,7 @@ const Map<String, String> translationsFr = {
   'batch_background_notification_tip':
       'Vous pouvez quitter l\'application, vous serez informé lorsque la traduction sera terminée.',
   'batch_save_all_zip': 'Tout enregistrer en ZIP',
-  'batch_complete_title': 'Traduction terminée',
+  'batch_complete_title': 'Traduction par lots terminée',
   'batch_save_individual_prompt':
       'Ou enregistrez-les un par un depuis la liste :',
   'batch_translation_beta': 'Traduction par lots (Bêta)',
@@ -694,6 +696,8 @@ const Map<String, String> translationsFr = {
   'batch_cloud_processing_text': 'La traduction continue sur le serveur...',
   'batch_translation_complete_text': 'Traduction terminée !',
   'website_purchase': 'Achat sur le site web',
+    'purchase_recovered_previous':
+            'Vos crédits ont été ajoutés à partir dun achat finalisé précédemment. Aucun nouveau paiement na été prélevé maintenant.',
 
   'same_language_title': 'Avertissement : Même langue détectée',
   'same_language_desc': 'La langue des fichiers sélectionnés semble correspondre à la langue cible de traduction. Voulez-vous toujours continuer et consommer vos crédits ?',
@@ -706,24 +710,4 @@ const Map<String, String> translationsFr = {
   'error_multi_pack_detected': 'Ce fichier semble contenir plusieurs contenus de sous-titres. Veuillez diviser le fichier en parties pour la sécurité et l\'équilibre des crédits.',
   'batch_report_success': '{count} fichier(s) traduit(s) avec succès.',
   'batch_report_failed_count': '{count} fichier(s) échoué(s) :',
-  'desktop_settings': 'Paramètres du bureau',
-  'desktop_minimize_to_tray': 'Réduire dans la zone de notification',
-  'desktop_minimize_to_tray_desc': 'Masquer la fenêtre au lieu de la fermer',
-  'desktop_always_on_top': 'Toujours au-dessus',
-  'desktop_always_on_top_desc': 'Garder cette fenêtre au-dessus des autres',
-    'update_downloading': 'Téléchargement de la mise à jour',
-  'update_download_failed': 'Impossible de télécharger la mise à jour. Ouverture dans le navigateur.',
-  'update_not_found': 'Aucune mise à jour trouvée.',
-'check_updates': 'Vérifier les mises à jour',
-  'log_update_check_started': 'Vérification des mises à jour commencée',
-  'log_update_not_available_param': 'Aucune mise à jour disponible (Actuelle : {current})',
-  'log_update_check_failed_param': 'Échec de la vérification de mise à jour : {error}',
-  'log_update_available_param': 'Mise à jour trouvée ! Actuelle : {current}, Dernière : {latest}',
-  'empty_translation_list_hint': 'Vous pouvez glisser-déposer des fichiers de sous-titres ici',
-  'delete_project_title': 'Supprimer le projet',
-  'delete_project_confirm': 'Ce projet sera supprimé.',
-  'delete_permanent_warning': 'Cette action est irréversible !',
-  'purchase_windows_web_or_mobile': 'Vous pouvez acheter des crédits sur notre application mobile ou notre site web et les utiliser ici (Windows) avec le même compte.',
-  'install_app_cta': 'Installer l\'application',
-  'buy_from_web': 'Acheter sur le web',
 };
