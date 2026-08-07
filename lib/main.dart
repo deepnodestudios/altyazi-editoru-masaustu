@@ -136,9 +136,13 @@ Future<void> _deferredStartupWork(FirebaseAuth auth) async {
   try {
     final remoteConfig = FirebaseRemoteConfig.instance;
     await MaintenanceModeService.ensureDefaults(remoteConfig);
+    final minFetchInterval = (!kIsWeb &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+        ? const Duration(seconds: 10)
+        : const Duration(hours: 1);
     await remoteConfig.setConfigSettings(RemoteConfigSettings(
-      fetchTimeout: const Duration(minutes: 1),
-      minimumFetchInterval: const Duration(hours: 1),
+      fetchTimeout: const Duration(seconds: 30),
+      minimumFetchInterval: minFetchInterval,
     ));
     await remoteConfig.fetchAndActivate();
   } catch (e) {
@@ -1235,15 +1239,13 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       _syncDesktopWindowTitle(windowTitle);
     });
 
-    if (!settings.prefsLoaded || _forceStartupSplash) {
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: _StartupSplash(),
-      );
-    }
-
     return MaintenanceModeGate(
-      child: MaterialApp(
+      child: !settings.prefsLoaded || _forceStartupSplash
+          ? const MaterialApp(
+              debugShowCheckedModeBanner: false,
+              home: _StartupSplash(),
+            )
+          : MaterialApp(
         navigatorKey: _navigatorKey,
         debugShowCheckedModeBanner: false,
         title: windowTitle,

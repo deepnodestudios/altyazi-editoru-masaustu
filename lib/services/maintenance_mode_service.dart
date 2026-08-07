@@ -23,7 +23,23 @@ class MaintenanceModeService {
     try {
       final rc = FirebaseRemoteConfig.instance;
       await ensureDefaults(rc);
-      await rc.fetchAndActivate();
+      await rc.setConfigSettings(
+        RemoteConfigSettings(
+          fetchTimeout: const Duration(seconds: 30),
+          // Maintenance checks must bypass the long RC cache window.
+          minimumFetchInterval: Duration.zero,
+        ),
+      );
+      final activated = await rc.fetchAndActivate();
+      if (kDebugMode) {
+        debugPrint(
+          'MaintenanceModeService fetchAndActivate=$activated '
+          'global=${_readBool(rc, keyGlobal)} '
+          'mobile=${_readBool(rc, keyMobile)} '
+          'desktop=${_readBool(rc, keyDesktop)} '
+          'web=${_readBool(rc, keyWeb)}',
+        );
+      }
     } catch (e) {
       debugPrint('MaintenanceModeService refresh failed: $e');
     }
@@ -33,17 +49,30 @@ class MaintenanceModeService {
   static bool isActive() {
     try {
       final rc = FirebaseRemoteConfig.instance;
-      if (rc.getBool(keyGlobal)) return true;
-      if (kIsWeb) return rc.getBool(keyWeb);
+      if (_readBool(rc, keyGlobal)) return true;
+      if (kIsWeb) return _readBool(rc, keyWeb);
       if (Platform.isAndroid || Platform.isIOS) {
-        return rc.getBool(keyMobile);
+        return _readBool(rc, keyMobile);
       }
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        return rc.getBool(keyDesktop);
+        return _readBool(rc, keyDesktop);
       }
     } catch (e) {
       debugPrint('MaintenanceModeService read failed: $e');
     }
+    return false;
+  }
+
+  static bool _readBool(FirebaseRemoteConfig rc, String key) {
+    try {
+      if (rc.getBool(key)) return true;
+    } catch (_) {}
+
+    try {
+      final value = rc.getValue(key).asString().trim().toLowerCase();
+      return value == 'true' || value == '1' || value == 'yes';
+    } catch (_) {}
+
     return false;
   }
 }
