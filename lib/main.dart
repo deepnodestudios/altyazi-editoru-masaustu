@@ -20,9 +20,11 @@ import 'tabs/editor_tab.dart';
 import 'settings.dart';
 import 'widgets/adaptive_text.dart';
 import 'widgets/shared_system_log.dart';
+import 'widgets/maintenance_mode_gate.dart';
 import 'translations.dart';
 import 'services/update_service.dart';
 import 'services/desktop_install_tracker.dart';
+import 'services/maintenance_mode_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -130,18 +132,17 @@ Future<bool> _tryRestoreGoogleFirebaseSession(FirebaseAuth auth) async {
 /// Remote Config ve Firebase Auth oturum geri yükleme işlemlerini
 /// arka planda çalıştırır. main()'de runApp()'ı bloklamadan başlatılır.
 Future<void> _deferredStartupWork(FirebaseAuth auth) async {
-  // Remote Config (yalnızca mobil platformlarda)
-  if (Platform.isAndroid || Platform.isIOS || kIsWeb) {
-    try {
-      final remoteConfig = FirebaseRemoteConfig.instance;
-      await remoteConfig.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(minutes: 1),
-        minimumFetchInterval: const Duration(hours: 1),
-      ));
-      await remoteConfig.fetchAndActivate();
-    } catch (e) {
-      debugPrint("Remote Config failed: $e");
-    }
+  // Remote Config (tüm platformlar)
+  try {
+    final remoteConfig = FirebaseRemoteConfig.instance;
+    await MaintenanceModeService.ensureDefaults(remoteConfig);
+    await remoteConfig.setConfigSettings(RemoteConfigSettings(
+      fetchTimeout: const Duration(minutes: 1),
+      minimumFetchInterval: const Duration(hours: 1),
+    ));
+    await remoteConfig.fetchAndActivate();
+  } catch (e) {
+    debugPrint("Remote Config failed: $e");
   }
 
   // Firebase Auth oturum geri yükleme
@@ -1241,14 +1242,15 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       );
     }
 
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: windowTitle,
-      themeMode: theme.themeMode,
-      theme: AppTheme.light(),
-      darkTheme: theme.oledMode ? AppTheme.oled() : AppTheme.dark(),
-      builder: (context, child) {
+    return MaintenanceModeGate(
+      child: MaterialApp(
+        navigatorKey: _navigatorKey,
+        debugShowCheckedModeBanner: false,
+        title: windowTitle,
+        themeMode: theme.themeMode,
+        theme: AppTheme.light(),
+        darkTheme: theme.oledMode ? AppTheme.oled() : AppTheme.dark(),
+        builder: (context, child) {
         if (child == null) return const SizedBox.shrink();
 
         final media = MediaQuery.of(context);
@@ -1326,6 +1328,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
         return content;
       },
       home: const MainScreen(),
+      ),
     );
   }
 }
