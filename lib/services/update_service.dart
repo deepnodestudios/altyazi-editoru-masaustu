@@ -298,7 +298,6 @@ class UpdateService {
           '/SUPPRESSMSGBOXES',
           '/NORESTART',
           '/CLOSEAPPLICATIONS',
-          '/RESTARTAPPLICATIONS',
         ],
         mode: ProcessStartMode.detached,
       );
