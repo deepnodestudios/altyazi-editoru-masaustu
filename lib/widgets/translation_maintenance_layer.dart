@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../app_settings.dart';
 import '../managers/theme_manager.dart';
 import '../services/maintenance_mode_service.dart';
 import 'maintenance_mode_screen.dart';
@@ -25,6 +27,7 @@ class _TranslationMaintenanceLayerState
     extends State<TranslationMaintenanceLayer> with WidgetsBindingObserver {
   bool _active = false;
   bool _retrying = false;
+  bool _loggedOnce = false;
   final List<Timer> _retryTimers = <Timer>[];
 
   @override
@@ -33,9 +36,10 @@ class _TranslationMaintenanceLayerState
     WidgetsBinding.instance.addObserver(this);
     _refresh();
     for (final delay in const <Duration>[
-      Duration(seconds: 2),
-      Duration(seconds: 6),
-      Duration(seconds: 15),
+      Duration(seconds: 1),
+      Duration(seconds: 3),
+      Duration(seconds: 8),
+      Duration(seconds: 20),
     ]) {
       _retryTimers.add(Timer(delay, () {
         if (!mounted || _active) return;
@@ -64,6 +68,21 @@ class _TranslationMaintenanceLayerState
   Future<void> _refresh() async {
     final active = await MaintenanceModeService.refreshAndIsActive();
     if (!mounted) return;
+
+    if (!_loggedOnce) {
+      _loggedOnce = true;
+      try {
+        final settings = context.read<AppSettings>();
+        settings.addLog(
+          'log_maintenance_check',
+          jsonEncode({
+            'active': active,
+            'status': MaintenanceModeService.lastStatus ?? '',
+          }),
+        );
+      } catch (_) {}
+    }
+
     setState(() {
       _active = active;
       _retrying = false;
@@ -72,6 +91,7 @@ class _TranslationMaintenanceLayerState
 
   Future<void> _handleRetry() async {
     setState(() => _retrying = true);
+    _loggedOnce = false;
     await _refresh();
   }
 
@@ -81,7 +101,6 @@ class _TranslationMaintenanceLayerState
     final trans = themeManager.trans;
 
     return Stack(
-      fit: StackFit.expand,
       children: [
         widget.child,
         if (_active)
