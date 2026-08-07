@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'ai_panel.dart';
+import '../widgets/translation_maintenance_layer.dart';
 
 class TranslationTab extends StatefulWidget {
   const TranslationTab({super.key});
@@ -16,6 +17,8 @@ class _TranslationTabState extends State<TranslationTab> with AutomaticKeepAlive
   @override
   Widget build(BuildContext context) {
     super.build(context); // KeepAlive için gerekli
-    return const AITranslationPanel();
+    return const TranslationMaintenanceLayer(
+      child: AITranslationPanel(),
+    );
   }
 }

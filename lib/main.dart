@@ -20,7 +20,6 @@ import 'tabs/editor_tab.dart';
 import 'settings.dart';
 import 'widgets/adaptive_text.dart';
 import 'widgets/shared_system_log.dart';
-import 'widgets/maintenance_mode_gate.dart';
 import 'translations.dart';
 import 'services/update_service.dart';
 import 'services/desktop_install_tracker.dart';
@@ -1239,98 +1238,96 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
       _syncDesktopWindowTitle(windowTitle);
     });
 
-    return MaintenanceModeGate(
-      child: !settings.prefsLoaded || _forceStartupSplash
-          ? const MaterialApp(
-              debugShowCheckedModeBanner: false,
-              home: _StartupSplash(),
-            )
-          : MaterialApp(
-        navigatorKey: _navigatorKey,
-        debugShowCheckedModeBanner: false,
-        title: windowTitle,
-        themeMode: theme.themeMode,
-        theme: AppTheme.light(),
-        darkTheme: theme.oledMode ? AppTheme.oled() : AppTheme.dark(),
-        builder: (context, child) {
-        if (child == null) return const SizedBox.shrink();
+    return !settings.prefsLoaded || _forceStartupSplash
+        ? const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: _StartupSplash(),
+          )
+        : MaterialApp(
+      navigatorKey: _navigatorKey,
+      debugShowCheckedModeBanner: false,
+      title: windowTitle,
+      themeMode: theme.themeMode,
+      theme: AppTheme.light(),
+      darkTheme: theme.oledMode ? AppTheme.oled() : AppTheme.dark(),
+      builder: (context, child) {
+      if (child == null) return const SizedBox.shrink();
 
-        final media = MediaQuery.of(context);
-        if (media.size.width == 0 || media.size.height == 0) {
-          return const SizedBox.shrink();
-        }
+      final media = MediaQuery.of(context);
+      if (media.size.width == 0 || media.size.height == 0) {
+        return const SizedBox.shrink();
+      }
 
-        final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-        final double scale = theme.uiScale;
+      final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+      final double scale = theme.uiScale;
 
-        Widget content = child;
+      Widget content = child;
 
-        if (isDesktop) {
-          // Native title bar kullanıyor, sadece FittedBox ile ölçekleme yap.
-          if ((scale - 1.0).abs() >= 0.001) {
-            final physicalWidth = media.size.width;
-            final physicalHeight = media.size.height;
-            final logicalWidth = physicalWidth / scale;
-            final logicalHeight = physicalHeight / scale;
-            return FittedBox(
-              fit: BoxFit.fill,
-              alignment: Alignment.topLeft,
-              child: SizedBox(
-                width: logicalWidth,
-                height: logicalHeight,
-                child: MediaQuery(
-                  data: media.copyWith(size: Size(logicalWidth, logicalHeight)),
-                  child: child,
-                ),
-              ),
-            );
-          }
-          return child;
-        }
-
-        // Mobil/Web için eski mantık
+      if (isDesktop) {
+        // Native title bar kullanıyor, sadece FittedBox ile ölçekleme yap.
         if ((scale - 1.0).abs() >= 0.001) {
-          EdgeInsets scaleInsets(EdgeInsets value) {
-            return EdgeInsets.fromLTRB(
-              value.left / scale,
-              value.top / scale,
-              value.right / scale,
-              value.bottom / scale,
-            );
-          }
-
-          final dpr = media.devicePixelRatio;
-          final scaledWidth =
-              ((media.size.width * dpr / scale).floorToDouble()) / dpr;
-          final scaledHeight =
-              ((media.size.height * dpr / scale).floorToDouble()) / dpr;
-
-          final scaledMedia = media.copyWith(
-            size: Size(scaledWidth, scaledHeight),
-            padding: scaleInsets(media.padding),
-            viewPadding: scaleInsets(media.viewPadding),
-            viewInsets: scaleInsets(media.viewInsets),
-            systemGestureInsets: scaleInsets(media.systemGestureInsets),
-          );
-
-          content = FittedBox(
+          final physicalWidth = media.size.width;
+          final physicalHeight = media.size.height;
+          final logicalWidth = physicalWidth / scale;
+          final logicalHeight = physicalHeight / scale;
+          return FittedBox(
             fit: BoxFit.fill,
             alignment: Alignment.topLeft,
             child: SizedBox(
-              width: scaledWidth,
-              height: scaledHeight,
+              width: logicalWidth,
+              height: logicalHeight,
               child: MediaQuery(
-                data: scaledMedia,
+                data: media.copyWith(size: Size(logicalWidth, logicalHeight)),
                 child: child,
               ),
             ),
           );
         }
+        return child;
+      }
 
-        return content;
-      },
-      home: const MainScreen(),
-      ),
+      // Mobil/Web için eski mantık
+      if ((scale - 1.0).abs() >= 0.001) {
+        EdgeInsets scaleInsets(EdgeInsets value) {
+          return EdgeInsets.fromLTRB(
+            value.left / scale,
+            value.top / scale,
+            value.right / scale,
+            value.bottom / scale,
+          );
+        }
+
+        final dpr = media.devicePixelRatio;
+        final scaledWidth =
+            ((media.size.width * dpr / scale).floorToDouble()) / dpr;
+        final scaledHeight =
+            ((media.size.height * dpr / scale).floorToDouble()) / dpr;
+
+        final scaledMedia = media.copyWith(
+          size: Size(scaledWidth, scaledHeight),
+          padding: scaleInsets(media.padding),
+          viewPadding: scaleInsets(media.viewPadding),
+          viewInsets: scaleInsets(media.viewInsets),
+          systemGestureInsets: scaleInsets(media.systemGestureInsets),
+        );
+
+        content = FittedBox(
+          fit: BoxFit.fill,
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: scaledWidth,
+            height: scaledHeight,
+            child: MediaQuery(
+              data: scaledMedia,
+              child: child,
+            ),
+          ),
+        );
+      }
+
+      return content;
+    },
+    home: const MainScreen(),
     );
   }
 }
