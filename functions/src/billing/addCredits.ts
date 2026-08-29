@@ -4,6 +4,13 @@ import { createHash } from 'crypto';
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
 import { shouldGrantPurchaseBonus } from '../referral/referralUtils';
+import {
+    addTokenPackTokens,
+    hydrateTokenWallet,
+    resolveTokenPack,
+    shouldUseTokenWallet,
+    tokenWalletUserFields,
+} from './tokenWallet';
 
 // UYGULAMA PAKET ADI (Android Manifest'teki applicationId)
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
@@ -249,23 +256,31 @@ export const addCredits = onCall<AddCreditsData>({
   const purchaseToken = normalizeOptionalString(data.purchaseToken);
   const appVersion = normalizeOptionalString(data.appVersion);
   const grantPurchaseBonus = shouldGrantPurchaseBonus(appVersion);
+  const tokenPack = resolveTokenPack(productId);
   const resolvedEmail = await resolvePurchaseEmail({
     uid: auth.uid,
     token: auth.token as Record<string, any>,
   });
 
   // 2. Input validasyonu
-  if (!amount || amount <= 0) {
-    throw new HttpsError(
-      'invalid-argument',
-      'Geçersiz kredi miktarı'
-    );
-  }
-
   if (!productId || !purchaseToken) {
     throw new HttpsError(
       'invalid-argument',
       'Eksik satın alma bilgileri'
+    );
+  }
+
+  if (shouldUseTokenWallet({ appVersion, platform: 'android' }) && tokenPack == null) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Bu sürümde eski kredi paketleri satılmaz. Token paketi seçin.'
+    );
+  }
+
+  if (tokenPack == null && (!amount || amount <= 0)) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Geçersiz kredi miktarı'
     );
   }
 
@@ -354,6 +369,96 @@ export const addCredits = onCall<AddCreditsData>({
       const userDoc = await transaction.get(userRef);
 
       const userData = userDoc.exists ? (userDoc.data() ?? {}) : {};
+
+      if (tokenPack != null) {
+        const walletState = addTokenPackTokens(
+          hydrateTokenWallet({ userData }),
+          { base: tokenPack.base, bonus: tokenPack.bonus },
+        );
+        transaction.set(purchaseRef, {
+          ...purchaseAuditBase,
+          amount: tokenPack.tokens,
+          tokensGranted: tokenPack.tokens,
+          tokenBase: tokenPack.base,
+          tokenBonus: tokenPack.bonus,
+          bonusGrantApplied: tokenPack.bonus > 0,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          processed: true,
+          verified: true,
+          status: 'processed',
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+          failureCode: admin.firestore.FieldValue.delete(),
+          failureMessage: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+
+        const historyRef = userRef.collection('purchase_history').doc(purchaseRecordId);
+        transaction.set(historyRef, {
+          amount: tokenPack.tokens,
+          unit: 'token',
+          purchaseId,
+          purchaseRecordId,
+          productId,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        const creditTxRef = userRef.collection('credit_transactions').doc(purchaseRecordId);
+        transaction.set(creditTxRef, {
+          type: 'add',
+          amount: tokenPack.base,
+          unit: 'token',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          source: 'purchase',
+          creditType: 'token_purchased',
+          purchaseId: purchaseId ?? purchaseRecordId,
+          purchaseRecordId,
+          productId,
+          platform: 'android',
+          tokenBase: tokenPack.base,
+          tokenBonus: tokenPack.bonus,
+          remainingTokenBalance: walletState.tokenBalance,
+          remainingTokenGrantBalance: walletState.tokenGrantBalance,
+          remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+        }, { merge: true });
+
+        if (tokenPack.bonus > 0) {
+          const purchaseBonusTxRef = userRef
+            .collection('credit_transactions')
+            .doc(`${purchaseRecordId}_purchase_bonus`);
+          transaction.set(purchaseBonusTxRef, {
+            type: 'add',
+            amount: tokenPack.bonus,
+            unit: 'token',
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            source: 'purchase_bonus',
+            reason: 'purchase_bonus',
+            creditType: 'token_grant',
+            purchaseId: purchaseId ?? purchaseRecordId,
+            purchaseRecordId,
+            productId,
+            platform: 'android',
+            remainingTokenBalance: walletState.tokenBalance,
+            remainingTokenGrantBalance: walletState.tokenGrantBalance,
+            remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+          }, { merge: true });
+        }
+
+        transaction.set(userRef, {
+          email: resolvedEmail,
+          ...tokenWalletUserFields(walletState),
+          lastPurchase: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        return {
+          success: true,
+          newPurchasedCredits: walletState.purchasedCredits,
+          newCredits: walletState.purchasedCredits,
+          tokenBalance: walletState.tokenBalance,
+          legacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+          tokensGranted: tokenPack.tokens,
+        };
+      }
+
       const legacyCredits = Number(userData.credits ?? 0);
       const legacyBonusCredits = Number(userData.bonusCredits ?? 0);
 

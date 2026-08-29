@@ -10,9 +10,25 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../app_settings.dart';
 import '../controllers/translation_controller.dart';
+import '../services/token_wallet_math.dart';
+import '../utils/string_utils.dart';
+
+String _tokenPackCoverageLabel(Map<String, String> trans, int tokens) {
+  final coverage = estimateTokenMediaCoverage(tokens);
+  return StringUtils.fillTemplate(
+    trans['token_pack_coverage'] ??
+        'About {movies} movies or {episodes} episodes',
+    {
+      'movies': coverage.movies.toString(),
+      'episodes': coverage.episodes.toString(),
+    },
+  );
+}
 
 class PurchaseDialog extends StatefulWidget {
-  const PurchaseDialog({super.key});
+  const PurchaseDialog({super.key, this.source = 'unknown'});
+
+  final String source;
 
   @override
   State<PurchaseDialog> createState() => _PurchaseDialogState();
@@ -66,6 +82,8 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
     required int credits,
     required String priceText,
     required String url,
+    String? unit,
+    int? coverageBaseTokens,
     bool isBestSeller = false,
     bool isBestValue = false,
   }) {
@@ -112,12 +130,25 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  "$credits ${(trans["purchase_translations_unit"] ?? "Çeviri Hakkı")}",
+                  "${unit != null ? formatTokenCount(credits) : credits} ${unit ?? (trans["purchase_translations_unit"] ?? "Çeviri Hakkı")}",
                   style: TextStyle(
                     color: subtitleColor,
                     fontSize: 13,
                   ),
                 ),
+                if (unit != null && coverageBaseTokens != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _tokenPackCoverageLabel(trans, coverageBaseTokens),
+                    style: TextStyle(
+                      color: subtitleColor?.withValues(alpha: 0.85) ??
+                          colorScheme.onSurface.withValues(alpha: 0.62),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
               ],
             ),
             trailing: ElevatedButton(
@@ -219,6 +250,7 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
     
     return Consumer<TranslationController>(
       builder: (context, ctrl, _) {
+        final offerTokenPacks = ctrl.showTokenWalletUi;
         return PopScope(
           canPop: !ctrl.isPurchasing,
           child: Focus(
@@ -250,7 +282,12 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                       Icon(Icons.auto_awesome, size: 40, color: colorScheme.primary),
                       const SizedBox(height: 16),
                       Text(
-                        (trans["add_credits"] ?? "Kredi Ekle").toUpperCase(),
+                        (offerTokenPacks
+                                ? (trans["add_tokens"] ??
+                                    trans["add_credits"] ??
+                                    "Token Ekle")
+                                : (trans["add_credits"] ?? "Kredi Ekle"))
+                            .toUpperCase(),
                         style: TextStyle(
                           color: colorScheme.primary,
                           fontFamily: 'Courier',
@@ -261,7 +298,11 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        trans["credit_usage_info"] ?? "1 Kredi = 1 Tam Dosya Çevirisi",
+                        offerTokenPacks
+                            ? (trans["token_usage_info"] ??
+                                "Uzun dosya daha fazla token harcar; çeviri başlamadan tahmini görürsünüz.")
+                            : (trans["credit_usage_info"] ??
+                                "1 Kredi = 1 Tam Dosya Çevirisi"),
                         style: TextStyle(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 12,
@@ -313,18 +354,40 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                                 _buildWebPackageCard(
                                   context: context,
                                   id: 'starter',
-                                  name: trans['package_starter'] ?? 'Starter',
-                                  credits: 10,
-                                  priceText: '\$1.99',
+                                  name: offerTokenPacks
+                                      ? (trans['package_tokens_1m'] ??
+                                          trans['package_starter'] ??
+                                          'Starter')
+                                      : (trans['package_starter'] ?? 'Starter'),
+                                  credits: offerTokenPacks ? 1100000 : 10,
+                                  unit: offerTokenPacks
+                                      ? (trans['purchase_tokens_unit'] ??
+                                          'Token')
+                                      : null,
+                                  coverageBaseTokens:
+                                      offerTokenPacks ? 1000000 : null,
+                                  priceText:
+                                      offerTokenPacks ? '\$2.49' : '\$1.99',
                                   url: 'https://deepnode-studios.lemonsqueezy.com/checkout/buy/0781242d-9870-4b8e-bf7c-3f609fbff843',
                                 ),
                                 const SizedBox(height: 12),
                                 _buildWebPackageCard(
                                   context: context,
                                   id: 'pro',
-                                  name: trans['package_pro'] ?? 'Pro',
-                                  credits: 50,
-                                  priceText: '\$5.99',
+                                  name: offerTokenPacks
+                                      ? (trans['package_tokens_5m'] ??
+                                          trans['package_pro'] ??
+                                          'Pro')
+                                      : (trans['package_pro'] ?? 'Pro'),
+                                  credits: offerTokenPacks ? 5500000 : 50,
+                                  unit: offerTokenPacks
+                                      ? (trans['purchase_tokens_unit'] ??
+                                          'Token')
+                                      : null,
+                                  coverageBaseTokens:
+                                      offerTokenPacks ? 5000000 : null,
+                                  priceText:
+                                      offerTokenPacks ? '\$11.99' : '\$5.99',
                                   url: 'https://deepnode-studios.lemonsqueezy.com/checkout/buy/13ee56c7-8eba-4741-83b3-e0b20bb31b99',
                                   isBestSeller: true,
                                 ),
@@ -332,9 +395,20 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                                 _buildWebPackageCard(
                                   context: context,
                                   id: 'expert',
-                                  name: trans['package_expert'] ?? 'Expert',
-                                  credits: 100,
-                                  priceText: '\$9.99',
+                                  name: offerTokenPacks
+                                      ? (trans['package_tokens_10m'] ??
+                                          trans['package_expert'] ??
+                                          'Expert')
+                                      : (trans['package_expert'] ?? 'Expert'),
+                                  credits: offerTokenPacks ? 11000000 : 100,
+                                  unit: offerTokenPacks
+                                      ? (trans['purchase_tokens_unit'] ??
+                                          'Token')
+                                      : null,
+                                  coverageBaseTokens:
+                                      offerTokenPacks ? 10000000 : null,
+                                  priceText:
+                                      offerTokenPacks ? '\$21.99' : '\$9.99',
                                   url: 'https://deepnode-studios.lemonsqueezy.com/checkout/buy/38250e3a-c965-483f-858a-b7e03b57ebdb',
                                   isBestValue: true,
                                 ),

@@ -3,10 +3,19 @@ import * as admin from 'firebase-admin';
 
 import { shouldUseV163AdRewardRules, shouldUseV169DeviceAdRewardRules } from '../referral/referralUtils';
 import { assertFreeRewardsAllowed } from './regionPolicy';
+import {
+  AD_REWARD_TOKENS,
+  addGrantTokens,
+  hydrateTokenWallet,
+  shouldUseTokenWallet,
+  tokenWalletUserFields,
+} from './tokenWallet';
 
 const AD_REWARD_VIEWS_PER_CREDIT = 5;
 const DAILY_AD_REWARD_VIEW_LIMIT = 5;
 const WEEKLY_AD_REWARD_CREDIT_LIMIT = 2;
+const DAILY_AD_REWARD_VIEW_LIMIT_TOKEN = 10;
+const WEEKLY_AD_REWARD_VIEW_LIMIT_TOKEN = 40;
 
 interface AdRewardData {
   deviceId?: string;
@@ -15,6 +24,12 @@ interface AdRewardData {
   countryCodes?: string[];
   timeZoneOffsetMinutes?: number;
 }
+
+type RewardLimits = {
+  daily: number;
+  weekly: number;
+  viewsPerReward: number;
+};
 
 type RewardState = {
   adRewardCredits: number;
@@ -56,7 +71,37 @@ function utcWeekKey(date: Date): string {
   return `${normalized.getUTCFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
 }
 
-function normalizeRewardState(userData: Record<string, unknown>, now: Date): RewardState {
+function adRewardLimits(useWallet: boolean): RewardLimits {
+  if (useWallet) {
+    return {
+      daily: DAILY_AD_REWARD_VIEW_LIMIT_TOKEN,
+      weekly: WEEKLY_AD_REWARD_VIEW_LIMIT_TOKEN,
+      viewsPerReward: 1,
+    };
+  }
+  return {
+    daily: DAILY_AD_REWARD_VIEW_LIMIT,
+    weekly: WEEKLY_AD_REWARD_CREDIT_LIMIT,
+    viewsPerReward: AD_REWARD_VIEWS_PER_CREDIT,
+  };
+}
+
+function emptyRewardState(now = new Date()): RewardState {
+  return {
+    adRewardCredits: 0,
+    progressViews: 0,
+    dailyViews: 0,
+    weeklyCredits: 0,
+    todayKey: utcDayKey(now),
+    weekKey: utcWeekKey(now),
+  };
+}
+
+function normalizeRewardState(
+  userData: Record<string, unknown>,
+  now: Date,
+  limits: RewardLimits,
+): RewardState {
   const todayKey = utcDayKey(now);
   const weekKey = utcWeekKey(now);
 
@@ -64,16 +109,16 @@ function normalizeRewardState(userData: Record<string, unknown>, now: Date): Rew
   const storedWeekKey = String(userData.adRewardWeeklyKey ?? '').trim();
 
   const dailyViews = storedDailyKey === todayKey
-    ? Math.min(DAILY_AD_REWARD_VIEW_LIMIT, clampNonNegativeInt(userData.adRewardDailyViews))
+    ? Math.min(limits.daily, clampNonNegativeInt(userData.adRewardDailyViews))
     : 0;
   const weeklyCredits = storedWeekKey === weekKey
-    ? Math.min(WEEKLY_AD_REWARD_CREDIT_LIMIT, clampNonNegativeInt(userData.adRewardWeeklyCredits))
+    ? Math.min(limits.weekly, clampNonNegativeInt(userData.adRewardWeeklyCredits))
     : 0;
 
   return {
     adRewardCredits: clampNonNegativeInt(userData.adRewardCredits),
     progressViews: Math.min(
-      AD_REWARD_VIEWS_PER_CREDIT - 1,
+      Math.max(0, limits.viewsPerReward - 1),
       clampNonNegativeInt(userData.adRewardProgressViews),
     ),
     dailyViews,
@@ -83,44 +128,53 @@ function normalizeRewardState(userData: Record<string, unknown>, now: Date): Rew
   };
 }
 
-function buildStatus(state: RewardState, supported: boolean): Record<string, unknown> {
+function buildStatus(
+  state: RewardState,
+  supported: boolean,
+  limits: RewardLimits,
+  useWallet: boolean,
+): Record<string, unknown> {
   const allowed = supported &&
-    state.dailyViews < DAILY_AD_REWARD_VIEW_LIMIT &&
-    state.weeklyCredits < WEEKLY_AD_REWARD_CREDIT_LIMIT;
+    state.dailyViews < limits.daily &&
+    state.weeklyCredits < limits.weekly;
 
   return {
     supported,
     allowed,
     adRewardCredits: state.adRewardCredits,
     progressViews: state.progressViews,
-    viewsPerCredit: AD_REWARD_VIEWS_PER_CREDIT,
+    viewsPerCredit: limits.viewsPerReward,
     dailyViews: state.dailyViews,
-    dailyViewLimit: DAILY_AD_REWARD_VIEW_LIMIT,
+    dailyViewLimit: limits.daily,
     weeklyCredits: state.weeklyCredits,
-    weeklyCreditLimit: WEEKLY_AD_REWARD_CREDIT_LIMIT,
-    remainingViewsToday: Math.max(0, DAILY_AD_REWARD_VIEW_LIMIT - state.dailyViews),
-    remainingCreditsThisWeek: Math.max(0, WEEKLY_AD_REWARD_CREDIT_LIMIT - state.weeklyCredits),
+    weeklyCreditLimit: limits.weekly,
+    remainingViewsToday: Math.max(0, limits.daily - state.dailyViews),
+    remainingCreditsThisWeek: Math.max(0, limits.weekly - state.weeklyCredits),
+    tokensPerReward: useWallet ? AD_REWARD_TOKENS : null,
   };
+}
+
+function resolveWalletMode(data: AdRewardData): { useWallet: boolean; limits: RewardLimits } {
+  const platform = String(data.platform ?? '').trim().toLowerCase() || null;
+  const useWallet = shouldUseTokenWallet({
+    appVersion: data.appVersion,
+    platform,
+  });
+  return { useWallet, limits: adRewardLimits(useWallet) };
 }
 
 export const getAdRewardStatus = onCall<AdRewardData>(
   { invoker: 'public', enforceAppCheck: false },
   async (request) => {
     const { auth, data } = request;
+    const { useWallet, limits } = resolveWalletMode(data);
     const supported = shouldUseV163AdRewardRules({
       appVersion: data.appVersion,
       platform: data.platform,
     });
 
     if (!supported) {
-      return buildStatus({
-        adRewardCredits: 0,
-        progressViews: 0,
-        dailyViews: 0,
-        weeklyCredits: 0,
-        todayKey: utcDayKey(new Date()),
-        weekKey: utcWeekKey(new Date()),
-      }, false);
+      return buildStatus(emptyRewardState(), false, limits, useWallet);
     }
 
     const useDeviceRules = shouldUseV169DeviceAdRewardRules({
@@ -138,6 +192,7 @@ export const getAdRewardStatus = onCall<AdRewardData>(
       uid: auth.uid,
       countryCodes: data.countryCodes,
       timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
+      appVersion: data.appVersion,
     });
 
     let stateData: Record<string, unknown> = {};
@@ -154,8 +209,8 @@ export const getAdRewardStatus = onCall<AdRewardData>(
       stateData = userDoc.data() ?? {};
     }
 
-    const state = normalizeRewardState(stateData, new Date());
-    return buildStatus(state, true);
+    const state = normalizeRewardState(stateData, new Date(), limits);
+    return buildStatus(state, true, limits, useWallet);
   },
 );
 
@@ -163,19 +218,17 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
   { invoker: 'public', enforceAppCheck: false },
   async (request) => {
     const { auth, data } = request;
+    const { useWallet, limits } = resolveWalletMode(data);
 
     if (!shouldUseV163AdRewardRules({
       appVersion: data.appVersion,
       platform: data.platform,
     })) {
-      return { success: true, skipped: true, ...buildStatus({
-        adRewardCredits: 0,
-        progressViews: 0,
-        dailyViews: 0,
-        weeklyCredits: 0,
-        todayKey: utcDayKey(new Date()),
-        weekKey: utcWeekKey(new Date()),
-      }, false) };
+      return {
+        success: true,
+        skipped: true,
+        ...buildStatus(emptyRewardState(), false, limits, useWallet),
+      };
     }
 
     const useDeviceRules = shouldUseV169DeviceAdRewardRules({
@@ -193,6 +246,7 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
       uid: auth.uid,
       countryCodes: data.countryCodes,
       timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
+      appVersion: data.appVersion,
     });
 
     const deviceId = (data.deviceId ?? '').trim();
@@ -204,33 +258,50 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
     const targetRef = useDeviceRules
       ? db.collection('device_bonuses').doc(deviceId)
       : db.collection('users').doc(auth.uid);
+    const userRef = db.collection('users').doc(auth.uid);
 
     return db.runTransaction(async (tx) => {
       const targetDoc = await tx.get(targetRef);
+      const userDoc = useWallet ? await tx.get(userRef) : null;
       const now = new Date();
       const targetData = targetDoc.data() ?? {};
-      const state = normalizeRewardState(targetData, now);
+      const state = normalizeRewardState(targetData, now, limits);
 
-      if (state.dailyViews >= DAILY_AD_REWARD_VIEW_LIMIT ||
-          state.weeklyCredits >= WEEKLY_AD_REWARD_CREDIT_LIMIT) {
+      if (state.dailyViews >= limits.daily ||
+          state.weeklyCredits >= limits.weekly) {
         throw new HttpsError('resource-exhausted', 'AD_REWARD_LIMIT_REACHED');
       }
 
-      let progressViews = state.progressViews + 1;
       const dailyViews = state.dailyViews + 1;
+      let progressViews = state.progressViews;
       let weeklyCredits = state.weeklyCredits;
       let adRewardCredits = state.adRewardCredits;
       let earnedCredit = false;
+      let tokensGranted = 0;
+      let walletState = useWallet
+        ? hydrateTokenWallet({
+            userData: userDoc?.data() ?? {},
+            deviceData: useDeviceRules ? targetData : undefined,
+          })
+        : null;
 
-      if (progressViews >= AD_REWARD_VIEWS_PER_CREDIT) {
-        if (weeklyCredits >= WEEKLY_AD_REWARD_CREDIT_LIMIT) {
-          throw new HttpsError('resource-exhausted', 'AD_REWARD_LIMIT_REACHED');
-        }
-
-        progressViews -= AD_REWARD_VIEWS_PER_CREDIT;
+      if (useWallet && walletState) {
         weeklyCredits += 1;
-        adRewardCredits += 1;
         earnedCredit = true;
+        tokensGranted = AD_REWARD_TOKENS;
+        walletState = addGrantTokens(walletState, AD_REWARD_TOKENS);
+        progressViews = 0;
+      } else {
+        progressViews = state.progressViews + 1;
+        if (progressViews >= AD_REWARD_VIEWS_PER_CREDIT) {
+          if (weeklyCredits >= limits.weekly) {
+            throw new HttpsError('resource-exhausted', 'AD_REWARD_LIMIT_REACHED');
+          }
+          progressViews -= AD_REWARD_VIEWS_PER_CREDIT;
+          weeklyCredits += 1;
+          earnedCredit = true;
+          adRewardCredits += 1;
+        }
       }
 
       const updateData: Record<string, any> = {
@@ -242,8 +313,12 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
         adRewardWeeklyKey: state.weekKey,
         lastAdRewardAt: admin.firestore.FieldValue.serverTimestamp(),
         lastAdRewardDeviceId: deviceId.length === 0 ? null : deviceId,
-        lastAdRewardUserId: auth?.uid ?? null, // track user id when bound to device
+        lastAdRewardUserId: auth?.uid ?? null,
       };
+
+      if (useWallet) {
+        updateData.adRewardCredits = 0;
+      }
 
       if (useDeviceRules && !targetDoc.exists) {
         updateData.deviceCredits = 0;
@@ -252,25 +327,34 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
       }
 
       tx.set(targetRef, updateData, { merge: true });
+      if (useWallet && walletState && (
+        tokensGranted > 0
+        || walletState.snapshotPending
+        || walletState.convertedBonusTokens > 0
+      )) {
+        tx.set(userRef, tokenWalletUserFields(walletState), { merge: true });
+      }
 
       if (earnedCredit) {
-        const txRef = targetRef.collection('credit_transactions').doc();
+        const txRef = (useWallet ? userRef : targetRef).collection('credit_transactions').doc();
         tx.set(txRef, {
           type: 'add',
-          amount: 1,
+          amount: useWallet ? tokensGranted : 1,
+          unit: useWallet ? 'token' : 'credit',
           reason: 'ad_reward',
           source: 'ad_reward',
-          creditType: 'ad_reward',
+          creditType: useWallet ? 'token_grant' : 'ad_reward',
           deviceId: deviceId.length === 0 ? null : deviceId,
           platform,
           progressViews,
           weeklyCredits,
+          remainingTokenBalance: walletState?.tokenBalance ?? null,
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
         });
       }
 
       const nextState: RewardState = {
-        adRewardCredits,
+        adRewardCredits: useWallet ? 0 : adRewardCredits,
         progressViews,
         dailyViews,
         weeklyCredits,
@@ -281,7 +365,9 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
       return {
         success: true,
         earnedCredit,
-        ...buildStatus(nextState, true),
+        tokensGranted,
+        tokenBalance: walletState?.tokenBalance ?? 0,
+        ...buildStatus(nextState, true, limits, useWallet),
       };
     });
   },
@@ -291,4 +377,6 @@ export {
   AD_REWARD_VIEWS_PER_CREDIT,
   DAILY_AD_REWARD_VIEW_LIMIT,
   WEEKLY_AD_REWARD_CREDIT_LIMIT,
+  DAILY_AD_REWARD_VIEW_LIMIT_TOKEN,
+  WEEKLY_AD_REWARD_VIEW_LIMIT_TOKEN,
 };

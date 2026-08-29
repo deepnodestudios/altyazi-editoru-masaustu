@@ -6,6 +6,16 @@ import {
     resolveFreeRewardsRestriction,
     RESTRICTED_STARTER_BONUS,
 } from './regionPolicy';
+import {
+    addGrantTokens,
+    hydrateTokenWallet,
+    maybeRebalancePackBonusGrant,
+    maybeSplitCombinedPackHistory,
+    shouldUseTokenWallet,
+    starterTokenGrant,
+    tokenWalletDeviceFields,
+    tokenWalletUserFields,
+} from './tokenWallet';
 
 const MOBILE_STARTER_BONUS_LEGACY = 5;
 const MOBILE_STARTER_BONUS_V160 = 2;
@@ -100,6 +110,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
     const geoPolicyArgs = {
         countryCodes,
         timeZoneOffsetMinutes,
+        appVersion,
     };
 
     // NOTE: Starter bonus is device-based and must not require Google sign-in.
@@ -135,6 +146,21 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
         ? db.collection('device_bonuses').doc(normalizedDeviceId)
         : null;
     const userRef = db.collection('users').doc(userId);
+    if (shouldUseTokenWallet({ appVersion, platform: resolvedPlatform })) {
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+            await maybeRebalancePackBonusGrant({
+                db,
+                uid: userId,
+                userData: userDoc.data() ?? {},
+            });
+            await maybeSplitCombinedPackHistory({
+                db,
+                uid: userId,
+                userData: (await userRef.get()).data() ?? {},
+            });
+        }
+    }
     const googleTrackingEmail = await resolveGoogleTrackingEmail({ auth, uid: userId });
     const trackingRef = googleTrackingEmail
         ? db.collection('claimed_login_bonuses').doc(googleTrackingEmail)
@@ -242,13 +268,22 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             if (!Number.isFinite(deviceCredits) || deviceCredits < 0) deviceCredits = 0;
             deviceCredits = Math.min(deviceCredits, remainingAllowed);
 
+            const useWallet = shouldUseTokenWallet({
+                appVersion,
+                platform: resolvedPlatform,
+            });
             const canGiveStarterBonus =
                 starterBonusAmount > 0 &&
                 (!deviceBonusDoc?.exists || isAdRewardOnlyInit) &&
                 !starterBonusBlockedOnRootedDevice;
-            if (canGiveStarterBonus) {
+            if (canGiveStarterBonus && !useWallet) {
                 grantedNow = true;
                 deviceCredits = starterBonusAmount;
+                totalBonusConsumed = 0;
+            }
+            if (canGiveStarterBonus && useWallet) {
+                grantedNow = true;
+                deviceCredits = 0;
                 totalBonusConsumed = 0;
             }
 
@@ -256,6 +291,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             const firstPlatform = String(trackingData.firstPlatform || trackingData.platform || trackingPlatform).trim() || trackingPlatform;
 
             // Unified Google login bonus: one-time 2 googleLoginCredits per Google account (any platform).
+            // Token-wallet clients (mobile 1.8.0+, desktop/web after wallet start) do not receive it.
             // Uses claimed_login_bonuses/{email} for cross-platform dedup.
             // Backward-compat: also skip if loginBonusGranted === true (old desktop purchasedCredits grant).
             const alreadyHasLoginBonus =
@@ -276,12 +312,18 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 googleLoginCredits = Number.isFinite(Number(userData.googleLoginCredits)) ? Number(userData.googleLoginCredits) : 0;
             }
 
-            const googleLoginBonusToGive = !freeRewardsRestricted &&
+            const googleLoginBonusToGive = !useWallet &&
+                !freeRewardsRestricted &&
                 trackingRef &&
                 !alreadyHasLoginBonus &&
                 !deviceAlreadyHasLoginBonus
                 ? GOOGLE_LOGIN_BONUS
                 : 0;
+            const starterTokensToGive = useWallet && canGiveStarterBonus
+                ? starterTokenGrant(freeRewardsRestricted)
+                : 0;
+            // Token-wallet era: no Google login token grant (all regions).
+            const googleLoginTokensToGive = 0;
 
             if (trackingRef && (!trackingDoc?.exists || googleLoginBonusToGive > 0)) {
                 transaction.set(
@@ -300,8 +342,11 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                             source: 'signup_tracking',
                         }),
                         ...(googleLoginBonusToGive > 0 ? {
-                            creditsAdded: googleLoginBonusToGive,
-                            creditType: 'google_login',
+                            creditsAdded: googleLoginTokensToGive > 0
+                                ? googleLoginTokensToGive
+                                : googleLoginBonusToGive,
+                            creditType: googleLoginTokensToGive > 0 ? 'token_grant' : 'google_login',
+                            unit: googleLoginTokensToGive > 0 ? 'token' : 'credit',
                             claimedAt: admin.firestore.FieldValue.serverTimestamp(),
                             googleLoginBonusGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
                             googleLoginBonusPlatform: trackingPlatform,
@@ -352,7 +397,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 );
             }
 
-            if (googleLoginBonusToGive > 0) {
+            if (googleLoginBonusToGive > 0 && !useWallet) {
                 googleLoginCredits = Math.max(googleLoginCredits, googleLoginBonusToGive);
 
                 transaction.set(
@@ -374,6 +419,77 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                     creditType: 'google_login',
                     platform: resolvedPlatform || 'unknown',
                 });
+            }
+
+            let walletState = useWallet
+                ? hydrateTokenWallet({
+                    userData: userDoc.exists ? (userDoc.data() ?? {}) : {},
+                    deviceData: existingData,
+                })
+                : null;
+            if (useWallet) {
+                deviceCredits = 0;
+            }
+            if (walletState && starterTokensToGive > 0) {
+                walletState = addGrantTokens(walletState, starterTokensToGive);
+            }
+            if (walletState && googleLoginTokensToGive > 0) {
+                walletState = addGrantTokens(walletState, googleLoginTokensToGive);
+            }
+            if (walletState && (starterTokensToGive > 0 || googleLoginTokensToGive > 0 || walletState.snapshotPending || walletState.convertedBonusTokens > 0)) {
+                transaction.set(userRef, {
+                    ...tokenWalletUserFields(walletState),
+                    ...(googleLoginTokensToGive > 0
+                        ? {
+                            googleLoginBonusGranted: true,
+                            googleLoginBonusDate: admin.firestore.FieldValue.serverTimestamp(),
+                        }
+                        : {}),
+                }, { merge: true });
+                const deviceWalletPatch = tokenWalletDeviceFields(walletState);
+                if (deviceWalletPatch && deviceBonusRef) {
+                    transaction.set(deviceBonusRef, deviceWalletPatch, { merge: true });
+                }
+                if (walletState.convertedBonusTokens > 0) {
+                    transaction.set(userRef.collection('credit_transactions').doc(), {
+                        type: 'add',
+                        amount: walletState.convertedBonusTokens,
+                        unit: 'token',
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        source: 'legacy_bonus_conversion',
+                        creditType: 'token_grant',
+                        convertedAdCredits: walletState.convertedAdCredits,
+                        convertedFreeCredits: walletState.convertedFreeCredits,
+                        convertedGoogleCredits: walletState.convertedGoogleCredits,
+                        convertedDeviceCredits: walletState.convertedDeviceCredits,
+                        remainingTokenBalance: walletState.tokenBalance,
+                        remainingTokenGrantBalance: walletState.tokenGrantBalance,
+                    });
+                }
+                if (starterTokensToGive > 0) {
+                    transaction.set(userRef.collection('credit_transactions').doc(), {
+                        type: 'add',
+                        amount: starterTokensToGive,
+                        unit: 'token',
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        source: 'starter_bonus',
+                        creditType: 'token_grant',
+                        platform: resolvedPlatform || 'unknown',
+                        remainingTokenBalance: walletState.tokenBalance,
+                    });
+                }
+                if (googleLoginTokensToGive > 0) {
+                    transaction.set(userRef.collection('credit_transactions').doc(), {
+                        type: 'add',
+                        amount: googleLoginTokensToGive,
+                        unit: 'token',
+                        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                        source: 'google_login_bonus',
+                        creditType: 'token_grant',
+                        platform: resolvedPlatform || 'unknown',
+                        remainingTokenBalance: walletState.tokenBalance,
+                    });
+                }
             }
 
             if (restriction.clearLegacyRestrictedFlag) {
@@ -399,7 +515,12 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 );
             }
 
-            const totalCredits = purchasedCredits + googleLoginCredits + deviceCredits;
+            const totalCredits = useWallet
+                ? (walletState?.legacyFlatRateRemaining ?? purchasedCredits)
+                : purchasedCredits + googleLoginCredits + deviceCredits;
+            const bonusAmount = useWallet
+                ? starterTokensToGive + googleLoginTokensToGive
+                : (canGiveStarterBonus ? starterBonusAmount : 0) + googleLoginBonusToGive;
             const baseMessage = starterBonusBlockedOnRootedDevice
                 ? 'Cihaz bütünlüğü doğrulanamadığı için başlangıç kredisi verilmedi.'
                 : canGiveStarterBonus
@@ -415,7 +536,10 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 purchasedCredits,
                 googleLoginCredits,
                 totalCredits,
-                bonusAmount: (canGiveStarterBonus ? starterBonusAmount : 0) + googleLoginBonusToGive,
+                bonusAmount,
+                tokenBalance: walletState?.tokenBalance ?? 0,
+                legacyFlatRateRemaining: walletState?.legacyFlatRateRemaining ?? 0,
+                usesTokenWallet: useWallet,
                 starterBonusBlockedReason: starterBonusBlockedOnRootedDevice
                     ? 'ROOTED_DEVICE'
                     : null,

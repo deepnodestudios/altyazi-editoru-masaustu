@@ -40,6 +40,37 @@ class CreditHistoryEntry {
     this.chargeKey,
   });
 
+  bool get isSpend => type == CreditHistoryEntryType.spend;
+
+  bool get isAdd => type == CreditHistoryEntryType.add;
+
+  bool get isTokenLedger {
+    final unit = _asStringOrNull(raw['unit'])?.toLowerCase();
+    if (unit == 'token' || unit == 'tokens') return true;
+    final chargeMode = _asStringOrNull(raw['chargeMode'])?.toLowerCase();
+    if (chargeMode == 'tokens') return true;
+    final creditType = _asStringOrNull(raw['creditType'])?.toLowerCase() ?? '';
+    if (creditType.startsWith('token')) return true;
+    if (_asInt(raw['fromPaidTokens']) + _asInt(raw['fromGrantTokens']) > 0) {
+      return true;
+    }
+    final product = productId?.toLowerCase() ?? '';
+    if (product.startsWith('tokens_') || product.contains('token')) return true;
+    // Wallet token amounts are thousands+; leftover file credits are 1 each.
+    return amount.abs() >= 1000;
+  }
+
+  int get displayAmount {
+    if (!isTokenLedger) return amount.abs();
+    if (amount.abs() > 1) return amount.abs();
+    final tokenSum =
+        _asInt(raw['fromPaidTokens']) + _asInt(raw['fromGrantTokens']);
+    if (tokenSum > 0) return tokenSum;
+    final estimated = _asInt(raw['estimatedTokens']);
+    if (estimated > 0) return estimated;
+    return amount.abs();
+  }
+
   /// A UI-friendly filename that strips common hash suffixes like
   /// `_<md5>.ext` / `-<sha1>.ext` / `_<sha256>.ext`.
   String? get displayFileName {

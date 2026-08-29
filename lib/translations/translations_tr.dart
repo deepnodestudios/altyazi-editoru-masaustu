@@ -411,6 +411,8 @@ const Map<String, String> translationsTr = {
       'Hata sonrası {seconds} sn içinde yeniden deneme ({attempt}/{max})',
   'log_safety_filter_retry':
       'Güvenlik filtresi tetiklendi; yeniden deneniyor...',
+  'log_wrong_language_retry':
+      'Yanlış çıktı dili algılandı; parça {target} için yeniden deneniyor...',
   'log_saved': 'Kaydedildi',
   'log_saved_to_provider': '{provider} konumuna kaydedildi: {name}',
   'log_screen_normal': 'Ekran Normal Modda',

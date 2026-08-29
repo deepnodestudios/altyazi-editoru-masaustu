@@ -285,6 +285,9 @@ class TranslationRepository {
         'isBatch': isBatch,
         'usageCount': 1,
         if (cost != null && cost.isNotEmpty) 'cost': cost,
+        if (cost != null && cost['costUsd'] != null) 'costUsd': cost['costUsd'],
+        if (cost != null && cost['costUsdProvider'] != null)
+          'costUsdProvider': cost['costUsdProvider'],
       };
       if (deviceId != null && deviceId.isNotEmpty) {
         setData['deviceIds'] = FieldValue.arrayUnion([deviceId]);

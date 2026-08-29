@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import '../constants/ai_language_options.dart';
 
 import '../utils/io_platform_stub.dart'
@@ -50,11 +51,31 @@ class GeminiService {
     _usageModel = '';
   }
 
+  Future<String> _currentAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return info.version.trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<Map<String, dynamic>> _walletGateFields() async {
+    final appVersion = await _currentAppVersion();
+    final platform = io_platform.operatingSystem.trim();
+    return {
+      if (appVersion.isNotEmpty) 'appVersion': appVersion,
+      if (platform.isNotEmpty && platform != 'unknown') 'platform': platform,
+    };
+  }
+
   Future<void> prepareTranslationAccess({
     required String chargeKey,
     String? fileName,
     String? targetLanguage,
     String? platform,
+    int? charCount,
+    int? estimatedTokens,
   }) async {
     await _ensureAuthReady();
     try {
@@ -67,6 +88,10 @@ class GeminiService {
           'targetLanguage': targetLanguage.trim(),
         if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
           'targetLanguageName': _getFullLanguageName(targetLanguage.trim()),
+        if (charCount != null && charCount > 0) 'charCount': charCount,
+        if (estimatedTokens != null && estimatedTokens > 0)
+          'estimatedTokens': estimatedTokens,
+        ...await _walletGateFields(),
         if (platform != null && platform.trim().isNotEmpty)
           'platform': platform.trim(),
       };
@@ -209,6 +234,7 @@ class GeminiService {
         if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
         // Keep the field stable (mobile sends it always).
         'approveCharge': approveCharge == true,
+        ...await _walletGateFields(),
       },
     });
 
@@ -340,6 +366,7 @@ class GeminiService {
         if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
         // Keep the field stable (mobile sends it always).
         'approveCharge': approveCharge == true,
+        ...await _walletGateFields(),
       })
           .timeout(const Duration(minutes: 2));
 
@@ -383,6 +410,7 @@ class GeminiService {
               'deviceId': _deviceId,
             if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
             'approveCharge': approveCharge == true,
+            ...await _walletGateFields(),
           });
 
           final retryData = retryResult.data as Map;
@@ -417,11 +445,11 @@ class GeminiService {
 
     final fullLanguageName = _getFullLanguageName(targetLanguage);
 
-    final systemPrompt = 'Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin. '
-        'Aşağıdaki SRT formatındaki metinleri $fullLanguageName diline çevir. '
-        'Zaman kodlarını ve satır numaralarını ASLA değiştirme. '
-        'Kelime kelime değil, anlam odaklı çevir. '
-        'Günlük konuşma diline uygun, doğal ve akıcı olsun.';
+    final systemPrompt = 'You are a professional subtitle translator working to Netflix standards. '
+        'Translate the following SRT-format texts into $fullLanguageName. '
+        'NEVER change the timecodes or line numbers. '
+        'Translate for meaning, not word-for-word. '
+        'Keep it natural and fluent, matching everyday spoken language.';
 
     Future<String?> generateWithRetry(String text) async {
       int attempts = 0;
@@ -483,17 +511,21 @@ class GeminiService {
     final ctx = (contextHint ?? '').trim();
     final srcHint = (sourceLanguageHint ?? '').trim();
 
-    final systemPrompt = '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Verilen SRT formatındaki altyazı bloklarını [${srcHint.isNotEmpty ? srcHint : 'Kaynak Dil'}]'den $fullLanguageName diline çevirmek.
+    final systemPrompt = '''You are a professional subtitle translator working to Netflix standards.
+Your task: Translate the given SRT-format subtitle blocks from [${srcHint.isNotEmpty ? srcHint : 'Source Language'}] into $fullLanguageName.
 
-Kurallar:
-1. Çeviriyi yaparken "çeviri kokan" cümlelerden kaçın. Hedef dilde ($fullLanguageName) günlük hayatta nasıl konuşuluyorsa öyle yaz.
-2. Deyimleri, argoları ve kültürel referansları kelimesi kelimesine değil, $fullLanguageName kültüründeki en doğal karşılıklarıyla uyarla.
-3. Cümleleri mümkün olduğunca kısa ve öz tut (altyazı okuma hızı için). Gereksiz dolgu kelimelerini at.
-4. Karakterlerin duygusunu ve sahnenin tonunu yansıt. Resmiyetten uzak, samimi ve akıcı bir dil kullan.
-5. SRT formatını (Zaman kodları ve Blok Numaraları) ASLA bozma ve değiştirmeden aynen koru.
-6. Bir satır aşırı cinsel/açık saçık olduğu için doğrudan çevrilirse sorun çıkaracaksa satırı ASLA atlama, boş bırakma veya çevirmeyi reddetme; anlamı koruyarak daha yumuşak ve örtülü bir dille çevir.
-${expectedBlockCount != null ? '7. Çıktıda tam olarak $expectedBlockCount blok olmalı.\n' : ''}${ctx.isNotEmpty ? 'Bağlam (Film/Dizi Bilgisi): $ctx\n' : ''}''';
+ATTENTION / IMPORTANT:
+- YOU MUST PROVIDE THE TRANSLATION RESULT STRICTLY AND ONLY IN $fullLanguageName.
+- DO NOT USE ANY LANGUAGE OTHER THAN $fullLanguageName IN THE OUTPUT. IF THE TARGET LANGUAGE IS NOT TURKISH, NEVER WRITE TURKISH SENTENCES!
+
+Rules:
+1. Avoid "translationese" when translating. Write the way people speak in everyday $fullLanguageName.
+2. Adapt idioms, slang, and cultural references to their most natural equivalents in $fullLanguageName culture, not word-for-word.
+3. Keep sentences as short and concise as possible (for subtitle reading speed). Drop unnecessary filler words.
+4. Reflect the characters' emotion and the scene's tone. Prefer informal, natural, and fluent language over formality.
+5. NEVER break the SRT format (timecodes and block numbers); preserve them unchanged.
+6. If a line is so sexually explicit that a direct translation would cause problems, NEVER skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning.
+${expectedBlockCount != null ? '7. The output must contain exactly $expectedBlockCount blocks.\n' : ''}${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
 
     int attempts = 0;
     while (attempts < 3) {
@@ -547,28 +579,28 @@ ${expectedBlockCount != null ? '7. Çıktıda tam olarak $expectedBlockCount blo
     final srcHint = (sourceLanguageHint ?? '').trim();
     if (hint.isEmpty || sample.isEmpty) return '';
 
-    final systemPrompt = '''Sen profesyonel bir film altyazısı çeviri editörüsün.
-  Elimde bir altyazı dosyası var ve onu parça parça çevireceğim.
+    final systemPrompt = '''You are a professional film subtitle translation editor.
+  I have a subtitle file and I will translate it in chunks.
 
-  Amaç: SONRAKİ parçalarda sadece İSİM/TERİM tutarlılığı için kısa bir "terim hafızası" üret.
-  - Dosya ipucu (film adı/yıl): $hint
-  ${srcHint.isNotEmpty ? '- Kaynak dil olasılıkla: $srcHint\n' : ''}
+  Goal: Produce a short "term memory" ONLY for NAME/TERM consistency in later chunks.
+  - File hint (movie name/year): $hint
+  ${srcHint.isNotEmpty ? '- Source language is likely: $srcHint\n' : ''}
 
-  KURALLAR:
-  1) Çıktı KISA olmalı (maksimum 1000 karakter).
-  2) Sadece düz metin ver. Markdown, kod bloğu, açıklama ekleme.
-  3) SADECE şunları üret:
-     - Karakter/yer adları (SRT örneğinde geçiyorsa)
-     - 8-15 adet terim/glossary tercihi (özellikle isimler, ünvanlar, argo, teknik kelimeler)
-  4) Uydurma yapma; örnekte yoksa ekleme.
-  5) Emin değilsen "OLDUĞU GİBİ BIRAK" de (placeholder üretme).
-  6) Bu hafıza içerik üretmek için DEĞİL; metni yeniden yazdırmak için kullanılamaz.
+  RULES:
+  1) Output must be SHORT (maximum 1000 characters).
+  2) Provide plain text only. Do not add markdown, code blocks, or explanations.
+  3) Produce ONLY the following:
+     - Character/place names (if they appear in the SRT sample)
+     - 8-15 term/glossary preferences (especially names, titles, slang, technical words)
+  4) Do not invent; if it is not in the sample, do not add it.
+  5) If you are not sure, say "LEAVE AS IS" (do not invent placeholders).
+  6) This memory is NOT for generating content; it must not be used to rewrite the text.
   ''';
 
-    final userPrompt = '''Aşağıdaki SRT örneğini incele ve yukarıdaki kurallara göre "çeviri hafızası" üret.
-Hedef dil: $fullLanguageName
+    final userPrompt = '''Inspect the SRT sample below and produce a "translation memory" according to the rules above.
+Target language: $fullLanguageName
 
-SRT ÖRNEĞİ (sadece örnek):
+SRT SAMPLE (sample only):
 $sample
 ''';
 
@@ -610,13 +642,18 @@ $sample
 
     final prompt = systemPrompt.isNotEmpty
         ? systemPrompt
-        : '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Aşağıdaki metni $fullLanguageName diline çevirmek.
-Kurallar:
-1. Metni kelime kelime değil, anlam bütünlüğünü koruyarak doğal bir şekilde çevir.
-2. Hedef dilin ($fullLanguageName) günlük konuşma kalıplarını kullan.
-3. Formatı koru.
-4. Deyimleri ve kültürel öğeleri hedef dile uygun şekilde yerelleştir.''';
+        : '''You are a professional subtitle translator working to Netflix standards.
+Your task: Translate the following text into $fullLanguageName.
+
+ATTENTION / IMPORTANT:
+- YOU MUST PROVIDE THE TRANSLATION RESULT STRICTLY AND ONLY IN $fullLanguageName.
+- DO NOT USE ANY LANGUAGE OTHER THAN $fullLanguageName IN THE OUTPUT. IF THE TARGET LANGUAGE IS NOT TURKISH, NEVER WRITE TURKISH SENTENCES!
+
+Rules:
+1. Do not translate word-for-word; translate naturally while preserving meaning.
+2. Use everyday speech patterns of the target language ($fullLanguageName).
+3. Preserve the format.
+4. Localize idioms and cultural elements appropriately for the target language.''';
     
     // Cloud Function çağrısı
     final result = await _callCloudTranslate(
@@ -713,17 +750,21 @@ http.Response? response;
     final srcHint = (sourceLanguageHint ?? '').trim();
 
     final systemPrompt =
-        '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Verilen SRT formatındaki altyazı bloklarını [${srcHint.isNotEmpty ? srcHint : 'Kaynak Dil'}]'den $fullTargetLanguage diline çevirmek.
+        '''You are a professional subtitle translator working to Netflix standards.
+Your task: Translate the given SRT-format subtitle blocks from [${srcHint.isNotEmpty ? srcHint : 'Source Language'}] into $fullTargetLanguage.
 
-Kurallar:
-1. Çeviriyi yaparken "çeviri kokan" cümlelerden kaçın. Hedef dilde ($fullTargetLanguage) günlük hayatta nasıl konuşuluyorsa öyle yaz.
-2. Deyimleri, argoları ve kültürel referansları kelimesi kelimesine değil, $fullTargetLanguage kültüründeki en doğal karşılıklarıyla uyarla.
-3. Cümleleri mümkün olduğunca kısa ve öz tut.
-4. Karakterlerin duygusunu ve sahnenin tonunu yansıt.
-5. SRT formatını (Zaman kodları ve Blok Numaraları) ASLA bozma ve değiştirmeden aynen koru.
-6. Bir satır aşırı cinsel/açık saçık olduğu için doğrudan çevrilirse sorun çıkaracaksa satırı ASLA atlama, boş bırakma veya çevirmeyi reddetme; anlamı koruyarak daha yumuşak ve örtülü bir dille çevir.
-${ctx.isNotEmpty ? 'Bağlam (Film/Dizi Bilgisi): $ctx\n' : ''}''';
+ATTENTION / IMPORTANT:
+- YOU MUST PROVIDE THE TRANSLATION RESULT STRICTLY AND ONLY IN $fullTargetLanguage.
+- DO NOT USE ANY LANGUAGE OTHER THAN $fullTargetLanguage IN THE OUTPUT. IF THE TARGET LANGUAGE IS NOT TURKISH, NEVER WRITE TURKISH SENTENCES!
+
+Rules:
+1. Avoid "translationese" when translating. Write the way people speak in everyday $fullTargetLanguage.
+2. Adapt idioms, slang, and cultural references to their most natural equivalents in $fullTargetLanguage culture, not word-for-word.
+3. Keep sentences as short and concise as possible.
+4. Reflect the characters' emotion and the scene's tone.
+5. NEVER break the SRT format (timecodes and block numbers); preserve them unchanged.
+6. If a line is so sexually explicit that a direct translation would cause problems, NEVER skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning.
+${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
 
     Future<String> attemptCall() async {
       final data = {

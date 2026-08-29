@@ -6,6 +6,7 @@ import '../constants/ai_language_options.dart';
 import '../services/gemini_service.dart';
 import '../services/subtitle_parser.dart';
 import '../services/subtitle_builder.dart';
+import '../services/translation_language_guard.dart';
 import '../models/subtitle_block.dart';
 import '../repositories/subtitle_repository.dart';
 
@@ -455,8 +456,51 @@ class TranslationEngine {
     return translatedBlocks;
   }
 
+  Future<List<SubtitleBlock>> _retryIfOffTargetLanguage({
+    required String chunk,
+    required List<SubtitleBlock> expectedBlocks,
+    required List<SubtitleBlock> translatedBlocks,
+    required String targetLanguage,
+    String? contextHint,
+    String? sourceLanguageHint,
+  }) async {
+    final sample = SubtitleBuilder.buildSrt(translatedBlocks);
+    if (!translationLooksOffTarget(sample, targetLanguage)) {
+      return translatedBlocks;
+    }
+
+    onLog?.call(
+      'log_wrong_language_retry',
+      jsonEncode({
+        'target': targetLanguage,
+        'blocks': expectedBlocks.length,
+      }),
+    );
+
+    try {
+      final retryTranslated = await _geminiService.translateChunk(
+        chunk,
+        targetLanguage: targetLanguage,
+        contextHint: wrongLanguageRetryHint(
+          existingContextHint: contextHint,
+          targetLanguage: targetLanguage,
+        ),
+        sourceLanguageHint: sourceLanguageHint,
+        expectedBlockCount: expectedBlocks.length,
+      );
+      final retryParsed = SubtitleParser.parseSrt(retryTranslated);
+      if (retryParsed.length != expectedBlocks.length) {
+        return translatedBlocks;
+      }
+      _alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
+      return retryParsed;
+    } catch (_) {
+      return translatedBlocks;
+    }
+  }
+
   Future<({String srt, List<SubtitleBlock> blocks})>
-  _translateSrtChunkResilient(
+      _translateSrtChunkResilient(
     String chunk, {
     required String targetLanguage,
     String? contextHint,
@@ -508,9 +552,17 @@ class TranslationEngine {
 
       if (parsed.length == expectedCount) {
         _alignTranslatedBlocksToSource(expectedBlocks, parsed);
+        final languageFixed = await _retryIfOffTargetLanguage(
+          chunk: chunk,
+          expectedBlocks: expectedBlocks,
+          translatedBlocks: parsed,
+          targetLanguage: targetLanguage,
+          contextHint: contextHint,
+          sourceLanguageHint: sourceLanguageHint,
+        );
         final fixedBlocks = await _fixLikelyUntranslatedBlocks(
           sourceBlocks: expectedBlocks,
-          translatedBlocks: parsed,
+          translatedBlocks: languageFixed,
           targetLanguage: targetLanguage,
           contextHint: contextHint,
           sourceLanguageHint: sourceLanguageHint,
@@ -552,9 +604,17 @@ class TranslationEngine {
         final retryParsed = SubtitleParser.parseSrt(retryTranslated);
         if (retryParsed.length == expectedCount) {
           _alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
+          final languageFixed = await _retryIfOffTargetLanguage(
+            chunk: chunk,
+            expectedBlocks: expectedBlocks,
+            translatedBlocks: retryParsed,
+            targetLanguage: targetLanguage,
+            contextHint: contextHint,
+            sourceLanguageHint: sourceLanguageHint,
+          );
           final fixedBlocks = await _fixLikelyUntranslatedBlocks(
             sourceBlocks: expectedBlocks,
-            translatedBlocks: retryParsed,
+            translatedBlocks: languageFixed,
             targetLanguage: targetLanguage,
             contextHint: contextHint,
             sourceLanguageHint: sourceLanguageHint,

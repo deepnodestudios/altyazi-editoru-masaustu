@@ -38,6 +38,9 @@ const String _kPrefWindowAlwaysOnTop = 'window_always_on_top';
 const double _kDesktopMinWidth = 1120;
 const double _kDesktopMinHeight = 720;
 
+final GlobalKey<NavigatorState> globalNavigatorKey =
+    GlobalKey<NavigatorState>();
+
 const MethodChannel _desktopWindowChannel =
     MethodChannel('com.deepnode.altyaziceviri/window');
 
@@ -465,7 +468,7 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
   Timer? _startupVisibilityGuardTimer;
   bool _forceStartupSplash = false;
   String? _lastWindowTitle;
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  GlobalKey<NavigatorState> get _navigatorKey => globalNavigatorKey;
   bool _trayReady = false;
   bool _isQuitRequested = false;
   bool _isShuttingDown = false;

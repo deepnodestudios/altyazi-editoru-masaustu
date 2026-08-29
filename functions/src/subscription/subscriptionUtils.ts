@@ -4,6 +4,13 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { GoogleAuth } from 'google-auth-library';
 import { shouldGrantPurchaseBonus } from '../referral/referralUtils';
+import {
+  applySubscriptionTokenGrant,
+  hydrateTokenWallet,
+  resolveSubscriptionTokenGrant,
+  shouldUseTokenWallet,
+  tokenWalletUserFields,
+} from '../billing/tokenWallet';
 
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
 
@@ -319,6 +326,114 @@ export async function applySubscriptionRenewal(args: {
     }
 
     if (!alreadyProcessed) {
+      if (shouldUseTokenWallet({ appVersion, platform: 'android' })) {
+        const tokenGrant = resolveSubscriptionTokenGrant(canonicalProductId);
+        const hydratedWallet = hydrateTokenWallet({ userData });
+        const shouldReplaceSubscriptionTokens =
+          subscriptionDoc.exists ||
+          userData.subscriptionActive === true ||
+          hydratedWallet.subscriptionTokenPaidRemaining > 0 ||
+          hydratedWallet.subscriptionTokenGrantRemaining > 0;
+        const applied = tokenGrant != null
+          ? applySubscriptionTokenGrant(
+            hydratedWallet,
+            { base: tokenGrant.base, bonus: tokenGrant.bonus },
+            { replace: shouldReplaceSubscriptionTokens },
+          )
+          : {
+            next: hydratedWallet,
+            afterForfeit: hydratedWallet,
+            forfeitedPaid: 0,
+            forfeitedGrant: 0,
+          };
+        const walletState = applied.next;
+        const forfeitedTokens = applied.forfeitedPaid + applied.forfeitedGrant;
+        tx.set(userRef, {
+          email,
+          ...tokenWalletUserFields(walletState),
+          subscriptionTier: product.tier,
+          subscriptionProductId: productId,
+          subscriptionActive: status !== 'expired' && status !== 'inactive',
+          subscriptionRenewedAt: admin.firestore.FieldValue.serverTimestamp(),
+          subscriptionExpiresAt: expiryTimeMillis != null
+            ? admin.firestore.Timestamp.fromMillis(expiryTimeMillis)
+            : admin.firestore.FieldValue.serverTimestamp(),
+          isPaidUser: true,
+        }, { merge: true });
+
+        if (tokenGrant != null && tokenGrant.tokens > 0) {
+          const historyId = orderId || purchaseToken;
+          if (forfeitedTokens > 0) {
+            tx.set(
+              userRef.collection('credit_transactions')
+                .doc(`${historyId}_subscription_forfeit`),
+              {
+                type: 'spend',
+                amount: forfeitedTokens,
+                unit: 'token',
+                reason: 'subscription_renewal_forfeit',
+                source: 'subscription',
+                creditType: 'token_purchased',
+                productId,
+                tier: product.tier,
+                orderId,
+                isRenewal: true,
+                forfeitedPaidTokens: applied.forfeitedPaid,
+                forfeitedGrantTokens: applied.forfeitedGrant,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                remainingTokenBalance: applied.afterForfeit.tokenBalance,
+                remainingTokenGrantBalance: applied.afterForfeit.tokenGrantBalance,
+                remainingLegacyFlatRateRemaining: applied.afterForfeit.legacyFlatRateRemaining,
+              },
+            );
+          }
+          tx.set(
+            userRef.collection('credit_transactions')
+              .doc(`${historyId}_subscription_tokens`),
+            {
+              type: 'add',
+              amount: tokenGrant.base,
+              unit: 'token',
+              reason: shouldReplaceSubscriptionTokens ? 'subscription_renewal' : 'subscription',
+              source: 'subscription',
+              creditType: 'token_purchased',
+              productId,
+              tier: product.tier,
+              orderId,
+              tokenBase: tokenGrant.base,
+              tokenBonus: tokenGrant.bonus,
+              bonusGrantApplied: tokenGrant.bonus > 0,
+              isRenewal: shouldReplaceSubscriptionTokens,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+              remainingTokenBalance: walletState.tokenBalance,
+              remainingTokenGrantBalance: walletState.tokenGrantBalance,
+              remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+            },
+          );
+          if (tokenGrant.bonus > 0) {
+            tx.set(
+              userRef.collection('credit_transactions')
+                .doc(`${historyId}_subscription_tokens_purchase_bonus`),
+              {
+                type: 'add',
+                amount: tokenGrant.bonus,
+                unit: 'token',
+                reason: 'purchase_bonus',
+                source: 'purchase_bonus',
+                creditType: 'token_grant',
+                productId,
+                tier: product.tier,
+                orderId,
+                isRenewal: shouldReplaceSubscriptionTokens,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                remainingTokenBalance: walletState.tokenBalance,
+                remainingTokenGrantBalance: walletState.tokenGrantBalance,
+                remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+              },
+            );
+          }
+        }
+      } else {
       const existingPurchasedA = Number(userData.purchasedCredits ?? 0);
       const existingPurchasedB = Number(userData.credits ?? 0);
       const currentPurchasedCredits = Math.max(existingPurchasedA, existingPurchasedB, 0);
@@ -441,6 +556,7 @@ export async function applySubscriptionRenewal(args: {
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
         });
       }
+      }
     }
 
     tx.set(subscriptionRef, {
@@ -449,6 +565,9 @@ export async function applySubscriptionRenewal(args: {
       productId,
       tier: product.tier,
       credits: product.credits,
+      tokensGranted: shouldUseTokenWallet({ appVersion, platform: 'android' })
+        ? (resolveSubscriptionTokenGrant(canonicalProductId)?.tokens ?? 0)
+        : 0,
       purchaseToken,
       orderId,
       expiryTimeMillis,

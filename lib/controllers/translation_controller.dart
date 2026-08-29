@@ -14,6 +14,8 @@ import '../utils/string_utils.dart';
 import '../services/file_service.dart';
 import '../services/gemini_service.dart';
 import '../services/billing_service.dart';
+import '../services/token_estimate_gate_service.dart';
+import '../services/token_wallet_math.dart';
 import '../services/subtitle_parser.dart';
 import '../services/translation_engine.dart';
 import '../services/subtitle_builder.dart';
@@ -417,6 +419,14 @@ class TranslationController extends ChangeNotifier {
 
   // Proxy getters for UI (Delegation pattern)
   int get userCredits => billingService.userCredits;
+  int get tokenBalance => billingService.tokenBalance;
+  bool get usesTokenWallet => billingService.usesTokenWallet;
+  bool get offerTokenPacks => billingService.offerTokenPacks;
+  int get displayFileCredits => billingService.displayFileCredits;
+  int get displayTokenBalance => billingService.displayTokenBalance;
+  int get displayPaidTokenBalance => billingService.displayPaidTokenBalance;
+  bool get showTokenWalletUi => billingService.showTokenWalletUi;
+  bool get hasSpendableBalance => billingService.hasSpendableBalance;
   List<CreditPackage> get packages => billingService.packages;
   Stream<void> get purchaseSuccessStream =>
       billingService.purchaseSuccessStream;
@@ -570,7 +580,7 @@ class TranslationController extends ChangeNotifier {
       errors: List.unmodifiable(_batchErrors),
       completedPaths: List.unmodifiable(_batchCompletedPaths), // completedPaths
       stopped: _stopRequested,
-      outOfCredits: userCredits <= 0 && _jobQueue.isNotEmpty,
+      outOfCredits: !hasSpendableBalance && _jobQueue.isNotEmpty,
     );
   }
 
@@ -629,6 +639,7 @@ class TranslationController extends ChangeNotifier {
     bool clearSdh = false,
     String targetLanguage = 'Turkish',
     bool playCompletionSound = true,
+    String? displayFileName,
   }) async {
     if (_selectedFile == null) return;
 
@@ -638,7 +649,7 @@ class TranslationController extends ChangeNotifier {
       file: _selectedFile!,
       targetLanguage: targetLanguage,
       clearSdh: clearSdh,
-      displayFileName: currentFileName,
+      displayFileName: displayFileName ?? currentFileName,
     ));
 
     _stopRequested = false;
@@ -840,16 +851,32 @@ class TranslationController extends ChangeNotifier {
       // - Resume + hiç ilerleme yoksa: ilk başarılı chunk için kredi gerekir.
       // - Resume + en az 1 çevrilmiş blok varsa: kredi tekrar sorgulanmasın.
       final needsCreditForThisRun = !hasTranslatedProgressOnResume;
-      if (needsCreditForThisRun && userCredits <= 0) {
+      if (needsCreditForThisRun && !hasSpendableBalance) {
         throw Exception("Yetersiz Bakiye");
       }
 
       if (needsCreditForThisRun) {
+        final charCount = (_currentJobSourceContent ?? '').length;
+        final estimateDecision =
+            await TokenEstimateGateService.instance.confirmIfNeeded(
+          billing: billingService,
+          trans: _settings?.trans ?? const {},
+          charCount: charCount,
+        );
+        if (estimateDecision != TokenEstimateDecision.proceed) {
+          _stopRequested = true;
+          status = TranslationStatus.idle;
+          notifyListeners();
+          return;
+        }
+
         await _geminiService.prepareTranslationAccess(
           chargeKey: creditChargeKey,
           fileName: job.fileName,
           targetLanguage: job.targetLanguage,
           platform: Platform.operatingSystem,
+          charCount: charCount,
+          estimatedTokens: estimateTokensFromCharCount(charCount),
         );
       } else {
         _geminiService.setTranslationChargeContext(
@@ -884,7 +911,7 @@ class TranslationController extends ChangeNotifier {
       // 4. Çeviri Motorunu Çalıştır
       _engine.onBeforeChunk = (chunkIndex, totalChunks) async {
         if (_stopRequested) return;
-        if (!creditConsumedForRun && userCredits <= 0) {
+        if (!creditConsumedForRun && !hasSpendableBalance) {
           throw Exception("Yetersiz Bakiye");
         }
       };
@@ -1181,14 +1208,15 @@ class TranslationController extends ChangeNotifier {
 
   void _setupJobUI(TranslationJob job) {
     _lastTargetLanguage = job.targetLanguage;
-    if (_isBatchMode) {
-      currentFileName = job.effectiveFileName;
-      _selectedFile = job.file; // UI'ın aktif dosyayı takip edebilmesi için
-      _onLog?.call(
-        'log_processing_file',
-        jsonEncode({'file': job.effectiveFileName}),
-      );
-    }
+    currentFileName = _resolveDisplayFileName(
+      preferred: job.effectiveFileName,
+      fallbackPath: job.file.path,
+    );
+    _selectedFile = job.file;
+    _onLog?.call(
+      'log_processing_file',
+      jsonEncode({'file': currentFileName}),
+    );
   }
 
   Future<void> _ensurePrerequisites() async {
@@ -1357,6 +1385,27 @@ class TranslationController extends ChangeNotifier {
     throw Exception(message);
   }
 
+  String _cleanDisplayFileName(String name) {
+    return StringUtils.normalizeDisplayFileName(name).trim();
+  }
+
+  String _resolveDisplayFileName({
+    String? preferred,
+    required String fallbackPath,
+  }) {
+    final fromPreferred = _cleanDisplayFileName(preferred ?? '');
+    if (fromPreferred.isNotEmpty &&
+        !_looksLikeInternalGeneratedFileName(fromPreferred)) {
+      return fromPreferred;
+    }
+    final fromPath = _cleanDisplayFileName(path.basename(fallbackPath));
+    if (fromPath.isNotEmpty && !_looksLikeInternalGeneratedFileName(fromPath)) {
+      return fromPath;
+    }
+    if (fromPreferred.isNotEmpty) return fromPreferred;
+    return fromPath;
+  }
+
   bool _looksLikeInternalGeneratedFileName(String name) {
     final leaf = name.trim().split(RegExp(r'[\\/]')).last.trim();
     if (leaf.isEmpty) return false;
@@ -1439,7 +1488,6 @@ class TranslationController extends ChangeNotifier {
 
     final candidates = <String?>[
       job.displayFileName,
-      currentFileName,
       _findFriendlyProjectFileName(
           hash: hash, targetLanguage: job.targetLanguage),
       job.effectiveFileName,
@@ -1638,13 +1686,22 @@ class TranslationController extends ChangeNotifier {
       // Gerçek AI maliyeti: yalnızca bu çevrilen dosyaya, global_translations
       // dokümanının içine düz alan olarak yazılır (cache-hit'te AI çağrısı yoktur).
       final usage = _engine.usageSnapshot;
+      final inputTokens = (usage['inputTokens'] as num?)?.toInt() ?? 0;
+      final outputTokens = (usage['outputTokens'] as num?)?.toInt() ?? 0;
       final cost = <String, dynamic>{
         'inputTokens': usage['inputTokens'],
         'outputTokens': usage['outputTokens'],
         'calls': usage['apiCalls'],
         'retries': usage['apiRetries'],
         'resendRounds': usage['resendRounds'],
-        'costUsd': (usage['costUsd'] as num).toStringAsFixed(6),
+        'costUsd': formatUsd6(ledgerCostUsd(
+          inputTokens: inputTokens,
+          outputTokens: outputTokens,
+        )),
+        'costUsdProvider': formatUsd6(providerCostUsd(
+          inputTokens: inputTokens,
+          outputTokens: outputTokens,
+        )),
         'model': (usage['model'] as String?)?.trim().isNotEmpty == true
             ? usage['model']
             : 'gemini-2.5-flash-lite',
@@ -1881,20 +1938,33 @@ class TranslationController extends ChangeNotifier {
   }) async {
     if (inputSrtFiles.isEmpty) return;
 
-    if (userCredits <= 0) {
+    if (!hasSpendableBalance) {
       _onLog?.call(
           _settings?.trans['error_prefix'] ?? 'Hata',
-          _settings?.trans['batch_no_credit_log'] ??
-              'Kredi yetersiz. İşlemi başlatabilmek için bakiyeniz bulunmuyor.');
+          billingService.showTokenWalletUi
+              ? (_settings?.trans['batch_no_token_log'] ??
+                  _settings?.trans['batch_no_credit_log'] ??
+                  'Yetersiz token. İşlemi başlatabilmek için bakiyeniz bulunmuyor.')
+              : (_settings?.trans['batch_no_credit_log'] ??
+                  'Kredi yetersiz. İşlemi başlatabilmek için bakiyeniz bulunmuyor.'));
       onError?.call(
-          _settings?.trans['billing_no_credit'] ?? 'Kredi Yetersiz',
-          _settings?.trans['billing_no_credit_desc'] ??
-              'Bu işlemi başlatmak için bakiyeniz bulunmuyor.');
+          billingService.showTokenWalletUi
+              ? (_settings?.trans['billing_no_token'] ??
+                  _settings?.trans['token_insufficient_title'] ??
+                  'Yetersiz token')
+              : (_settings?.trans['billing_no_credit'] ?? 'Kredi Yetersiz'),
+          billingService.showTokenWalletUi
+              ? (_settings?.trans['billing_no_token_desc'] ??
+                  _settings?.trans['billing_no_credit_desc'] ??
+                  'Bu işlemi başlatmak için bakiyeniz bulunmuyor.')
+              : (_settings?.trans['billing_no_credit_desc'] ??
+                  'Bu işlemi başlatmak için bakiyeniz bulunmuyor.'));
       return;
     }
 
     List<BatchFile> filesToProcess = inputSrtFiles;
-    if (userCredits < inputSrtFiles.length) {
+    if (!billingService.usesTokenWallet &&
+        userCredits < inputSrtFiles.length) {
       filesToProcess = inputSrtFiles.sublist(0, userCredits);
       final partialDesc = (_settings?.trans['batch_credit_partial'] ??
               'Krediniz ({credits}), seçilen dosya sayısından ({total}) az...')
@@ -1983,11 +2053,26 @@ class TranslationController extends ChangeNotifier {
 
         final isMultiFile = filesToProcess.length > 1;
 
+        final estimateDecision =
+            await TokenEstimateGateService.instance.confirmIfNeeded(
+          billing: billingService,
+          trans: _settings?.trans ?? const {},
+          charCount: content.length,
+        );
+        if (estimateDecision != TokenEstimateDecision.proceed) {
+          _stopRequested = true;
+          status = TranslationStatus.idle;
+          notifyListeners();
+          return;
+        }
+
         await _geminiService.prepareTranslationAccess(
           chargeKey: fileChargeKey,
           fileName: displayName,
           targetLanguage: targetLanguage,
           platform: Platform.operatingSystem,
+          charCount: content.length,
+          estimatedTokens: estimateTokensFromCharCount(content.length),
         );
 
         if (isMultiFile && filesToProcess.indexOf(batchF) > 0) {
@@ -2609,7 +2694,7 @@ class TranslationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> handlePickedFile(File file) async {
+  Future<void> handlePickedFile(File file, {String? displayName}) async {
     try {
       if (!SubtitleParser.isSubtitleFileName(file.path)) {
         _onLog?.call('log_invalid_file_format');
@@ -2662,9 +2747,10 @@ class TranslationController extends ChangeNotifier {
       final permFile = File(permanentPath);
       _selectedFile = permFile;
 
-      // If a UI (like batch queue/history) already provided a friendly display name,
-      // don't overwrite it with our internal hashed storage filename.
-      currentFileName ??= path.basename(file.path);
+      currentFileName = _resolveDisplayFileName(
+        preferred: displayName,
+        fallbackPath: file.path,
+      );
       generatedFilePath = null;
 
       _onLog?.call('log_subtitle_selected', currentFileName);

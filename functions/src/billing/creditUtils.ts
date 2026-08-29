@@ -7,6 +7,17 @@ import {
     shouldUseV163AdRewardRules,
     shouldUseV169DeviceAdRewardRules,
 } from '../referral/referralUtils';
+import {
+    hydrateTokenWallet,
+    maybeRebalancePackBonusGrant,
+    maybeSplitCombinedPackHistory,
+    planTokenWalletCharge,
+    shouldUseTokenWallet,
+    spendableTokenBalance,
+    tokenWalletDeviceFields,
+    tokenWalletUserFields,
+    type TokenChargeMode,
+} from './tokenWallet';
 
 const STARTER_BONUS = 5;
 
@@ -29,6 +40,10 @@ export type CreditSummary = {
     hasPaidCredits: boolean;
     platform: string;
     deviceId: string;
+    usesTokenWallet: boolean;
+    tokenBalance: number;
+    tokenGrantBalance: number;
+    legacyFlatRateRemaining: number;
 };
 
 export type CreditUsagePlan = {
@@ -74,6 +89,8 @@ type ConsumeCreditArgs = {
     appVersion?: string | null;
     preferFreeCreditsFirst?: boolean;
     allowAutoApproveSession?: boolean;
+    charCount?: number | null;
+    estimatedTokens?: number | null;
 };
 
 export function normalizePlatform(platform?: string | null): string {
@@ -280,10 +297,26 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
     let freeCredits = 0;
     let googleLoginCredits = 0;
     let isPaidUser = false;
+    let userData: Record<string, unknown> = {};
     if (uid) {
         const userDoc = await db.collection('users').doc(uid).get();
         if (userDoc.exists) {
-            const userData = userDoc.data() ?? {};
+            userData = userDoc.data() ?? {};
+            if (shouldUseTokenWallet({
+                appVersion,
+                platform: normalizedPlatform,
+            })) {
+                userData = await maybeRebalancePackBonusGrant({
+                    db,
+                    uid,
+                    userData,
+                });
+                userData = await maybeSplitCombinedPackHistory({
+                    db,
+                    uid,
+                    userData,
+                });
+            }
             const purchasedA = Number.isFinite(Number(userData.purchasedCredits)) ? Number(userData.purchasedCredits) : 0;
             const purchasedB = Number.isFinite(Number(userData.credits)) ? Number(userData.credits) : 0;
             purchasedCredits = Math.max(purchasedA, purchasedB);
@@ -316,25 +349,81 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
     const spendableFreeCredits = paidCreditsOnly ? 0 : effectiveFreeCredits;
     const spendableGoogleLoginCredits = paidCreditsOnly ? 0 : effectiveGoogleLoginCredits;
     const spendableAdRewardCredits = paidCreditsOnly ? 0 : effectiveAdRewardCredits;
+    const usesTokenWallet = shouldUseTokenWallet({
+        appVersion,
+        platform: normalizedPlatform,
+    });
+    const wallet = usesTokenWallet
+        ? hydrateTokenWallet({
+            userData,
+            deviceData: existingDeviceData,
+        })
+        : null;
+    const tokenBalance = wallet?.tokenBalance ?? 0;
+    const tokenGrantBalance = wallet?.tokenGrantBalance ?? 0;
+    const legacyFlatRateRemaining = wallet?.legacyFlatRateRemaining ?? 0;
+    const spendableTokens = wallet
+        ? spendableTokenBalance({
+            state: wallet,
+            platform: normalizedPlatform,
+            appVersion,
+        })
+        : 0;
+    const walletFileCredits = usesTokenWallet ? legacyFlatRateRemaining : purchasedCredits;
+    const bonusFileCredits = 0;
+    const creditUnitTotal = paidCreditsOnly
+        ? purchasedCredits
+        : effectiveDeviceCredits + purchasedCredits + spendableAdRewardCredits + spendableFreeCredits + spendableGoogleLoginCredits;
+    const totalCredits = usesTokenWallet
+        ? (legacyFlatRateRemaining + bonusFileCredits + (spendableTokens > 0 ? 1 : 0))
+        : creditUnitTotal;
+
     return {
-        deviceCredits: effectiveDeviceCredits,
-        purchasedCredits,
-        adRewardCredits: spendableAdRewardCredits,
-        freeCredits: spendableFreeCredits,
-        googleLoginCredits: spendableGoogleLoginCredits,
-        totalCredits: paidCreditsOnly
-            ? purchasedCredits
-            : effectiveDeviceCredits + purchasedCredits + spendableAdRewardCredits + spendableFreeCredits + spendableGoogleLoginCredits,
+        deviceCredits: usesTokenWallet ? 0 : (paidCreditsOnly ? 0 : effectiveDeviceCredits),
+        purchasedCredits: usesTokenWallet ? walletFileCredits : purchasedCredits,
+        adRewardCredits: usesTokenWallet ? 0 : spendableAdRewardCredits,
+        freeCredits: usesTokenWallet ? 0 : spendableFreeCredits,
+        googleLoginCredits: usesTokenWallet ? 0 : spendableGoogleLoginCredits,
+        totalCredits,
         accessActive,
         isPaidUser,
-        hasPaidCredits: isPaidUser || purchasedCredits > 0,
+        hasPaidCredits: isPaidUser
+            || walletFileCredits > 0
+            || (usesTokenWallet && tokenBalance > tokenGrantBalance),
         platform: normalizedPlatform,
         deviceId: trimmedDeviceId,
+        usesTokenWallet,
+        tokenBalance,
+        tokenGrantBalance,
+        legacyFlatRateRemaining,
     };
 }
 
 export async function assertCreditsAvailable(args: CreditSummaryArgs): Promise<CreditSummary> {
     const summary = await loadCreditSummary(args);
+    if (summary.usesTokenWallet) {
+        const spendableTokens = spendableTokenBalance({
+            state: {
+                tokenBalance: summary.tokenBalance,
+                tokenGrantBalance: summary.tokenGrantBalance,
+            },
+            platform: summary.platform,
+            appVersion: args.appVersion,
+        });
+        const bonusFiles = summary.adRewardCredits
+            + summary.freeCredits
+            + summary.googleLoginCredits
+            + summary.deviceCredits;
+        if (
+            summary.legacyFlatRateRemaining <= 0
+            && bonusFiles <= 0
+            && spendableTokens <= 0
+            && !summary.accessActive
+        ) {
+            throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDIT');
+        }
+        return summary;
+    }
     if (summary.totalCredits <= 0 && !summary.accessActive) {
         throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDIT');
     }
@@ -354,11 +443,17 @@ export async function consumeCreditInternal({
     appVersion,
     preferFreeCreditsFirst,
     allowAutoApproveSession = false,
+    charCount,
+    estimatedTokens,
 }: ConsumeCreditArgs) {
     const reasonText = (reason ?? 'usage').trim();
     const fileNameText = (fileName ?? '').trim();
     const targetLanguageText = (targetLanguage ?? '').trim();
     const platformText = normalizePlatform(platform);
+    const usesTokenWallet = shouldUseTokenWallet({
+        appVersion,
+        platform: platformText,
+    });
     const paidCreditsOnly = shouldEnforceDesktopPaidCreditsOnly({
         appVersion,
         platform: platformText,
@@ -378,8 +473,8 @@ export async function consumeCreditInternal({
     const trimmedDeviceId = requireDeviceId(deviceId);
     const trimmedChargeKey = (chargeKey ?? '').trim();
 
-    if (!amount || amount <= 0) {
-        throw new HttpsError('invalid-argument', 'Ge�ersiz kredi miktar�');
+    if (!usesTokenWallet && (!amount || amount <= 0)) {
+        throw new HttpsError('invalid-argument', 'Geçersiz kredi miktarı');
     }
     if (trimmedChargeKey.includes('/')) {
         throw new HttpsError('invalid-argument', 'Invalid chargeKey');
@@ -429,12 +524,13 @@ export async function consumeCreditInternal({
         let adRewardCredits = 0;
         let freeCredits = 0;
         let googleLoginCredits = 0;
+        let userData: Record<string, unknown> = {};
         let userRef: FirebaseFirestore.DocumentReference | null = null;
         if (uid) {
             userRef = db.collection('users').doc(uid);
             const userDoc = await transaction.get(userRef);
             if (userDoc.exists) {
-                const userData = userDoc.data() ?? {};
+                userData = userDoc.data() ?? {};
                 const normalizedBuckets = normalizePurchasedCreditBuckets(userData);
                 purchasedCredits = normalizedBuckets.purchasedCredits;
                 subscriptionPurchasedCredits = normalizedBuckets.subscriptionPurchasedCredits;
@@ -510,6 +606,16 @@ export async function consumeCreditInternal({
                     remainingFreeCredits,
                     remainingGoogleLoginCredits,
                     remainingCredits,
+                    remainingTokenBalance: Number.isFinite(Number(existing.remainingTokenBalance))
+                        ? Math.max(0, Number(existing.remainingTokenBalance))
+                        : 0,
+                    remainingTokenGrantBalance: Number.isFinite(Number(existing.remainingTokenGrantBalance))
+                        ? Math.max(0, Number(existing.remainingTokenGrantBalance))
+                        : 0,
+                    remainingLegacyFlatRateRemaining: Number.isFinite(Number(existing.remainingLegacyFlatRateRemaining))
+                        ? Math.max(0, Number(existing.remainingLegacyFlatRateRemaining))
+                        : remainingPurchasedCredits,
+                    chargeMode: existing.chargeMode ?? 'credits',
                 };
             }
         }
@@ -517,48 +623,139 @@ export async function consumeCreditInternal({
         const currentTotal = paidCreditsOnly
             ? purchasedCredits
             : deviceCredits + purchasedCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0);
-        if (currentTotal < amount) {
-            throw new HttpsError(
-                'failed-precondition',
-                `Yetersiz kredi. Mevcut: ${currentTotal}, Gerekli: ${amount}`
+
+        let fromPurchased = 0;
+        let fromAdReward = 0;
+        let fromFree = 0;
+        let fromGoogleLogin = 0;
+        let fromDevice = 0;
+        let fromSubscriptionPurchased = 0;
+        let fromExtraPurchased = 0;
+        let chargedAmount = amount;
+        let chargeMode: TokenChargeMode | 'credits' = 'credits';
+        let fromPaidTokens = 0;
+        let fromGrantTokens = 0;
+        let remainingTokenBalance = 0;
+        let remainingTokenGrantBalance = 0;
+        let remainingLegacyFlatRateRemaining = 0;
+        let walletUserPatch: Record<string, unknown> | null = null;
+        let walletDevicePatch: Record<string, unknown> | null = null;
+        let convertedBonusTokens = 0;
+        let convertedAdCredits = 0;
+        let convertedFreeCredits = 0;
+        let convertedGoogleCredits = 0;
+        let convertedDeviceCredits = 0;
+        let conversionTokenBalance = 0;
+        let conversionGrantBalance = 0;
+        let conversionLegacyRemaining = 0;
+
+        if (usesTokenWallet) {
+            const walletState = hydrateTokenWallet({
+                userData,
+                deviceData: existingDeviceData,
+            });
+            convertedBonusTokens = walletState.convertedBonusTokens;
+            convertedAdCredits = walletState.convertedAdCredits;
+            convertedFreeCredits = walletState.convertedFreeCredits;
+            convertedGoogleCredits = walletState.convertedGoogleCredits;
+            convertedDeviceCredits = walletState.convertedDeviceCredits;
+            conversionTokenBalance = walletState.tokenBalance;
+            conversionGrantBalance = walletState.tokenGrantBalance;
+            conversionLegacyRemaining = walletState.legacyFlatRateRemaining;
+            if (walletState.convertedBonusTokens > 0 || walletState.snapshotPending) {
+                adRewardCredits = 0;
+                freeCredits = 0;
+                googleLoginCredits = 0;
+                deviceCredits = 0;
+            }
+            const chargePlan = planTokenWalletCharge({
+                state: walletState,
+                bonus: {
+                    adRewardCredits: 0,
+                    freeCredits: 0,
+                    googleLoginCredits: 0,
+                    deviceCredits: 0,
+                },
+                charCount,
+                estimatedTokens,
+                platform: platformText,
+                appVersion,
+                preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
+            });
+            chargeMode = chargePlan.mode;
+            chargedAmount = chargePlan.mode === 'tokens'
+                ? chargePlan.estimatedTokens
+                : 1;
+            fromPaidTokens = chargePlan.fromPaidTokens;
+            fromGrantTokens = chargePlan.fromGrantTokens;
+            fromPurchased = chargePlan.fromLegacy;
+            fromAdReward = chargePlan.fromAdReward;
+            fromFree = chargePlan.fromFree;
+            fromGoogleLogin = chargePlan.fromGoogleLogin;
+            fromDevice = chargePlan.fromDevice;
+            deviceCredits = chargePlan.bonusNext.deviceCredits;
+            totalBonusConsumed += fromDevice;
+            adRewardCredits = chargePlan.bonusNext.adRewardCredits;
+            freeCredits = chargePlan.bonusNext.freeCredits;
+            googleLoginCredits = chargePlan.bonusNext.googleLoginCredits;
+            purchasedCredits = chargePlan.next.purchasedCredits;
+            subscriptionPurchasedCredits = chargePlan.next.subscriptionPurchasedCredits;
+            extraPurchasedCredits = chargePlan.next.extraPurchasedCredits;
+            fromSubscriptionPurchased = Math.max(
+                0,
+                walletState.subscriptionPurchasedCredits - subscriptionPurchasedCredits,
             );
+            fromExtraPurchased = Math.max(
+                0,
+                walletState.extraPurchasedCredits - extraPurchasedCredits,
+            );
+            remainingTokenBalance = chargePlan.next.tokenBalance;
+            remainingTokenGrantBalance = chargePlan.next.tokenGrantBalance;
+            remainingLegacyFlatRateRemaining = chargePlan.next.legacyFlatRateRemaining;
+            walletUserPatch = tokenWalletUserFields(chargePlan.next);
+            walletDevicePatch = tokenWalletDeviceFields(chargePlan.next);
+        } else {
+            if (currentTotal < amount) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    `Yetersiz kredi. Mevcut: ${currentTotal}, Gerekli: ${amount}`
+                );
+            }
+
+            const usagePlan = predictCreditUsage({
+                amount,
+                purchasedCredits,
+                adRewardCredits,
+                freeCredits,
+                googleLoginCredits,
+                deviceCredits,
+                isModernClient,
+                preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
+                platform: platformText,
+                appVersion,
+            });
+            fromPurchased = usagePlan.fromPurchased;
+            fromAdReward = usagePlan.fromAdReward;
+            fromFree = usagePlan.fromFree;
+            fromGoogleLogin = usagePlan.fromGoogleLogin;
+            fromDevice = usagePlan.fromDevice;
+
+            deviceCredits -= fromDevice;
+            totalBonusConsumed += fromDevice;
+            fromSubscriptionPurchased = Math.min(subscriptionPurchasedCredits, fromPurchased);
+            fromExtraPurchased = fromPurchased - fromSubscriptionPurchased;
+            subscriptionPurchasedCredits -= fromSubscriptionPurchased;
+            if (subscriptionPurchasedCredits < 0) subscriptionPurchasedCredits = 0;
+            extraPurchasedCredits -= fromExtraPurchased;
+            if (extraPurchasedCredits < 0) extraPurchasedCredits = 0;
+            purchasedCredits = subscriptionPurchasedCredits + extraPurchasedCredits;
+            adRewardCredits -= fromAdReward;
+            if (adRewardCredits < 0) adRewardCredits = 0;
+            freeCredits -= fromFree;
+            if (freeCredits < 0) freeCredits = 0;
+            googleLoginCredits -= fromGoogleLogin;
+            if (googleLoginCredits < 0) googleLoginCredits = 0;
         }
-
-        const usagePlan = predictCreditUsage({
-            amount,
-            purchasedCredits,
-            adRewardCredits,
-            freeCredits,
-            googleLoginCredits,
-            deviceCredits,
-            isModernClient,
-            preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
-            platform: platformText,
-            appVersion,
-        });
-        const {
-            fromPurchased,
-            fromAdReward,
-            fromFree,
-            fromGoogleLogin,
-            fromDevice,
-        } = usagePlan;
-
-        deviceCredits -= fromDevice;
-        totalBonusConsumed += fromDevice;
-        const fromSubscriptionPurchased = Math.min(subscriptionPurchasedCredits, fromPurchased);
-        const fromExtraPurchased = fromPurchased - fromSubscriptionPurchased;
-        subscriptionPurchasedCredits -= fromSubscriptionPurchased;
-        if (subscriptionPurchasedCredits < 0) subscriptionPurchasedCredits = 0;
-        extraPurchasedCredits -= fromExtraPurchased;
-        if (extraPurchasedCredits < 0) extraPurchasedCredits = 0;
-        purchasedCredits = subscriptionPurchasedCredits + extraPurchasedCredits;
-        adRewardCredits -= fromAdReward;
-        if (adRewardCredits < 0) adRewardCredits = 0;
-        freeCredits -= fromFree;
-        if (freeCredits < 0) freeCredits = 0;
-        googleLoginCredits -= fromGoogleLogin;
-        if (googleLoginCredits < 0) googleLoginCredits = 0;
 
         const accessExpiry = admin.firestore.Timestamp.fromMillis(Date.now() + (3 * 60 * 60 * 1000));
 
@@ -575,6 +772,9 @@ export async function consumeCreditInternal({
         if (useDeviceAdRewardRules) {
             deviceBonusUpdateData.adRewardCredits = adRewardCredits;
         }
+        if (walletDevicePatch) {
+            Object.assign(deviceBonusUpdateData, walletDevicePatch);
+        }
         transaction.set(deviceBonusRef, deviceBonusUpdateData, { merge: true });
 
         if (userRef && uid) {
@@ -590,7 +790,28 @@ export async function consumeCreditInternal({
             if (!useDeviceAdRewardRules) {
                 userUpdateData.adRewardCredits = adRewardCredits;
             }
+            if (walletUserPatch) {
+                Object.assign(userUpdateData, walletUserPatch);
+            }
             transaction.set(userRef, userUpdateData, { merge: true });
+
+            if (convertedBonusTokens > 0) {
+                transaction.set(userRef.collection('credit_transactions').doc(), {
+                    type: 'add',
+                    amount: convertedBonusTokens,
+                    unit: 'token',
+                    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                    source: 'legacy_bonus_conversion',
+                    creditType: 'token_grant',
+                    convertedAdCredits,
+                    convertedFreeCredits,
+                    convertedGoogleCredits,
+                    convertedDeviceCredits,
+                    remainingTokenBalance: conversionTokenBalance,
+                    remainingTokenGrantBalance: conversionGrantBalance,
+                    remainingLegacyFlatRateRemaining: conversionLegacyRemaining,
+                });
+            }
 
             transaction.set(db.collection('google_users').doc(uid), {
                 purchasedCredits,
@@ -600,13 +821,15 @@ export async function consumeCreditInternal({
 
             const usageRef = userRef.collection('credit_usage').doc();
             transaction.set(usageRef, {
-                amount,
+                amount: chargedAmount,
                 reason: reasonText || 'unknown',
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 deviceId: trimmedDeviceId,
                 email: email ?? null,
                 fromDevice,
                 fromPurchased,
+                fromPaidTokens,
+                fromGrantTokens,
                 fromAdReward,
                 fromFree,
                 fromGoogleLogin,
@@ -616,18 +839,35 @@ export async function consumeCreditInternal({
                 remainingFreeCredits: freeCredits,
                 remainingGoogleLoginCredits: googleLoginCredits,
                 remainingCredits: purchasedCredits + deviceCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0),
+                remainingTokenBalance,
+                remainingTokenGrantBalance,
+                remainingLegacyFlatRateRemaining,
+                chargeMode,
             });
 
             transaction.set(userRef.collection('credit_transactions').doc(usageRef.id), {
                 type: 'spend',
-                amount,
+                amount: chargedAmount,
+                unit: chargeMode === 'tokens' ? 'token' : 'credit',
+                creditType: chargeMode === 'tokens'
+                    ? (fromGrantTokens > 0 && fromPaidTokens > 0
+                        ? 'token_mixed'
+                        : (fromGrantTokens > 0 ? 'token_grant' : 'token_purchased'))
+                    : chargeMode,
                 reason: reasonText || 'unknown',
                 chargeKey: trimmedChargeKey || null,
                 fileName: fileNameText || null,
                 targetLanguage: targetLanguageText || null,
                 platform: platformText || null,
                 email: email ?? null,
-                creditBucket: fromPurchased > 0 ? 'paid' : (fromAdReward > 0 ? 'ad_reward' : 'free'),
+                creditBucket: fromPurchased > 0
+                    ? 'paid'
+                    : (chargeMode === 'tokens'
+                        ? (fromGrantTokens > 0 && fromPaidTokens <= 0 ? 'token_grant' : 'token_purchased')
+                        : (fromAdReward > 0 ? 'ad_reward' : 'free')),
+                fromPaidTokens,
+                fromGrantTokens,
+                estimatedTokens: chargeMode === 'tokens' ? chargedAmount : 0,
                 fromSubscriptionPurchased,
                 fromExtraPurchased,
                 fromAdReward,
@@ -638,6 +878,10 @@ export async function consumeCreditInternal({
                 remainingFreeCredits: freeCredits,
                 remainingGoogleLoginCredits: googleLoginCredits,
                 remainingPurchasedCredits: purchasedCredits,
+                remainingTokenBalance,
+                remainingTokenGrantBalance,
+                remainingLegacyFlatRateRemaining,
+                chargeMode,
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
             });
         }
@@ -667,7 +911,7 @@ export async function consumeCreditInternal({
         if (chargeRef) {
             transaction.set(chargeRef, {
                 chargeKey: trimmedChargeKey,
-                amount,
+                amount: chargedAmount,
                 reason: reasonText || 'unknown',
                 deviceId: trimmedDeviceId,
                 uid: uid ?? null,
@@ -678,6 +922,10 @@ export async function consumeCreditInternal({
                 remainingFreeCredits: freeCredits,
                 remainingGoogleLoginCredits: googleLoginCredits,
                 remainingCredits: purchasedCredits + deviceCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0),
+                remainingTokenBalance,
+                remainingTokenGrantBalance,
+                remainingLegacyFlatRateRemaining,
+                chargeMode,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
         }
@@ -690,6 +938,11 @@ export async function consumeCreditInternal({
             remainingFreeCredits: freeCredits,
             remainingGoogleLoginCredits: googleLoginCredits,
             remainingCredits: purchasedCredits + deviceCredits + (isModernClient ? (adRewardCredits + freeCredits + googleLoginCredits) : 0),
+            remainingTokenBalance,
+            remainingTokenGrantBalance,
+            remainingLegacyFlatRateRemaining,
+            chargeMode,
+            chargedAmount,
         };
     });
 }

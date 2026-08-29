@@ -12,6 +12,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class CreditPackage {
   final String id;
@@ -62,7 +63,36 @@ class BillingService extends ChangeNotifier {
   int get userCredits => _userCredits;
 
   int _purchasedCredits = 0;
-  int get purchasedCredits => _purchasedCredits;
+  int get purchasedCredits =>
+      usesTokenWallet ? _legacyFlatRateRemaining : _purchasedCredits;
+
+  int _tokenBalance = 0;
+  int get tokenBalance => _tokenBalance;
+
+  int _legacyFlatRateRemaining = 0;
+  int get legacyFlatRateRemaining => _legacyFlatRateRemaining;
+
+  String _creditPolicy = '';
+  bool get usesTokenWallet => _creditPolicy == 'token_v1';
+  bool get offerTokenPacks => usesTokenWallet;
+  int get displayFileCredits =>
+      usesTokenWallet ? _legacyFlatRateRemaining : _purchasedCredits;
+  int get displayTokenBalance => _tokenBalance;
+  /// Desktop has no bonus/ad grants; purchased wallet tokens are the balance.
+  int get displayPaidTokenBalance => _tokenBalance;
+  bool get showTokenWalletUi => usesTokenWallet || _tokenBalance > 0;
+  bool get isDesktopClient => true;
+  int get tokenGrantBalance => 0;
+  int get freeCredits => 0;
+  bool get preferFreeCreditsFirst => false;
+  bool get hasPaidAccess =>
+      _purchasedCredits > 0 || _legacyFlatRateRemaining > 0;
+  bool get hasSpendableBalance {
+    if (usesTokenWallet) {
+      return _legacyFlatRateRemaining > 0 || _tokenBalance > 0;
+    }
+    return _userCredits > 0;
+  }
   
   bool _initialCreditsLoaded = false;
 
@@ -403,6 +433,9 @@ class BillingService extends ChangeNotifier {
       unawaited(_refreshUserCreditsOnce(listenedUid));
     } else {
       _purchasedCredits = 0;
+      _legacyFlatRateRemaining = 0;
+      _tokenBalance = 0;
+      _creditPolicy = '';
       // Keep device credits (starter bonus) even if auth is not ready.
       // Bonus is device-scoped and should be visible on first open.
       _recomputeTotalCredits();
@@ -431,6 +464,12 @@ class BillingService extends ChangeNotifier {
     }
 
     _purchasedCredits = newPurchasedCredits;
+    _legacyFlatRateRemaining = max(_asInt(data?['legacyFlatRateRemaining']), 0);
+    _tokenBalance = max(_asInt(data?['tokenBalance']), 0);
+    _creditPolicy = (data?['creditPolicy'] as String?)?.trim() ?? '';
+    if (!usesTokenWallet) {
+      _legacyFlatRateRemaining = _purchasedCredits;
+    }
     _recomputeTotalCredits();
     notifyListeners();
   }
@@ -447,6 +486,12 @@ class BillingService extends ChangeNotifier {
         _applyCreditsFromUserSnapshot(snapshot.data());
       } else {
         _purchasedCredits = 0;
+        _legacyFlatRateRemaining = 0;
+        _tokenBalance = 0;
+        _creditPolicy = '';
+        _legacyFlatRateRemaining = 0;
+        _tokenBalance = 0;
+        _creditPolicy = '';
         _recomputeTotalCredits();
         notifyListeners();
       }
@@ -462,9 +507,8 @@ class BillingService extends ChangeNotifier {
   }
 
   void _recomputeTotalCredits() {
-    // Desktop cannot spend device/bonus buckets (no rewarded ads). Paid credits only.
-    final effectiveDeviceCredits = _isDesktopPlatform ? 0 : _deviceCredits;
-    _userCredits = _purchasedCredits + effectiveDeviceCredits;
+    final paidDisplay = usesTokenWallet ? _legacyFlatRateRemaining : _purchasedCredits;
+    _userCredits = paidDisplay;
   }
 
   static int _asInt(dynamic v) {
@@ -472,6 +516,15 @@ class BillingService extends ChangeNotifier {
     if (v is num) return v.toInt();
     if (v is String) return int.tryParse(v) ?? 0;
     return 0;
+  }
+
+  Future<String> _currentAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return info.version.trim();
+    } catch (_) {
+      return '';
+    }
   }
 
   bool get _supportsFunctionsPlugin =>
@@ -567,12 +620,14 @@ class BillingService extends ChangeNotifier {
       final beforePurchased = _purchasedCredits;
       final beforeDevice = _deviceCredits;
       final beforeTotal = _userCredits;
+      final appVersion = await _currentAppVersion();
 
       final data = await _callCloudFunction('consumeCredit', {
         'amount': amount,
         'deviceId': _deviceId,
         'reason': reason ?? 'usage',
         'platform': resolvePlatform(),
+        if (appVersion.isNotEmpty) 'appVersion': appVersion,
         if (chargeKey != null && chargeKey.trim().isNotEmpty) 'chargeKey': chargeKey.trim(),
         if (fileName != null && fileName.trim().isNotEmpty) 'fileName': fileName.trim(),
         if (targetLanguage != null && targetLanguage.trim().isNotEmpty) 'targetLanguage': targetLanguage.trim(),
@@ -581,6 +636,13 @@ class BillingService extends ChangeNotifier {
       if (data['success'] == true) {
         if (data.containsKey('remainingPurchasedCredits')) {
           _purchasedCredits = _asInt(data['remainingPurchasedCredits']);
+        }
+        if (data.containsKey('remainingLegacyFlatRateRemaining')) {
+          _legacyFlatRateRemaining =
+              _asInt(data['remainingLegacyFlatRateRemaining']);
+        }
+        if (data.containsKey('remainingTokenBalance')) {
+          _tokenBalance = _asInt(data['remainingTokenBalance']);
         }
         if (data.containsKey('remainingDeviceCredits')) {
           _deviceCredits = _asInt(data['remainingDeviceCredits']);
@@ -753,6 +815,7 @@ class BillingService extends ChangeNotifier {
               : (Platform.isMacOS
                   ? 'macos'
                   : (Platform.isLinux ? 'linux' : 'windows')),
+          'appVersion': await _currentAppVersion(),
         });
 
         if (data.containsKey('purchasedCredits')) {
@@ -786,6 +849,7 @@ class BillingService extends ChangeNotifier {
       final data = await _callCloudFunction('giveStarterCredits', {
         'deviceId': _deviceId,
         'platform': Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : Platform.operatingSystem.toLowerCase()),
+        'appVersion': await _currentAppVersion(),
       });
 
       if (data.containsKey('deviceCredits')) {

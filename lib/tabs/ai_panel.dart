@@ -38,6 +38,7 @@ import '../widgets/ai_panel/selected_files_section.dart';
 import '../widgets/ai_panel/target_language_picker_bottom_sheet.dart';
 import '../widgets/ai_panel/file_content_dialog.dart';
 import '../widgets/purchase_dialog.dart';
+import '../services/token_wallet_math.dart';
 import 'history_tab.dart';
 
 class AITranslationPanel extends StatefulWidget {
@@ -73,6 +74,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
   final Map<String, String> _originalPaths = {};
   bool _isBulkProcessing = false;
   String _estimatedTime = "0 min";
+  int _selectedFilesTokenEstimate = 0;
 
   String? _desktopPreviewFilePath;
   String? _desktopPreviewFileName;
@@ -1203,7 +1205,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     final minuteShort = settings.trans['minute_short'] ?? 'min';
 
     if (_selectedFiles.isEmpty) {
-      if (mounted) setState(() => _estimatedTime = "0 $minuteShort");
+      if (mounted) {
+        setState(() {
+          _estimatedTime = "0 $minuteShort";
+          _selectedFilesTokenEstimate = 0;
+        });
+      }
       return;
     }
 
@@ -1220,7 +1227,10 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     if (minutes < 1 && totalBytes > 0) minutes = 1;
 
     if (mounted) {
-      setState(() => _estimatedTime = "~${minutes.ceil()} $minuteShort");
+      setState(() {
+        _estimatedTime = "~${minutes.ceil()} $minuteShort";
+        _selectedFilesTokenEstimate = estimateTokensFromCharCount(totalBytes);
+      });
     }
   }
 
@@ -1405,8 +1415,11 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     if (!_isBulkProcessing &&
         !controller.isLoading &&
         _selectedFiles.isNotEmpty) {
-      final lastPath = _selectedFiles.last.path;
-      unawaited(controller.handlePickedFile(File(lastPath)));
+      final last = _selectedFiles.last;
+      unawaited(controller.handlePickedFile(
+        File(last.path),
+        displayName: last.name,
+      ));
     }
 
     unawaited(_updateEstimatedTime());
@@ -1626,7 +1639,14 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(settings.trans['same_language_title'] ?? 'Uyarı: Aynı Dil Algılandı'),
-        content: Text(settings.trans['same_language_desc'] ?? 'Seçtiğiniz dosyaların dili, çevirmek istediğiniz hedef dil ile aynı gibi görünüyor. Yine de çeviri işlemine başlayıp kredinizi kullanmak istiyor musunuz?'),
+        content: Text(
+          controller.showTokenWalletUi
+              ? (settings.trans['same_language_desc_tokens'] ??
+                  settings.trans['same_language_desc'] ??
+                  'Seçtiğiniz dosyaların dili, çevirmek istediğiniz hedef dil ile aynı gibi görünüyor. Yine de çeviri işlemine başlayıp bakiyenizi kullanmak istiyor musunuz?')
+              : (settings.trans['same_language_desc'] ??
+                  'Seçtiğiniz dosyaların dili, çevirmek istediğiniz hedef dil ile aynı gibi görünüyor. Yine de çeviri işlemine başlayıp kredinizi kullanmak istiyor musunuz?'),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -1648,7 +1668,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
   }
 
   Future<void> _startBulkProcess(TranslationController controller) async {
-    if (controller.userCredits <= 0) {
+    if (!controller.hasSpendableBalance) {
       _showAddCreditDialog(context);
       return;
     }
@@ -1957,8 +1977,12 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
           ),
         );
       },
-        historyLabel: settings.trans['tour_credit_history_title'] ??
-          'Translation/Credit History',
+      historyLabel: context.read<TranslationController>().showTokenWalletUi
+          ? (settings.trans['history_menu_tokens'] ??
+              settings.trans['credit_history_title_tokens'] ??
+              'Çeviri/Token Geçmişi')
+          : (settings.trans['tour_credit_history_title'] ??
+              'Translation/Credit History'),
       onOpenHistory: _openHistoryPage,
       historyButtonKey: historyButtonKey,
       colorScheme: colorScheme,
@@ -2051,6 +2075,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
       controller: controller,
       isBulkProcessing: _isBulkProcessing,
       selectedFilesCount: _selectedFiles.length,
+      estimatedTokenTotal: _selectedFilesTokenEstimate,
       onSave: () => _saveTranslatedWithCloudChoice(
         context,
         settings,
@@ -2062,7 +2087,7 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
       },
       onStartTranslation: () => _startBulkProcess(controller),
       onStartBatchTranslation: () async {
-        if (controller.userCredits <= 0) {
+        if (!controller.hasSpendableBalance) {
           _showAddCreditDialog(context);
           return;
         }

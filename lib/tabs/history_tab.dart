@@ -1459,7 +1459,13 @@ class _HistoryTabState extends State<HistoryTab>
     });
 
     return Scaffold(
-      appBar: _buildAppBar(settings, trans, allProjects, filteredProjects),
+      appBar: _buildAppBar(
+        settings,
+        trans,
+        allProjects,
+        filteredProjects,
+        tokenHistory: controller.showTokenWalletUi,
+      ),
       body: TabBarView(
         controller: _tabController,
         children: [
@@ -2602,8 +2608,9 @@ class _HistoryTabState extends State<HistoryTab>
     AppSettings settings,
     Map<String, String> trans,
     List<TranslationProject> allProjects,
-    List<TranslationProject> visibleProjects,
-  ) {
+    List<TranslationProject> visibleProjects, {
+    bool tokenHistory = false,
+  }) {
     final labelStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
           fontSize: 17,
           fontWeight: FontWeight.w700,
@@ -2623,7 +2630,11 @@ class _HistoryTabState extends State<HistoryTab>
       tabs: [
         _buildHistoryTabLabel(trans['history_title'] ?? 'Çeviri Geçmişi'),
         _buildHistoryTabLabel(
-          trans['credit_history_title'] ?? 'Kredi Geçmişi',
+          tokenHistory
+              ? (trans['credit_history_title_tokens'] ??
+                  trans['credit_history_title'] ??
+                  'Token Geçmişi')
+              : (trans['credit_history_title'] ?? 'Kredi Geçmişi'),
         ),
       ],
     );

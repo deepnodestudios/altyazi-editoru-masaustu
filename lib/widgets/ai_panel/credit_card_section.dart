@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_settings.dart';
 import '../../controllers/translation_controller.dart';
+import '../../services/token_wallet_math.dart';
 import 'layout_constants.dart';
 
 class _WordSafeTwoLineText extends StatelessWidget {
@@ -119,26 +120,65 @@ class AiPanelCreditCardSection extends StatelessWidget {
     required this.onAddCredits,
   });
 
+  void _openWalletInfoDialog(BuildContext context, {required bool tokenUi}) {
+    final title = tokenUi
+        ? (settings.trans['wallet_token_label'] ?? 'Token')
+        : (settings.trans['remaining_credits'] ?? 'KALAN HAK:');
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(_walletInfoBody(tokenUi: tokenUi)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(settings.trans['ok'] ?? 'Tamam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _walletInfoBody({required bool tokenUi}) {
+    if (!tokenUi) {
+      return settings.trans['credit_explanation'] ??
+          '1 Credit = 1 Full Translation';
+    }
+    return settings.trans['credit_explanation_tokens'] ??
+        settings.trans['token_usage_info'] ??
+        'Tokens scale with file length.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isLowCredits = controller.userCredits > 0 && controller.userCredits < 3;
+    final tokenUi = controller.showTokenWalletUi;
+    final paidCredits = controller.displayFileCredits;
+    final isLowCredits =
+        controller.userCredits > 0 && controller.userCredits < 3;
     final creditAccent = isLowCredits ? colorScheme.error : colorScheme.primary;
     final creditContainer =
         isLowCredits ? colorScheme.errorContainer : colorScheme.primaryContainer;
 
-    final double exactHeight = kAiPanelPrimaryButtonHeight * 2 + kAiPanelSectionGap;
+    final double minHeight =
+        kAiPanelPrimaryButtonHeight * 2 + kAiPanelSectionGap;
+    final addLabel = tokenUi
+        ? (settings.trans['add_tokens'] ??
+            settings.trans['add_credits'] ??
+            'Token Ekle')
+        : (settings.trans['add_credits'] ?? 'EKLE');
 
-    return SizedBox(
-      width: double.infinity,
-      height: exactHeight,
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: minHeight),
       child: Card(
         margin: EdgeInsets.zero,
         elevation: 4,
         shadowColor: colorScheme.shadow.withValues(alpha: 0.26),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kAiPanelBorderRadius)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
+        ),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
             gradient: LinearGradient(
@@ -153,101 +193,168 @@ class AiPanelCreditCardSection extends StatelessWidget {
           ),
           child: Row(
             children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: creditAccent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: creditAccent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isLowCredits
+                      ? Icons.warning_amber_rounded
+                      : Icons.auto_awesome,
+                  color: creditAccent,
+                  size: 24,
+                ),
               ),
-              child: Icon(
-                isLowCredits
-                    ? Icons.warning_amber_rounded
-                    : Icons.auto_awesome,
-                color: creditAccent,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: kAiPanelInlineGap),
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
+              const SizedBox(width: kAiPanelInlineGap),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      settings.trans['remaining_credits'] ?? 'KALAN HAK:',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            settings.trans['remaining_credits'] ?? 'KALAN HAK:',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        if (!settings.hideInfoButtons)
+                          InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => _openWalletInfoDialog(
+                              context,
+                              tokenUi: tokenUi,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.info,
+                                color: colorScheme.primary,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        tokenUi
+                            ? '${formatTokenCount(controller.displayTokenBalance, grouping: '.')} ${settings.trans['wallet_token_label'] ?? 'TOKEN'}'
+                            : '${controller.userCredits} ${settings.trans['translations'] ?? 'ÇEVİRİ'}',
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Courier',
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '${controller.userCredits} ${settings.trans['translations'] ?? 'ÇEVİRİ'}',
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'Courier',
-                      ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (tokenUi && paidCredits > 0)
+                          _WalletChip(
+                            label:
+                                '${settings.trans['credit'] ?? 'Kredi'}: $paidCredits',
+                            backgroundColor:
+                                colorScheme.primary.withValues(alpha: 0.12),
+                            foregroundColor: colorScheme.primary,
+                          ),
+                        if (tokenUi && controller.displayPaidTokenBalance > 0)
+                          _WalletChip(
+                            label:
+                                '${settings.trans['wallet_paid_token_label'] ?? settings.trans['wallet_paid_label'] ?? 'Paid Token'}: ${formatTokenCount(controller.displayPaidTokenBalance, grouping: '.')}',
+                            backgroundColor:
+                                colorScheme.primary.withValues(alpha: 0.12),
+                            foregroundColor: colorScheme.primary,
+                          ),
+                        if (!tokenUi)
+                          _WalletChip(
+                            label:
+                                '${settings.trans['wallet_paid_label'] ?? 'Paid'}: $paidCredits',
+                            backgroundColor:
+                                colorScheme.primary.withValues(alpha: 0.12),
+                            foregroundColor: colorScheme.primary,
+                          ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      settings.trans['credit_explanation'] ??
-                          '1 Credit = 1 Full Translation',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              ),
-            ),
-            const SizedBox(width: kAiPanelInlineGap),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 128, maxWidth: 170),
-              child: ElevatedButton(
-                onPressed: onAddCredits,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple.shade800,
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+              const SizedBox(width: kAiPanelInlineGap),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 128, maxWidth: 170),
+                child: ElevatedButton(
+                  onPressed: onAddCredits,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple.shade800,
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: _WordSafeTwoLineText(
+                      text: addLabel,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: _WordSafeTwoLineText(
-                    text: settings.trans['add_credits'] ?? 'EKLE',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
               ),
-            ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletChip extends StatelessWidget {
+  const _WalletChip({
+    required this.label,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  final String label;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: foregroundColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

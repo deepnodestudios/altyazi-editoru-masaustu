@@ -7,6 +7,15 @@ import {
   subscriptionDocIdForToken,
   verifySubscriptionWithStore,
 } from './subscriptionUtils';
+import {
+  CREDIT_POLICY_TOKEN_V1,
+  hydrateTokenWallet,
+  paidTokenBalance,
+  resolveSubscriptionTokenGrant,
+  resolveTokenPack,
+  revokeTokenPack,
+  tokenWalletUserFields,
+} from '../billing/tokenWallet';
 
 /**
  * Google Play Real-Time Developer Notifications (RTDN) webhook.
@@ -139,18 +148,26 @@ export const handleVoidedPurchase = onRequest(
 
       let userId: string | null = null;
       let creditsToRevoke = 0;
+      let tokensToRevoke = 0;
       let source = 'unknown';
+      let productId: string | null = null;
 
       if (!purchaseQuery.empty) {
         const doc = purchaseQuery.docs[0];
         const data = doc.data();
         userId = data.userId ?? null;
-        creditsToRevoke = Number(data.amount ?? data.credits ?? 0);
+        productId = typeof data.productId === 'string' ? data.productId : null;
+        const tokenPack = resolveTokenPack(productId);
+        tokensToRevoke = Number(data.tokensGranted ?? tokenPack?.tokens ?? 0) || 0;
+        creditsToRevoke = tokensToRevoke > 0 ? 0 : Number(data.amount ?? data.credits ?? 0);
         source = 'purchase';
       } else if (subscriptionDoc.exists) {
         const data = subscriptionDoc.data() ?? {};
         userId = typeof data.userId === 'string' ? data.userId : null;
-        creditsToRevoke = Number(data.credits ?? 0);
+        productId = typeof data.productId === 'string' ? data.productId : null;
+        const tokenGrant = resolveSubscriptionTokenGrant(productId);
+        tokensToRevoke = Number(data.tokensGranted ?? tokenGrant?.tokens ?? 0) || 0;
+        creditsToRevoke = tokensToRevoke > 0 ? 0 : Number(data.credits ?? 0);
         source = 'subscription';
 
         // Mark subscription as voided
@@ -174,6 +191,56 @@ export const handleVoidedPurchase = onRequest(
         if (!userDoc.exists) return;
 
         const userData = userDoc.data()!;
+        if (
+          tokensToRevoke > 0
+          || String(userData.creditPolicy ?? '') === CREDIT_POLICY_TOKEN_V1
+        ) {
+          const tokenPack = resolveTokenPack(productId) ?? resolveSubscriptionTokenGrant(productId);
+          if (tokenPack != null || tokensToRevoke > 0) {
+            const packToRevoke = tokenPack ?? { base: tokensToRevoke, bonus: 0 };
+            const revoked = revokeTokenPack(
+              hydrateTokenWallet({ userData }),
+              packToRevoke,
+              { subscription: source === 'subscription' },
+            );
+            const walletState = revoked.next;
+            const revokedTokens = revoked.revokedPaid + revoked.revokedGrant;
+            tx.set(userRef, {
+              ...tokenWalletUserFields(walletState),
+              ...(source === 'subscription'
+                ? {
+                    subscriptionActive: false,
+                    isPaidUser: walletState.purchasedCredits > 0
+                      || walletState.legacyFlatRateRemaining > 0
+                      || paidTokenBalance(walletState) > 0,
+                  }
+                : {}),
+            }, { merge: true });
+            if (revokedTokens > 0) {
+              const txRef = userRef.collection('credit_transactions').doc();
+              tx.set(txRef, {
+                type: 'spend',
+                amount: revokedTokens,
+                unit: 'token',
+                reason: 'voided_purchase',
+                source,
+                creditType: 'token_purchased',
+                purchaseToken: purchaseToken.substring(0, 30),
+                refundType: refundType ?? null,
+                productType: productType ?? null,
+                productId,
+                revokedPaidTokens: revoked.revokedPaid,
+                revokedGrantTokens: revoked.revokedGrant,
+                remainingTokenBalance: walletState.tokenBalance,
+                remainingTokenGrantBalance: walletState.tokenGrantBalance,
+                remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          return;
+        }
+
         const currentCredits = Number(userData.purchasedCredits ?? userData.credits ?? 0);
         let subscriptionBucket = Number(userData.subscriptionPurchasedCredits ?? Number.NaN);
         if (!Number.isFinite(subscriptionBucket) || subscriptionBucket < 0) subscriptionBucket = 0;

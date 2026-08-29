@@ -2,3 +2,4 @@
 
 bool get isWindows => false;
 bool get isDesktop => false;
+String get operatingSystem => 'unknown';

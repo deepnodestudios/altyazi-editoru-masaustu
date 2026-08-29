@@ -403,6 +403,8 @@ const Map<String, String> translationsEn = {
   'log_retrying_after_error':
       'Retrying after error in {seconds}s (attempt {attempt}/{max})',
   'log_safety_filter_retry': 'Safety filter triggered, retrying...',
+  'log_wrong_language_retry':
+      'Wrong output language detected; retrying chunk in {target}...',
   'log_saved': 'Saved',
   'log_saved_to_provider': '{provider}: {name}',
   'log_screen_normal': 'Screen Normal Mode',

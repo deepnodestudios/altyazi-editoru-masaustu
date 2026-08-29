@@ -10,12 +10,17 @@ import { resolveGeminiModel } from './modelUtils';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 
-const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Ek kural: Bir altyazi satiri asiri cinsel veya acik sacik oldugu icin dogrudan cevrildiginde sorun cikacaksa satiri asla atlama, bos birakma veya cevirmeyi reddetme; anlami koruyarak daha yumusak ve ortulu bir dille cevir ve SRT yapisini aynen koru.';
+const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Additional rule: If a subtitle line is so sexually explicit that a direct translation would cause problems, never skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning, and keep the SRT structure unchanged.';
 
 function withExplicitContentFallback(systemPrompt?: string): string {
     const base = (systemPrompt ?? '').trim();
     if (!base) return EXPLICIT_CONTENT_FALLBACK_INSTRUCTION;
-    if (base.includes('asla atlama') || base.includes('cevirmeyi reddetme')) {
+    if (
+        base.includes('never skip the line') ||
+        base.includes('refuse to translate') ||
+        base.includes('asla atlama') ||
+        base.includes('cevirmeyi reddetme')
+    ) {
         return base;
     }
     return `${base}\n${EXPLICIT_CONTENT_FALLBACK_INSTRUCTION}`;
@@ -181,6 +186,8 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             appVersion: resolvedAppVersion,
             preferFreeCreditsFirst: sessionData.preferFreeCreditsFirst === true,
             allowAutoApproveSession: true,
+            charCount: Number(sessionData.charCount ?? 0) || null,
+            estimatedTokens: Number(sessionData.estimatedTokens ?? 0) || null,
         });
 
         // Save batch job info to Firestore so we can track it

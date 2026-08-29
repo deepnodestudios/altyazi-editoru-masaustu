@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_settings.dart';
+import 'controllers/translation_controller.dart';
 import 'services/update_service.dart';
 import 'managers/theme_manager.dart';
 import 'widgets/adaptive_text.dart';
@@ -309,6 +310,7 @@ class _FeaturesContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trans = context.watch<ThemeManager>().trans;
+    final tokenUi = context.watch<TranslationController>().showTokenWalletUi;
     final colorScheme = Theme.of(context).colorScheme;
 
     final features = <({String title, String desc, IconData icon})>[
@@ -343,9 +345,17 @@ class _FeaturesContent extends StatelessWidget {
         icon: Icons.sync,
       ),
       (
-        title: trans['feature_credit_title'] ?? 'Credit System & History',
-        desc: trans['feature_credit_desc'] ??
-            'Track all your credit usage and purchases in detail. See when and for which file each credit was used.',
+        title: tokenUi
+            ? (trans['feature_credit_title_tokens'] ??
+                trans['feature_credit_title'] ??
+                'Token System & History')
+            : (trans['feature_credit_title'] ?? 'Credit System & History'),
+        desc: tokenUi
+            ? (trans['feature_credit_desc_tokens'] ??
+                trans['feature_credit_desc'] ??
+                'Track token and leftover file-credit usage in detail.')
+            : (trans['feature_credit_desc'] ??
+                'Track all your credit usage and purchases in detail. See when and for which file each credit was used.'),
         icon: Icons.account_balance_wallet,
       ),
       (

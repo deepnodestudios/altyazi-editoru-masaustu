@@ -36,6 +36,9 @@ import 'translations/translations_uk.dart';
 import 'translations/translations_vi.dart';
 import 'translations/translations_maintenance.dart';
 import 'translations/translations_log_updates.dart';
+import 'translations/translations_policy_change.dart';
+import 'translations/translations_token_wallet.dart';
+import 'translations/translations_bonus_policy.dart';
 
 const Map<String, Map<String, String>> _desktopDialogTranslations = {
     'TR': {
@@ -915,6 +918,18 @@ class Translations {
                 translationsLogUpdates['EN'] ??
                 const {};
         merged.addAll(logUpdates);
+        merged.addAll(translationsPolicyChange['EN'] ?? const {});
+        if (lang != 'EN') {
+          merged.addAll(translationsPolicyChange[lang] ?? const {});
+        }
+        merged.addAll(translationsBonusPolicy['EN'] ?? const {});
+        if (lang != 'EN') {
+          merged.addAll(translationsBonusPolicy[lang] ?? const {});
+        }
+        merged.addAll(translationsTokenWallet['EN'] ?? const {});
+        if (lang != 'EN') {
+          merged.addAll(translationsTokenWallet[lang] ?? const {});
+        }
         final view = _TranslationMapView(
             Map<String, String>.unmodifiable(merged), lang);
         _cache[lang] = view;

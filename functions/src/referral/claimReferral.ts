@@ -2,11 +2,17 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { meetsVersionRequirement, grantFreeCredits, REFERRAL_REWARD } from './referralUtils';
 import { assertFreeRewardsAllowed } from '../billing/regionPolicy';
+import {
+  REFERRAL_TOKENS,
+  grantWalletTokens,
+  shouldUseTokenWallet,
+} from '../billing/tokenWallet';
 
 interface ClaimReferralData {
   referralCode: string;
   deviceId: string;
   appVersion?: string;
+  platform?: string;
   countryCodes?: string[];
   timeZoneOffsetMinutes?: number;
 }
@@ -22,7 +28,7 @@ export const claimReferral = onCall<ClaimReferralData>(
   { invoker: 'public', enforceAppCheck: false },
   async (request) => {
     const { auth, data } = request;
-    const { referralCode, deviceId, appVersion, countryCodes, timeZoneOffsetMinutes } = data;
+    const { referralCode, deviceId, appVersion, platform, countryCodes, timeZoneOffsetMinutes } = data;
 
     if (!auth?.uid) {
       throw new HttpsError('unauthenticated', 'AUTH_REQUIRED');
@@ -56,6 +62,7 @@ export const claimReferral = onCall<ClaimReferralData>(
       uid: auth.uid,
       countryCodes,
       timeZoneOffsetMinutes,
+      appVersion,
     });
 
     // 1. Validate referral code exists
@@ -117,6 +124,32 @@ export const claimReferral = onCall<ClaimReferralData>(
 
     await batch.commit();
 
+    const useWallet = shouldUseTokenWallet({ appVersion, platform });
+    if (useWallet) {
+      await Promise.all([
+        grantWalletTokens({
+          db,
+          uid: auth.uid,
+          tokens: REFERRAL_TOKENS,
+          reason: 'referral_claim',
+          source: 'referral',
+          asGrant: true,
+          metadata: { referralCode: trimmedCode, role: 'claimer' },
+        }),
+        grantWalletTokens({
+          db,
+          uid: referrerUid,
+          tokens: REFERRAL_TOKENS,
+          reason: 'referral_reward',
+          source: 'referral',
+          asGrant: true,
+          metadata: { referralCode: trimmedCode, role: 'referrer', claimerUid: auth.uid },
+        }),
+      ]);
+      console.log(`✅ Referral claimed (tokens): code=${trimmedCode}, claimer=${auth.uid}, referrer=${referrerUid}`);
+      return { success: true, creditsAwarded: 0, tokensAwarded: REFERRAL_TOKENS };
+    }
+
     // Grant free credits to both parties (non-transactional, idempotent via audit)
     await Promise.all([
       grantFreeCredits({
@@ -138,6 +171,6 @@ export const claimReferral = onCall<ClaimReferralData>(
     ]);
 
     console.log(`✅ Referral claimed: code=${trimmedCode}, claimer=${auth.uid}, referrer=${referrerUid}`);
-    return { success: true, creditsAwarded: REFERRAL_REWARD };
+    return { success: true, creditsAwarded: REFERRAL_REWARD, tokensAwarded: 0 };
   }
 );

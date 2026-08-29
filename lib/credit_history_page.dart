@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
+import 'controllers/translation_controller.dart';
 import 'managers/theme_manager.dart';
 import 'models/credit_history_entry.dart';
 import 'repositories/credit_history_repository.dart';
+import 'services/token_wallet_math.dart';
 import 'widgets/adaptive_text.dart';
 
 class CreditHistoryPage extends StatelessWidget {
@@ -13,7 +15,12 @@ class CreditHistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trans = context.watch<ThemeManager>().trans;
-    final title = trans['credit_history_title'] ?? 'Kredi Geçmişi';
+    final tokenUi = context.watch<TranslationController>().showTokenWalletUi;
+    final title = tokenUi
+        ? (trans['credit_history_title_tokens'] ??
+            trans['credit_history_title'] ??
+            'Token Geçmişi')
+        : (trans['credit_history_title'] ?? 'Kredi Geçmişi');
 
     return Scaffold(
       appBar: AppBar(
@@ -34,6 +41,9 @@ class CreditHistoryPage extends StatelessWidget {
 class CreditHistoryBody extends StatelessWidget {
   const CreditHistoryBody({super.key});
 
+  Map<String, String> _trans(BuildContext context) =>
+      context.read<ThemeManager>().trans;
+
   String _formatTimestamp(BuildContext context, DateTime? ts) {
     if (ts == null) return '';
     final local = ts.toLocal();
@@ -50,35 +60,164 @@ class CreditHistoryBody extends StatelessWidget {
   }
 
   String _formatAmount(BuildContext context, CreditHistoryEntry entry) {
-    final sign = entry.type == CreditHistoryEntryType.add ? '+' : '-';
-    return '$sign${entry.amount.abs()}';
+    final sign = entry.isAdd ? '+' : '-';
+    final abs = entry.displayAmount;
+    if (entry.isTokenLedger) {
+      return '$sign${formatTokenCount(abs, grouping: '.')}';
+    }
+    return '$sign$abs';
+  }
+
+  bool _isSubscriptionRenewalForfeit(CreditHistoryEntry entry) {
+    final reason = entry.reason?.trim().toLowerCase();
+    return reason == 'subscription_renewal_forfeit';
+  }
+
+  bool _isSubscriptionRenewalGrant(CreditHistoryEntry entry) {
+    final reason = entry.reason?.trim().toLowerCase();
+    return reason == 'subscription_renewal';
+  }
+
+  bool _isAdReward(CreditHistoryEntry entry) {
+    final source = entry.source?.trim().toLowerCase();
+    final reason = entry.reason?.trim().toLowerCase();
+    return source == 'ad_reward' || reason == 'ad_reward';
+  }
+
+  bool _isMonthlyBonus(CreditHistoryEntry entry) {
+    final reason = entry.reason?.trim().toLowerCase();
+    return reason == 'monthly_google_bonus';
+  }
+
+  bool _isPurchaseBonus(CreditHistoryEntry entry) {
+    final source = entry.source?.trim().toLowerCase();
+    final reason = entry.reason?.trim().toLowerCase();
+    return source == 'purchase_bonus' || reason == 'purchase_bonus';
+  }
+
+  bool _isBonusExpired(CreditHistoryEntry entry) {
+    final source = entry.source?.trim().toLowerCase();
+    final reason = entry.reason?.trim().toLowerCase();
+    return source == 'bonus_expired' ||
+        reason == 'bonus_expired' ||
+        reason == 'bonus_expiry';
+  }
+
+  String? _productLabelFor(BuildContext context, String? rawProductId) {
+    final trans = _trans(context);
+    final productId = rawProductId?.trim().toLowerCase();
+    if (productId == null || productId.isEmpty) {
+      return null;
+    }
+
+    switch (productId) {
+      case 'sub_20_credits_monthly':
+      case 'hobi_paket_monthly':
+        return trans['subscription_hobby_title'] ?? 'Hobby Pack';
+      case 'sub_30_credits_monthly':
+      case 'sinema_paketi_monthly':
+        return trans['subscription_cinema_title'] ?? 'Cinema Pack';
+      case 'tokens_1m':
+        return trans['package_tokens_1m'] ??
+            '${trans['package_starter'] ?? 'Starter Pack'} (1M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      case 'tokens_5m':
+        return trans['package_tokens_5m'] ??
+            '${trans['package_pro'] ?? 'Pro Pack'} (5M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      case 'tokens_10m':
+        return trans['package_tokens_10m'] ??
+            '${trans['package_expert'] ?? 'Expert Pack'} (10M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      default:
+        if (productId.startsWith('credits_')) {
+          return trans['credits_pack_generic'] ?? 'Credit Pack';
+        }
+        if (productId.startsWith('tokens_') || productId.contains('token')) {
+          return trans['tokens_pack_generic'] ?? 'Token Pack';
+        }
+        return rawProductId?.trim();
+    }
   }
 
   String? _addSourceLabel(BuildContext context, CreditHistoryEntry entry) {
-    final trans = context.read<ThemeManager>().trans;
-    final source = entry.source?.trim().toLowerCase();
+    final trans = _trans(context);
 
-    if (entry.reason?.trim().toLowerCase() == 'monthly_google_bonus') {
+    if (_isPurchaseBonus(entry)) {
+      return trans['credit_source_purchase_bonus'] ?? 'Purchase Bonus';
+    }
+    if (_isSubscriptionRenewalGrant(entry)) {
+      return trans['credit_source_subscription_renewal'] ??
+          trans['credit_source_subscription'] ??
+          'Subscription Renewal';
+    }
+    if (_isBonusExpired(entry)) {
+      return trans['credit_source_bonus_expired'] ?? 'Bonus Expired';
+    }
+    if (entry.source?.trim().toLowerCase() == 'legacy_bonus_conversion' ||
+        entry.reason?.trim().toLowerCase() == 'legacy_bonus_conversion') {
+      return trans['credit_source_legacy_bonus_conversion'] ??
+          'Bonus krediler tokena dönüştürüldü';
+    }
+    if (_isMonthlyBonus(entry)) {
       return trans['credit_source_monthly_bonus'] ?? 'Monthly Bonus';
     }
-    if (source == 'login_bonus') {
+    if (entry.source == 'login_bonus') {
       return trans['credit_source_login_bonus'] ?? 'Google Login Bonus';
     }
-    if (source == 'purchase_history' || (source?.contains('purchase') ?? false)) {
+    if (_isAdReward(entry)) {
+      return trans['credit_source_ad_reward'] ?? 'Ad Reward Credit';
+    }
+
+    final source = entry.source?.trim().toLowerCase();
+    if (source == null || source.isEmpty) {
+      return null;
+    }
+
+    if (source == 'purchase_history' || source.contains('purchase')) {
       return trans['credit_source_purchase'] ?? 'Purchase';
     }
-    if (source?.contains('website') ?? false) {
+    if (source == 'subscription' || source.contains('subscription')) {
+      return trans['credit_source_subscription'] ?? 'Subscription';
+    }
+    if (source.contains('website')) {
       return trans['credit_source_website'] ?? 'Website';
+    }
+    if (source.contains('referral')) {
+      return trans['credit_source_referral'] ??
+          trans['referral_dialog_title'] ??
+          'Referral reward';
     }
 
     return source;
   }
 
   String _titleFor(BuildContext context, CreditHistoryEntry entry) {
-    final trans = context.read<ThemeManager>().trans;
+    final trans = _trans(context);
 
-    if (entry.type == CreditHistoryEntryType.add) {
-      return trans['credit_history_add'] ?? trans['credit_history_added'] ?? 'Credit added';
+    if (entry.isAdd) {
+      if (entry.isTokenLedger) {
+        return trans['credit_history_add_tokens'] ??
+            trans['credit_history_add'] ??
+            trans['credit_history_added'] ??
+            'Token added';
+      }
+      return trans['credit_history_add'] ??
+          trans['credit_history_added'] ??
+          'Credit added';
+    }
+
+    if (_isSubscriptionRenewalForfeit(entry)) {
+      if (entry.isTokenLedger) {
+        return trans['credit_history_subscription_forfeit_tokens'] ??
+            trans['credit_history_subscription_forfeit'] ??
+            'Unused subscription tokens reset';
+      }
+      return trans['credit_history_subscription_forfeit'] ??
+          'Unused subscription credits reset';
+    }
+
+    if (entry.isTokenLedger) {
+      return trans['credit_history_spend_tokens'] ??
+          trans['credit_history_spend'] ??
+          'Token spent';
     }
 
     return trans['credit_history_spend'] ?? 'Credit spent';
@@ -93,8 +232,21 @@ class CreditHistoryBody extends StatelessWidget {
     } else {
       final reason = entry.reason?.trim();
       if (reason == 'cache_hit') {
-        final trans = context.read<ThemeManager>().trans;
-        detailParts.add(trans['credit_history_cache'] ?? trans['credit_history_cache_hit'] ?? 'Cache');
+        final trans = _trans(context);
+        detailParts.add(trans['credit_history_cache'] ??
+            trans['credit_history_cache_hit'] ??
+            'Cache');
+      } else if (_isSubscriptionRenewalForfeit(entry)) {
+        final trans = _trans(context);
+        detailParts.add(
+          trans['credit_source_subscription_renewal_forfeit'] ??
+              trans['credit_source_subscription'] ??
+              'Monthly subscription renewal',
+        );
+        final productLabel = _productLabelFor(context, entry.productId);
+        if (productLabel != null && productLabel.isNotEmpty) {
+          detailParts.add(productLabel);
+        }
       } else if (reason != null && reason.isNotEmpty) {
         const hiddenReasons = {'first_chunk', 'usage', 'unknown'};
         if (!hiddenReasons.contains(reason)) {
@@ -133,14 +285,13 @@ class CreditHistoryBody extends StatelessWidget {
 
   String? _subtitleFor(BuildContext context, CreditHistoryEntry entry) {
     final subtitleParts = <String>[];
-    final trans = context.read<ThemeManager>().trans;
 
     final dateText = _formatTimestamp(context, entry.timestamp);
     if (dateText.isNotEmpty) {
       subtitleParts.add(dateText);
     }
 
-    if (entry.type == CreditHistoryEntryType.spend) {
+    if (entry.isSpend) {
       final spendDetails = _buildSpendDetail(context, entry);
       if (spendDetails.isNotEmpty) {
         subtitleParts.add(spendDetails);
@@ -151,13 +302,9 @@ class CreditHistoryBody extends StatelessWidget {
         subtitleParts.add(sourceLabel);
       }
 
-      var productId = entry.productId?.trim().toLowerCase();
-      if (productId != null && productId.isNotEmpty) {
-        if (productId.startsWith('credits_')) {
-          subtitleParts.add(trans['credits_pack_generic'] ?? 'Credit Pack');
-        } else {
-          subtitleParts.add(productId);
-        }
+      final productLabel = _productLabelFor(context, entry.productId);
+      if (productLabel != null && productLabel.isNotEmpty) {
+        subtitleParts.add(productLabel);
       }
     }
 
@@ -168,6 +315,13 @@ class CreditHistoryBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trans = context.watch<ThemeManager>().trans;
+    final tokenUi = context.watch<TranslationController>().showTokenWalletUi;
+    final emptyLabel = trans['credit_history_empty'] ?? 'No transactions yet.';
+    final errorLabel = tokenUi
+        ? (trans['credit_history_error_tokens'] ??
+            trans['credit_history_error'] ??
+            'Could not load token history.')
+        : (trans['credit_history_error'] ?? 'Could not load credit history.');
 
     final auth = FirebaseAuth.instance;
 
@@ -181,7 +335,7 @@ class CreditHistoryBody extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: AdaptiveText(
-                trans['credit_history_empty'] ?? 'No transactions yet.',
+                emptyLabel,
                 textAlign: TextAlign.center,
               ),
             ),
@@ -191,7 +345,10 @@ class CreditHistoryBody extends StatelessWidget {
         final repo = CreditHistoryRepository();
 
         return StreamBuilder<List<CreditHistoryEntry>>(
-          stream: repo.watchCreditHistory(limit: 200, includeLegacyFallback: true),
+          stream: repo.watchCreditHistory(
+            limit: 200,
+            includeLegacyFallback: true,
+          ),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               assert(() {
@@ -202,7 +359,7 @@ class CreditHistoryBody extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: AdaptiveText(
-                    trans['credit_history_error'] ?? 'Could not load credit history.',
+                    errorLabel,
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -219,7 +376,7 @@ class CreditHistoryBody extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: AdaptiveText(
-                    trans['credit_history_empty'] ?? 'No transactions yet.',
+                    emptyLabel,
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -233,12 +390,15 @@ class CreditHistoryBody extends StatelessWidget {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final entry = entries[index];
-                final isAdd = entry.type == CreditHistoryEntryType.add;
-                final amountColor = isAdd ? colorScheme.primary : colorScheme.error;
+                final isAdd = entry.isAdd;
+                final amountColor =
+                    isAdd ? colorScheme.primary : colorScheme.error;
 
                 return ListTile(
                   leading: Icon(
-                    isAdd ? Icons.add_circle_outline : Icons.remove_circle_outline,
+                    isAdd
+                        ? Icons.add_circle_outline
+                        : Icons.remove_circle_outline,
                     color: amountColor,
                   ),
                   title: Text(

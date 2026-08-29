@@ -7,14 +7,21 @@ import { resolveGeminiModel, shouldUseVertexAi } from './modelUtils';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 
-// Gemini 2.5 Flash-Lite (GA) fiyatları: $ / 1M token.
-// Tek kaynak noktası: client bu fiyatı bilmez; costUsd'yi sunucu hesaplar.
-const MODEL_PRICING_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
+// Gemini 2.5 Flash-Lite runs the job. Ledger costUsd uses 3.1 list prices
+// so P&L matches the 1 Sep token packs. costUsdProvider is the real Google bill.
+const LEDGER_PRICING_USD_PER_MILLION = { input: 0.25, output: 1.50 };
+const PROVIDER_PRICING_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
     'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
 };
 
-function computeCostUsd(modelName: string, inputTokens: number, outputTokens: number): string {
-    const pricing = MODEL_PRICING_USD_PER_MILLION[modelName]
+function computeCostUsd(inputTokens: number, outputTokens: number): string {
+    const cost = (inputTokens / 1_000_000) * LEDGER_PRICING_USD_PER_MILLION.input
+        + (outputTokens / 1_000_000) * LEDGER_PRICING_USD_PER_MILLION.output;
+    return cost.toFixed(6);
+}
+
+function computeCostUsdProvider(modelName: string, inputTokens: number, outputTokens: number): string {
+    const pricing = PROVIDER_PRICING_USD_PER_MILLION[modelName]
         ?? { input: 0.10, output: 0.40 };
     const cost = (inputTokens / 1_000_000) * pricing.input
         + (outputTokens / 1_000_000) * pricing.output;
@@ -40,6 +47,8 @@ type TranslateRequestData = {
     // (responseSchema). Konum kaymasına karşı index bazlı eşleme sağlar.
     // Yalnızca yeni istemciler gönderir.
     numberedLines?: boolean;
+    charCount?: number;
+    estimatedTokens?: number;
 };
 
 type TranslationSessionLookup = {
@@ -48,12 +57,17 @@ type TranslationSessionLookup = {
     data: FirebaseFirestore.DocumentData;
 };
 
-const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Ek kural: Bir altyazi satiri asiri cinsel veya acik sacik oldugu icin dogrudan cevrildiginde sorun cikacaksa satiri asla atlama, bos birakma veya cevirmeyi reddetme; anlami koruyarak daha yumusak ve ortulu bir dille cevir ve SRT yapisini aynen koru.';
+const EXPLICIT_CONTENT_FALLBACK_INSTRUCTION = 'Additional rule: If a subtitle line is so sexually explicit that a direct translation would cause problems, never skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning, and keep the SRT structure unchanged.';
 
 function withExplicitContentFallback(systemPrompt?: string): string {
     const base = (systemPrompt ?? '').trim();
     if (!base) return EXPLICIT_CONTENT_FALLBACK_INSTRUCTION;
-    if (base.includes('asla atlama') || base.includes('cevirmeyi reddetme')) {
+    if (
+        base.includes('never skip the line') ||
+        base.includes('refuse to translate') ||
+        base.includes('asla atlama') ||
+        base.includes('cevirmeyi reddetme')
+    ) {
         return base;
     }
     return `${base}\n${EXPLICIT_CONTENT_FALLBACK_INSTRUCTION}`;
@@ -201,6 +215,8 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         numberedLines,
     } = request.data;
     const resolvedAppVersion = (appVersion ?? '').trim() || '1.6.0';
+    const requestCharCount = Number(request.data.charCount);
+    const requestEstimatedTokens = Number(request.data.estimatedTokens);
     const useStructuredOutput = structuredOutput === true;
     // Numaralı satır formatı yalnızca bunu bilen yeni istemciler için etkindir.
     // Eski canlı istemciler bu bayrağı göndermez → prompt aynen eski davranır.
@@ -334,9 +350,9 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
     if (useStructuredOutput) {
         // Altyapı katmanı kuralı: çıktı her zaman JSON string array olmalı.
         // (System prompt yalnızca ek bilgidir; asıl garanti responseSchema'da.)
-        const baseRules = `\n\nCikti kurallari (ZORUNLU):\n- Cevabin tek bir JSON dizisi olsun: ["cevrilmis satir 1", "cevrilmis satir 2", ...].\n- Dizi elemanlari, girdi dizisiyle BIREBIR ayni sirada ve ayni sayida olsun.\n- Zaman kodlari, blok numaralari veya SRT sekli EKLEME; yalnizca cevrilmis metinler.`;
-        const numberedRules = `\n- GIRDI "NUMARA|metin" biciminde numaralandirilmistir ve NUMARALAR SIRALI DEGILDIR (orn. 17, 3, 290, 81...). Cikti dizisindeki her eleman {"i": NUMARA, "t": "ceviri"} biciminde bir JSON objesi OLMALIDIR. "i" alani, girdideki KENDI satirinin numarasinin birebir KOPYASIDIR; sira numaralama yapma, kendi numaranizi uretmeyin, atlamayin, degistirmeyin ve tekrarlamayin. IKI GIRDI SATIRINI ASLA TEK CIKTI OBJESINDE BIRLESTIRME; her girdi satiri icin tam olarak bir obje uretilir.
-- BIR GIRDI SATIRI YARIM/BOLUNMUS CUMLE OLSA BILE ONU TAMAMLAMA, EKSIGINI TAHMIN ETME VE ONCEKI/SONRAKI SATIRIN ANLAMINI KENDI CEVIRINE EKLEME; her satiri bagimsiz olarak, sadece kendi sozcukleriyle cevir. IKI AYRI CIKTI OBJESINE AYNI/COK BENZER CUMLE YAZMA.`;
+        const baseRules = `\n\nOutput rules (MANDATORY):\n- Your reply must be a single JSON array: ["translated line 1", "translated line 2", ...].\n- Array elements must be in EXACTLY the same order and the same count as the input array.\n- Do NOT add timecodes, block numbers, or SRT framing; only the translated texts.`;
+        const numberedRules = `\n- The INPUT is numbered in "NUMBER|text" form and the NUMBERS ARE NOT SEQUENTIAL (e.g. 17, 3, 290, 81...). Each element in the output array MUST be a JSON object of the form {"i": NUMBER, "t": "translation"}. The "i" field is an exact COPY of that line's own number from the input; do not renumber in sequence, invent your own numbers, skip, change, or repeat them. NEVER MERGE TWO INPUT LINES INTO A SINGLE OUTPUT OBJECT; produce exactly one object for each input line.
+- EVEN IF AN INPUT LINE IS A HALF/SPLIT SENTENCE, DO NOT COMPLETE IT, DO NOT GUESS THE MISSING PART, AND DO NOT ADD MEANING FROM THE PREVIOUS/NEXT LINE INTO YOUR OWN TRANSLATION; translate each line independently, using only its own words. DO NOT WRITE THE SAME/VERY SIMILAR SENTENCE INTO TWO SEPARATE OUTPUT OBJECTS.`;
         effectiveSystemPrompt = `${effectiveSystemPrompt}${baseRules}${useNumberedLines ? numberedRules : ''}`;
     }
 
@@ -430,6 +446,12 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                 appVersion: resolvedAppVersion,
                 preferFreeCreditsFirst: sessionData.data()?.preferFreeCreditsFirst === true,
                 allowAutoApproveSession: true,
+                charCount: Number.isFinite(requestCharCount) && requestCharCount > 0
+                    ? requestCharCount
+                    : Number(sessionData.data()?.charCount ?? 0) || null,
+                estimatedTokens: Number.isFinite(requestEstimatedTokens) && requestEstimatedTokens > 0
+                    ? requestEstimatedTokens
+                    : Number(sessionData.data()?.estimatedTokens ?? 0) || null,
             });
         }
         
@@ -437,7 +459,8 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             text: outputText,
             inputTokens: result.usageMetadata?.promptTokenCount || 0,
             outputTokens: result.usageMetadata?.candidatesTokenCount || 0,
-            costUsd: computeCostUsd(modelUsed, result.usageMetadata?.promptTokenCount || 0, result.usageMetadata?.candidatesTokenCount || 0),
+            costUsd: computeCostUsd(result.usageMetadata?.promptTokenCount || 0, result.usageMetadata?.candidatesTokenCount || 0),
+            costUsdProvider: computeCostUsdProvider(modelUsed, result.usageMetadata?.promptTokenCount || 0, result.usageMetadata?.candidatesTokenCount || 0),
             modelUsed,
             providerUsed,
         };
@@ -458,6 +481,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                 inputTokens: 0,
                 outputTokens: 0,
                 costUsd: '0.000000',
+                costUsdProvider: '0.000000',
                 modelUsed: modelName
             };
         }

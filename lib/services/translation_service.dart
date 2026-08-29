@@ -37,15 +37,19 @@ class TranslationService extends ChangeNotifier {
 
       final effectiveSystemPrompt = systemPrompt.isNotEmpty
           ? systemPrompt
-          : '''Sen Netflix standartlarında çalışan profesyonel bir altyazı çevirmenisin.
-Görevin: Aşağıdaki "ID|Zaman|Metin" formatındaki satırların SADECE "Metin" kısımlarını $targetLanguage diline çevirmek.
+          : '''You are a professional subtitle translator working to Netflix standards.
+Your task: Translate ONLY the "Text" parts of the lines below in "ID|Time|Text" format into $targetLanguage.
 
-Kurallar:
-1. ASLA kelime kelime çeviri yapma. Anlama ve bağlama odaklan.
-2. Deyimleri ve argoları $targetLanguage kültürüne uyarla.
-3. Resmiyetten kaçın, doğal ve akıcı bir dil kullan.
-4. Çıktı formatı KESİNLİKLE "ID|Zaman|Çeviri" şeklinde olmalı.
-5. Satır sayısını ve ID'leri değiştirme.''';
+ATTENTION / IMPORTANT:
+- YOU MUST PROVIDE THE TRANSLATION RESULT STRICTLY AND ONLY IN $targetLanguage.
+- DO NOT USE ANY LANGUAGE OTHER THAN $targetLanguage IN THE OUTPUT. IF THE TARGET LANGUAGE IS NOT TURKISH, NEVER WRITE TURKISH SENTENCES!
+
+Rules:
+1. NEVER translate word-for-word. Focus on meaning and context.
+2. Adapt idioms and slang to $targetLanguage culture.
+3. Avoid formality; use natural and fluent language.
+4. Output format MUST be exactly "ID|Time|Translation".
+5. Do not change the number of lines or the IDs.''';
 
       // Çeviri yap
       final response = await _geminiService.translate(

@@ -3,7 +3,31 @@ import 'package:flutter/material.dart';
 
 import '../../app_settings.dart';
 import '../../controllers/translation_controller.dart';
+import '../../services/token_wallet_math.dart';
 import 'layout_constants.dart';
+
+String walletUiStartLabel(
+  Map<String, String> trans,
+  bool tokenUi, {
+  bool willChargeFileCredit = false,
+  int estimatedTokens = 0,
+}) {
+  final start = trans['start_translation'] ?? 'Start Translation';
+  String tokenLabel() {
+    if (estimatedTokens <= 0) return start;
+    final tokens = formatTokenCount(estimatedTokens, grouping: '.');
+    final unit = trans['wallet_token_label'] ?? 'Token';
+    return '$start ($tokens $unit)';
+  }
+
+  if (tokenUi && willChargeFileCredit) {
+    return '$start (1 ${trans['credit'] ?? 'Credit'})';
+  }
+  if (tokenUi) {
+    return tokenLabel();
+  }
+  return '$start (1 ${trans['credit'] ?? 'Credit'})';
+}
 
 class AiPanelPrimaryActionsSection extends StatelessWidget {
   final AppSettings settings;
@@ -11,6 +35,7 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
 
   final bool isBulkProcessing;
   final int selectedFilesCount;
+  final int estimatedTokenTotal;
 
   final VoidCallback onSave;
   final VoidCallback onNewTranslation;
@@ -25,6 +50,7 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
     required this.controller,
     required this.isBulkProcessing,
     required this.selectedFilesCount,
+    this.estimatedTokenTotal = 0,
     required this.onSave,
     required this.onNewTranslation,
     required this.onStartTranslation,
@@ -131,7 +157,14 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.center,
                     child: AutoSizeText(
-                      '${settings.trans['start_translation'] ?? 'Çeviriyi Başlat'} (1 ${settings.trans['credit'] ?? 'Kredi'})',
+                      walletUiStartLabel(
+                        settings.trans,
+                        controller.showTokenWalletUi,
+                        willChargeFileCredit:
+                            controller.showTokenWalletUi &&
+                                controller.displayFileCredits > 0,
+                        estimatedTokens: estimatedTokenTotal,
+                      ),
                       maxLines: 1,
                       minFontSize: 10,
                       overflow: TextOverflow.ellipsis,
