@@ -14,6 +14,7 @@ import {
     tokenChargeRequiresRewardedAd,
 } from '../billing/tokenWallet';
 import {
+    isUnsupportedDesktopClient,
     meetsMinimumVersion,
     shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
@@ -43,6 +44,9 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
     const targetLanguage = (request.data.targetLanguage ?? '').trim();
     const platform = normalizePlatform(request.data.platform);
     const appVersion = (request.data.appVersion ?? '').trim() || '1.6.0';
+    if (isUnsupportedDesktopClient({ appVersion, platform })) {
+        throw new HttpsError('failed-precondition', 'DESKTOP_UPDATE_REQUIRED');
+    }
     const useRewardedAd = request.data.useRewardedAd === true;
     const paidCreditsOnly = shouldEnforceDesktopPaidCreditsOnly({
         appVersion,

@@ -69,6 +69,9 @@ class BillingService extends ChangeNotifier {
   int _tokenBalance = 0;
   int get tokenBalance => _tokenBalance;
 
+  int _tokenGrantBalance = 0;
+  int get tokenGrantBalance => _tokenGrantBalance;
+
   int _legacyFlatRateRemaining = 0;
   int get legacyFlatRateRemaining => _legacyFlatRateRemaining;
 
@@ -77,19 +80,23 @@ class BillingService extends ChangeNotifier {
   bool get offerTokenPacks => usesTokenWallet;
   int get displayFileCredits =>
       usesTokenWallet ? _legacyFlatRateRemaining : _purchasedCredits;
-  int get displayTokenBalance => _tokenBalance;
-  /// Desktop has no bonus/ad grants; purchased wallet tokens are the balance.
-  int get displayPaidTokenBalance => _tokenBalance;
-  bool get showTokenWalletUi => usesTokenWallet || _tokenBalance > 0;
+  /// Desktop has no ads; hide grant/bonus tokens and show only paid balance.
+  int get _paidTokenBalance =>
+      max(0, _tokenBalance - max(0, min(_tokenGrantBalance, _tokenBalance)));
+  int get displayTokenBalance =>
+      usesTokenWallet ? _paidTokenBalance : _tokenBalance;
+  int get displayPaidTokenBalance => displayTokenBalance;
+  int get displayBonusTokenBalance => 0;
+  bool get showTokenWalletUi =>
+      usesTokenWallet || _paidTokenBalance > 0 || _legacyFlatRateRemaining > 0;
   bool get isDesktopClient => true;
-  int get tokenGrantBalance => 0;
   int get freeCredits => 0;
   bool get preferFreeCreditsFirst => false;
   bool get hasPaidAccess =>
       _purchasedCredits > 0 || _legacyFlatRateRemaining > 0;
   bool get hasSpendableBalance {
     if (usesTokenWallet) {
-      return _legacyFlatRateRemaining > 0 || _tokenBalance > 0;
+      return _legacyFlatRateRemaining > 0 || _paidTokenBalance > 0;
     }
     return _userCredits > 0;
   }
@@ -435,6 +442,7 @@ class BillingService extends ChangeNotifier {
       _purchasedCredits = 0;
       _legacyFlatRateRemaining = 0;
       _tokenBalance = 0;
+      _tokenGrantBalance = 0;
       _creditPolicy = '';
       // Keep device credits (starter bonus) even if auth is not ready.
       // Bonus is device-scoped and should be visible on first open.
@@ -466,6 +474,10 @@ class BillingService extends ChangeNotifier {
     _purchasedCredits = newPurchasedCredits;
     _legacyFlatRateRemaining = max(_asInt(data?['legacyFlatRateRemaining']), 0);
     _tokenBalance = max(_asInt(data?['tokenBalance']), 0);
+    _tokenGrantBalance = max(
+      0,
+      min(_tokenBalance, _asInt(data?['tokenGrantBalance'])),
+    );
     _creditPolicy = (data?['creditPolicy'] as String?)?.trim() ?? '';
     if (!usesTokenWallet) {
       _legacyFlatRateRemaining = _purchasedCredits;
@@ -488,9 +500,7 @@ class BillingService extends ChangeNotifier {
         _purchasedCredits = 0;
         _legacyFlatRateRemaining = 0;
         _tokenBalance = 0;
-        _creditPolicy = '';
-        _legacyFlatRateRemaining = 0;
-        _tokenBalance = 0;
+        _tokenGrantBalance = 0;
         _creditPolicy = '';
         _recomputeTotalCredits();
         notifyListeners();
@@ -643,6 +653,12 @@ class BillingService extends ChangeNotifier {
         }
         if (data.containsKey('remainingTokenBalance')) {
           _tokenBalance = _asInt(data['remainingTokenBalance']);
+        }
+        if (data.containsKey('remainingTokenGrantBalance')) {
+          _tokenGrantBalance = max(
+            0,
+            min(_tokenBalance, _asInt(data['remainingTokenGrantBalance'])),
+          );
         }
         if (data.containsKey('remainingDeviceCredits')) {
           _deviceCredits = _asInt(data['remainingDeviceCredits']);

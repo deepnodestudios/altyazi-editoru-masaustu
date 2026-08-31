@@ -7,6 +7,8 @@ const MIN_AD_REWARD_APP_VERSION = '1.6.3';
 const MIN_DEVICE_AD_REWARD_APP_VERSION = '1.6.9';
 const MIN_MOBILE_BONUS_POLICY_APP_VERSION = '1.7.5';
 const MIN_DESKTOP_BONUS_POLICY_APP_VERSION = '1.7.4';
+/** Desktop clients below this must update; translation APIs reject them. */
+const MIN_DESKTOP_SUPPORTED_APP_VERSION = '1.7.6';
 
 function parseVersion(value: string): { parts: number[]; build: number | null } {
   const trimmed = value.trim();
@@ -117,6 +119,15 @@ export function shouldEnforceDesktopPaidCreditsOnly(args: {
     meetsMinimumVersion(args.appVersion, MIN_DESKTOP_BONUS_POLICY_APP_VERSION);
 }
 
+/** True when a desktop client is older than the minimum supported release (1.7.6). */
+export function isUnsupportedDesktopClient(args: {
+  appVersion: string | null | undefined;
+  platform: string | null | undefined;
+}): boolean {
+  return isDesktopPlatform(args.platform) &&
+    !meetsMinimumVersion(args.appVersion, MIN_DESKTOP_SUPPORTED_APP_VERSION);
+}
+
 /**
  * Grants free credits to a user (referral bonus, monthly bonus, etc.).
  * Records the transaction in credit_transactions.
@@ -161,4 +172,5 @@ export {
   MIN_DEVICE_AD_REWARD_APP_VERSION,
   MIN_MOBILE_BONUS_POLICY_APP_VERSION,
   MIN_DESKTOP_BONUS_POLICY_APP_VERSION,
+  MIN_DESKTOP_SUPPORTED_APP_VERSION,
 };

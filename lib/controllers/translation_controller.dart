@@ -425,6 +425,7 @@ class TranslationController extends ChangeNotifier {
   int get displayFileCredits => billingService.displayFileCredits;
   int get displayTokenBalance => billingService.displayTokenBalance;
   int get displayPaidTokenBalance => billingService.displayPaidTokenBalance;
+  int get displayBonusTokenBalance => billingService.displayBonusTokenBalance;
   bool get showTokenWalletUi => billingService.showTokenWalletUi;
   bool get hasSpendableBalance => billingService.hasSpendableBalance;
   List<CreditPackage> get packages => billingService.packages;
