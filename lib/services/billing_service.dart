@@ -604,16 +604,19 @@ class BillingService extends ChangeNotifier {
   }
 
   /// Cloud Function üzerinden kredi düşme
-  Future<void> consumeCredit(
+  /// Returns app-wallet tokens charged (`0` for file-credit/legacy paths).
+  Future<int> consumeCredit(
     int amount, {
     String? reason,
     String? chargeKey,
     String? fileName,
     String? targetLanguage,
     String? platform,
+    int? charCount,
+    int? estimatedTokens,
   }) async {
     try {
-      if (_deviceId == null || _deviceId!.trim().isEmpty) return;
+      if (_deviceId == null || _deviceId!.trim().isEmpty) return 0;
 
       String resolvePlatform() {
         final override = platform?.trim();
@@ -631,6 +634,7 @@ class BillingService extends ChangeNotifier {
       final beforeDevice = _deviceCredits;
       final beforeTotal = _userCredits;
       final appVersion = await _currentAppVersion();
+      var appChargedTokens = 0;
 
       final data = await _callCloudFunction('consumeCredit', {
         'amount': amount,
@@ -641,6 +645,9 @@ class BillingService extends ChangeNotifier {
         if (chargeKey != null && chargeKey.trim().isNotEmpty) 'chargeKey': chargeKey.trim(),
         if (fileName != null && fileName.trim().isNotEmpty) 'fileName': fileName.trim(),
         if (targetLanguage != null && targetLanguage.trim().isNotEmpty) 'targetLanguage': targetLanguage.trim(),
+        if (charCount != null && charCount > 0) 'charCount': charCount,
+        if (estimatedTokens != null && estimatedTokens > 0)
+          'estimatedTokens': estimatedTokens,
       });
 
       if (data['success'] == true) {
@@ -662,6 +669,10 @@ class BillingService extends ChangeNotifier {
         }
         if (data.containsKey('remainingDeviceCredits')) {
           _deviceCredits = _asInt(data['remainingDeviceCredits']);
+        }
+        final chargeMode = (data['chargeMode']?.toString() ?? '').trim();
+        if (chargeMode == 'tokens') {
+          appChargedTokens = _asInt(data['chargedAmount']);
         }
         _recomputeTotalCredits();
 
@@ -693,6 +704,7 @@ class BillingService extends ChangeNotifier {
 
         notifyListeners();
       }
+      return appChargedTokens;
     } on FirebaseFunctionsException catch (e) {
       if (e.code == 'failed-precondition') {
         final message = (e.message ?? '').toLowerCase();

@@ -83,6 +83,7 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             },
             platform,
             appVersion,
+            googleLoginTokenGrantBalance: summary.googleLoginTokenGrantBalance,
         });
         if (
             summary.legacyFlatRateRemaining <= 0
@@ -129,6 +130,7 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             platform,
             appVersion,
             preferFreeCreditsFirst,
+            googleLoginTokenGrantBalance: summary.googleLoginTokenGrantBalance,
         });
         chargeMode = chargePlan.mode;
         plannedEstimatedTokens = chargePlan.estimatedTokens;

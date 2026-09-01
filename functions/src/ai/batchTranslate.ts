@@ -6,6 +6,10 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { assertCreditsAvailable, consumeCreditInternal, getAuthEmail, normalizePlatform, requireDeviceId } from '../billing/creditUtils';
+import {
+    appChargedTokensFromResult,
+    globalTranslationAppChargeFields,
+} from '../billing/tokenWallet';
 import { resolveGeminiModel } from './modelUtils';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
@@ -172,7 +176,7 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             throw new Error('Batch job creation failed, job name is missing');
         }
 
-        await consumeCreditInternal({
+        const chargeResult = await consumeCreditInternal({
             db,
             amount: 1,
             deviceId: normalizedDeviceId,
@@ -188,6 +192,10 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             allowAutoApproveSession: true,
             charCount: Number(sessionData.charCount ?? 0) || null,
             estimatedTokens: Number(sessionData.estimatedTokens ?? 0) || null,
+        });
+        const appChargedTokens = appChargedTokensFromResult({
+            chargeMode: chargeResult.chargeMode,
+            chargedAmount: chargeResult.chargedAmount,
         });
 
         // Save batch job info to Firestore so we can track it
@@ -206,6 +214,8 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             targetLanguage: targetLanguage ?? null,
             originalNameForGlobalCache: originalNameForGlobalCache ?? null,
             fileNameForHistory: fileNameForHistory ?? null,
+            chargedTokens: appChargedTokens,
+            appVersion: resolvedAppVersion,
             totalLines: totalLines ?? null,
             canWriteUserHistory: canWriteUserHistory ?? true,
             completedPlatform: resolvedPlatform,
@@ -304,6 +314,12 @@ const fileRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${
             // Update firestore
             const db = admin.firestore();
             const jobDoc = db.collection('device_bonuses').doc(deviceId).collection('batch_jobs').doc(jobName.split('/').join('_'));
+            const jobSnap = await jobDoc.get();
+            const chargedTokens = Math.max(
+                0,
+                Math.floor(Number(jobSnap.data()?.chargedTokens ?? 0) || 0),
+            );
+            const jobAppVersion = String(jobSnap.data()?.appVersion ?? '').trim();
             
             const fullTransSrt = results.join('\n\n');
 
@@ -326,6 +342,8 @@ const fileRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${
                                 lastDeviceId: deviceId,
                                 ...(data.isBatch === undefined || data.isBatch === null ? { isBatch: true } : {}),
                                 ...(actorEmail ? { lastUserEmail: actorEmail } : {}),
+                                ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                ...globalTranslationAppChargeFields(chargedTokens, false),
                             });
                         } else {
                             t.set(globalCacheRef, {
@@ -344,6 +362,8 @@ const fileRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${
                                 lastDeviceId: deviceId,
                                 creatorDeviceId: deviceId,
                                 ...(actorEmail ? { creatorEmail: actorEmail, lastUserEmail: actorEmail } : {}),
+                                ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                ...globalTranslationAppChargeFields(chargedTokens, true),
                             });
                         }
                     });

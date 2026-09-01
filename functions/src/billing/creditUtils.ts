@@ -12,10 +12,13 @@ import {
     maybeRebalancePackBonusGrant,
     maybeSplitCombinedPackHistory,
     planTokenWalletCharge,
+    resolveGoogleLoginTokenGrantBalance,
     shouldUseTokenWallet,
     spendableTokenBalance,
     tokenWalletDeviceFields,
     tokenWalletUserFields,
+    googleLoginGrantSpendAmount,
+    withGoogleLoginGrantSpend,
     type TokenChargeMode,
 } from './tokenWallet';
 
@@ -43,6 +46,7 @@ export type CreditSummary = {
     usesTokenWallet: boolean;
     tokenBalance: number;
     tokenGrantBalance: number;
+    googleLoginTokenGrantBalance: number;
     legacyFlatRateRemaining: number;
 };
 
@@ -361,12 +365,16 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
         : null;
     const tokenBalance = wallet?.tokenBalance ?? 0;
     const tokenGrantBalance = wallet?.tokenGrantBalance ?? 0;
+    const googleLoginTokenGrantBalance = usesTokenWallet
+        ? resolveGoogleLoginTokenGrantBalance(userData)
+        : 0;
     const legacyFlatRateRemaining = wallet?.legacyFlatRateRemaining ?? 0;
     const spendableTokens = wallet
         ? spendableTokenBalance({
             state: wallet,
             platform: normalizedPlatform,
             appVersion,
+            googleLoginTokenGrantBalance,
         })
         : 0;
     const walletFileCredits = usesTokenWallet ? legacyFlatRateRemaining : purchasedCredits;
@@ -395,6 +403,7 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
         usesTokenWallet,
         tokenBalance,
         tokenGrantBalance,
+        googleLoginTokenGrantBalance,
         legacyFlatRateRemaining,
     };
 }
@@ -409,6 +418,7 @@ export async function assertCreditsAvailable(args: CreditSummaryArgs): Promise<C
             },
             platform: summary.platform,
             appVersion: args.appVersion,
+            googleLoginTokenGrantBalance: summary.googleLoginTokenGrantBalance,
         });
         const bonusFiles = summary.adRewardCredits
             + summary.freeCredits
@@ -681,6 +691,7 @@ export async function consumeCreditInternal({
                 platform: platformText,
                 appVersion,
                 preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
+                googleLoginTokenGrantBalance: resolveGoogleLoginTokenGrantBalance(userData),
             });
             chargeMode = chargePlan.mode;
             chargedAmount = chargePlan.mode === 'tokens'
@@ -712,7 +723,19 @@ export async function consumeCreditInternal({
             remainingTokenBalance = chargePlan.next.tokenBalance;
             remainingTokenGrantBalance = chargePlan.next.tokenGrantBalance;
             remainingLegacyFlatRateRemaining = chargePlan.next.legacyFlatRateRemaining;
-            walletUserPatch = tokenWalletUserFields(chargePlan.next);
+            const loginGrantSpent = googleLoginGrantSpendAmount({
+                platform: platformText,
+                userData,
+                tokenGrantBalance: walletState.tokenGrantBalance,
+                fromGrantTokens,
+            });
+            walletUserPatch = {
+                ...tokenWalletUserFields(chargePlan.next),
+                googleLoginTokenGrantBalance: withGoogleLoginGrantSpend(
+                    userData,
+                    loginGrantSpent,
+                ),
+            };
             walletDevicePatch = tokenWalletDeviceFields(chargePlan.next);
         } else {
             if (currentTotal < amount) {

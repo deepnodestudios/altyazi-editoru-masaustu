@@ -25,6 +25,8 @@ export const TOKENS_PER_LEGACY_CREDIT = 110_000;
 export const STARTER_TOKENS = 150_000;
 export const STARTER_TOKENS_RESTRICTED = 75_000;
 export const GOOGLE_LOGIN_TOKENS = 150_000; // Legacy constant; new token-wallet clients no longer grant this.
+/** Web first-time Google login grant in the token-wallet era. */
+export const WEB_GOOGLE_LOGIN_TOKENS = 100_000;
 export const REFERRAL_TOKENS = 150_000;
 export const AD_REWARD_TOKENS = 5_000;
 export const AD_REWARD_WEEKLY_TOKEN_LIMIT = 200_000;
@@ -35,6 +37,16 @@ export const TOKEN_PACKS: Record<string, { base: number; bonus: number; tokens: 
     tokens_1m: { base: 1_000_000, bonus: 100_000, tokens: 1_100_000 },
     tokens_5m: { base: 5_000_000, bonus: 500_000, tokens: 5_500_000 },
     tokens_10m: { base: 10_000_000, bonus: 1_000_000, tokens: 11_000_000 },
+};
+
+/** Lemon Squeezy variant IDs → canonical token pack SKUs. */
+const TOKEN_PACK_ALIASES: Record<string, string> = {
+    '2048626': 'tokens_1m',
+    '2048645': 'tokens_5m',
+    '2048653': 'tokens_10m',
+    '1456186': 'tokens_1m',
+    '1456188': 'tokens_5m',
+    '1456194': 'tokens_10m',
 };
 
 /**
@@ -204,13 +216,43 @@ export function estimateTokens(charCount: unknown): number {
     return Math.ceil(n * TOKEN_CHAR_MULTIPLIER);
 }
 
+/** App-wallet tokens charged for a job (not Gemini usage). File-credit jobs → 0. */
+export function appChargedTokensFromResult(args: {
+    chargeMode?: unknown;
+    chargedAmount?: unknown;
+}): number {
+    if (String(args.chargeMode ?? '').trim() !== 'tokens') {
+        return 0;
+    }
+    return clampNonNegativeInt(args.chargedAmount);
+}
+
+/** Fields for global_translations: last charge + cumulative app-token spend. */
+export function globalTranslationAppChargeFields(
+    chargedTokens: unknown,
+    isCreate: boolean,
+): Record<string, unknown> {
+    const n = clampNonNegativeInt(chargedTokens);
+    if (isCreate) {
+        return {
+            chargedTokens: n,
+            totalChargedTokens: n,
+        };
+    }
+    return {
+        chargedTokens: n,
+        totalChargedTokens: admin.firestore.FieldValue.increment(n),
+    };
+}
+
 export function resolveTokenPack(productId?: string | null): {
     productId: string;
     base: number;
     bonus: number;
     tokens: number;
 } | null {
-    const key = (productId ?? '').trim();
+    const raw = (productId ?? '').trim();
+    const key = TOKEN_PACK_ALIASES[raw] ?? raw;
     const pack = TOKEN_PACKS[key];
     if (!pack) {
         return null;
@@ -259,10 +301,66 @@ export function paidTokenBalance(state: Pick<TokenWalletState, 'tokenBalance' | 
     return Math.max(0, state.tokenBalance - state.tokenGrantBalance);
 }
 
+/**
+ * Remaining web Google-login grant (100k). Converted ads/starter/pack bonuses
+ * stay in tokenGrantBalance for mobile and are not labeled as this bonus.
+ */
+export function resolveGoogleLoginTokenGrantBalance(userData: Record<string, unknown> = {}): number {
+    const explicit = userData.googleLoginTokenGrantBalance;
+    if (explicit !== undefined && explicit !== null) {
+        return clampNonNegativeInt(explicit);
+    }
+    const granted =
+        userData.googleLoginBonusGranted === true ||
+        userData.loginBonusGranted === true;
+    if (!granted) {
+        return 0;
+    }
+    const grant = Math.min(
+        clampNonNegativeInt(userData.tokenBalance),
+        clampNonNegativeInt(userData.tokenGrantBalance),
+    );
+    return Math.min(WEB_GOOGLE_LOGIN_TOKENS, grant);
+}
+
+export function withGoogleLoginGrantSpend(
+    userData: Record<string, unknown>,
+    fromGrantTokens: number,
+): number {
+    const current = resolveGoogleLoginTokenGrantBalance(userData);
+    const spent = Math.min(current, clampNonNegativeInt(fromGrantTokens));
+    return Math.max(0, current - spent);
+}
+
+/**
+ * How much of a grant spend should decrement googleLoginTokenGrantBalance.
+ * Web only spends that 100k slice; mobile spends other grants first so the
+ * web bonus remains until those are gone.
+ */
+export function googleLoginGrantSpendAmount(args: {
+    platform?: string | null;
+    userData?: Record<string, unknown>;
+    tokenGrantBalance: number;
+    fromGrantTokens: number;
+}): number {
+    const fromGrant = clampNonNegativeInt(args.fromGrantTokens);
+    if (fromGrant <= 0) {
+        return 0;
+    }
+    const platform = String(args.platform ?? '').trim().toLowerCase();
+    if (platform === 'web') {
+        return fromGrant;
+    }
+    const login = resolveGoogleLoginTokenGrantBalance(args.userData);
+    const otherGrant = Math.max(0, clampNonNegativeInt(args.tokenGrantBalance) - login);
+    return Math.max(0, fromGrant - Math.min(otherGrant, fromGrant));
+}
+
 export function spendableTokenBalance(args: {
     state: Pick<TokenWalletState, 'tokenBalance' | 'tokenGrantBalance'>;
     platform?: string | null;
     appVersion?: string | null;
+    googleLoginTokenGrantBalance?: unknown;
 }): number {
     const paid = paidTokenBalance(args.state);
     if (shouldEnforceDesktopPaidCreditsOnly({
@@ -270,6 +368,14 @@ export function spendableTokenBalance(args: {
         appVersion: args.appVersion,
     }) || isDesktopPlatform(args.platform)) {
         return paid;
+    }
+    const platform = String(args.platform ?? '').trim().toLowerCase();
+    if (platform === 'web') {
+        const loginGrant = Math.min(
+            Math.max(0, args.state.tokenGrantBalance),
+            clampNonNegativeInt(args.googleLoginTokenGrantBalance),
+        );
+        return paid + loginGrant;
     }
     return Math.max(0, args.state.tokenBalance);
 }
@@ -631,10 +737,17 @@ export function addPurchasedTokens(state: TokenWalletState, tokens: number): Tok
 export function addTokenPackTokens(
     state: TokenWalletState,
     pack: { base: number; bonus: number },
+    options?: { bonusAsPaid?: boolean },
 ): TokenWalletState {
-    let next = addPurchasedTokens(state, clampNonNegativeInt(pack.base));
-    if (clampNonNegativeInt(pack.bonus) > 0) {
-        next = addGrantTokens(next, pack.bonus);
+    const base = clampNonNegativeInt(pack.base);
+    const bonus = clampNonNegativeInt(pack.bonus);
+    // Lemon/web shop: +10% is paid so every platform can spend it.
+    if (options?.bonusAsPaid === true) {
+        return addPurchasedTokens(state, base + bonus);
+    }
+    let next = addPurchasedTokens(state, base);
+    if (bonus > 0) {
+        next = addGrantTokens(next, bonus);
     }
     return next;
 }
@@ -869,6 +982,8 @@ function emptyFilePlanFields(): Pick<
  * any shortfall from paid tokens → leftover paid file-credits.
  * A mixed bonus+paid token job still requires a rewarded ad.
  * Desktop paid-only: paid file-credits then paid tokens only.
+ * Web: paid file-credits / paid tokens, plus Google-login 100k grant only.
+ * Lemon pack base+10% is paid. Converted ads/starter grants stay mobile-only.
  */
 export function planTokenWalletCharge(args: {
     state: TokenWalletState;
@@ -878,10 +993,12 @@ export function planTokenWalletCharge(args: {
     platform?: string | null;
     appVersion?: string | null;
     preferFreeCreditsFirst?: boolean;
+    googleLoginTokenGrantBalance?: unknown;
 }): TokenChargePlan {
     const { state, platform, appVersion } = args;
     const desktopPaidOnly = shouldEnforceDesktopPaidCreditsOnly({ platform, appVersion })
         || isDesktopPlatform(platform);
+    const isWeb = String(platform ?? '').trim().toLowerCase() === 'web';
     const bonus = desktopPaidOnly ? clampBonusBuckets(null) : clampBonusBuckets(args.bonus);
     const preferBonusFirst = !desktopPaidOnly && args.preferFreeCreditsFirst === true;
     const estimatedTokens = Math.max(
@@ -891,7 +1008,12 @@ export function planTokenWalletCharge(args: {
     const paidFiles = state.legacyFlatRateRemaining;
     const bonusFiles = bonusFileTotal(bonus);
     const paidAvailable = paidTokenBalance(state);
-    const grantAvailable = desktopPaidOnly ? 0 : Math.max(0, state.tokenGrantBalance);
+    const loginGrantAvailable = clampNonNegativeInt(args.googleLoginTokenGrantBalance);
+    const grantAvailable = desktopPaidOnly
+        ? 0
+        : isWeb
+            ? Math.min(Math.max(0, state.tokenGrantBalance), loginGrantAvailable)
+            : Math.max(0, state.tokenGrantBalance);
 
     if (estimatedTokens <= 0 && (paidAvailable + grantAvailable) > 0) {
         throw new HttpsError('invalid-argument', 'CHAR_COUNT_REQUIRED');
@@ -996,21 +1118,46 @@ export function tokenChargeRequiresRewardedAd(plan: TokenChargePlan): boolean {
 }
 
 function resolvePackBonusFromProductId(productId: unknown): number {
-    const key = String(productId ?? '').trim();
-    if (!key) {
+    const raw = String(productId ?? '').trim();
+    if (!raw) {
         return 0;
     }
+    const key = TOKEN_PACK_ALIASES[raw] ?? raw;
     return clampNonNegativeInt(
         TOKEN_PACKS[key]?.bonus ?? SUBSCRIPTION_TOKEN_GRANTS[key]?.bonus ?? 0,
     );
 }
 
-function resolvePackBonusFromDoc(data: FirebaseFirestore.DocumentData): number {
-    const fromField = clampNonNegativeInt(data.tokenBonus ?? data.token_bonus);
-    if (fromField > 0) {
-        return fromField;
+function resolvePackBaseFromProductId(productId: unknown): number {
+    const raw = String(productId ?? '').trim();
+    if (!raw) {
+        return 0;
     }
-    return resolvePackBonusFromProductId(data.productId);
+    const key = TOKEN_PACK_ALIASES[raw] ?? raw;
+    return clampNonNegativeInt(
+        TOKEN_PACKS[key]?.base ?? SUBSCRIPTION_TOKEN_GRANTS[key]?.base ?? 0,
+    );
+}
+
+function resolvePackBaseBonusFromDoc(data: FirebaseFirestore.DocumentData): {
+    base: number;
+    bonus: number;
+} | null {
+    if (resolveSubscriptionTokenGrant(data.productId) != null) {
+        return null;
+    }
+    const pack = resolveTokenPack(data.productId)
+        ?? resolveTokenPackByTokens(data.tokensGranted ?? data.amount ?? data.tokenBase);
+    const bonus = clampNonNegativeInt(data.tokenBonus ?? data.token_bonus)
+        || (pack?.bonus ?? 0)
+        || resolvePackBonusFromProductId(data.productId);
+    const base = clampNonNegativeInt(data.tokenBase ?? data.token_base)
+        || (pack?.base ?? 0)
+        || resolvePackBaseFromProductId(data.productId);
+    if (base <= 0 && bonus <= 0) {
+        return null;
+    }
+    return { base, bonus };
 }
 
 /**
@@ -1019,19 +1166,14 @@ function resolvePackBonusFromDoc(data: FirebaseFirestore.DocumentData): number {
  * (base+bonus) is accepted — greedy "largest pack that fits" would mis-read
  * 1M+5M leftover as a 5.5M pack and steal 500k into grant.
  */
-function inferMisfiledPackBonus(paidTokens: number): number {
-    const paid = clampNonNegativeInt(paidTokens);
-    if (paid <= 0) {
-        return 0;
+function isLemonPurchaseDoc(data: FirebaseFirestore.DocumentData): boolean {
+    const source = String(data.source ?? '').trim();
+    const provider = String(data.provider ?? '').trim().toLowerCase();
+    const productId = String(data.productId ?? '').trim();
+    if (source === 'website_purchase' || provider === 'lemonsqueezy') {
+        return true;
     }
-    const packs = [
-        ...Object.values(TOKEN_PACKS),
-        ...Object.values(SUBSCRIPTION_TOKEN_GRANTS),
-    ].filter((pack) => pack.tokens === paid && pack.bonus > 0);
-    if (packs.length !== 1) {
-        return 0;
-    }
-    return packs[0].bonus;
+    return Object.prototype.hasOwnProperty.call(TOKEN_PACK_ALIASES, productId);
 }
 
 export async function maybeRebalancePackBonusGrant(args: {
@@ -1039,22 +1181,22 @@ export async function maybeRebalancePackBonusGrant(args: {
     uid: string;
     userData: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-    // V2: also recovers packs whose purchase docs lacked tokenBonus / were
-    // marked done by V1 without moving grant balance.
-    if (args.userData.packBonusGrantRebalancedV2 === true) {
+    // Lemon +10% is paid on every platform. V4 moves that slice back out of
+    // grant if an earlier webhook wrote it as tokenGrantBalance.
+    if (args.userData.packLemonBonusAsPaidV4 === true) {
         return args.userData;
     }
     const tokenBalanceEarly = clampNonNegativeInt(args.userData.tokenBalance);
     const hasTokenWalletPolicy =
         String(args.userData.creditPolicy ?? '').trim() === CREDIT_POLICY_TOKEN_V1;
-    // Run even if creditPolicy is missing: some buys wrote tokenBalance first.
     if (!hasTokenWalletPolicy && tokenBalanceEarly <= 0) {
         return args.userData;
     }
 
-    let bonusToGrant = 0;
-    const purchaseUpdates: Array<{ ref: admin.firestore.DocumentReference }> = [];
-    const txUpdates: Array<{ ref: admin.firestore.DocumentReference }> = [];
+    let lemonBases = 0;
+    let lemonBonuses = 0;
+    let playBases = 0;
+    const lemonPurchaseUpdates: Array<{ ref: admin.firestore.DocumentReference }> = [];
 
     try {
         const purchasesSnap = await args.db.collection('purchases')
@@ -1063,92 +1205,90 @@ export async function maybeRebalancePackBonusGrant(args: {
             .get();
         for (const doc of purchasesSnap.docs) {
             const data = doc.data();
-            if (data.bonusGrantApplied === true) {
+            const pack = resolvePackBaseBonusFromDoc(data);
+            if (pack == null) {
                 continue;
             }
-            const bonus = resolvePackBonusFromDoc(data);
-            if (bonus <= 0) {
-                continue;
+            if (isLemonPurchaseDoc(data)) {
+                lemonBases += pack.base;
+                lemonBonuses += pack.bonus;
+                lemonPurchaseUpdates.push({ ref: doc.ref });
+            } else {
+                playBases += pack.base;
             }
-            bonusToGrant += bonus;
-            purchaseUpdates.push({ ref: doc.ref });
         }
     } catch (error) {
         console.warn('maybeRebalancePackBonusGrant: purchases query failed', error);
     }
 
-    try {
-        const txSnap = await args.db.collection('users').doc(args.uid)
-            .collection('credit_transactions')
-            .where('unit', '==', 'token')
-            .get();
-        for (const doc of txSnap.docs) {
-            const data = doc.data();
-            const source = String(data.source ?? data.reason ?? '').trim();
-            if (source !== 'purchase' && source !== 'subscription') {
-                continue;
+    if (lemonBonuses <= 0) {
+        try {
+            const txSnap = await args.db.collection('users').doc(args.uid)
+                .collection('credit_transactions')
+                .where('unit', '==', 'token')
+                .get();
+            for (const doc of txSnap.docs) {
+                const data = doc.data();
+                const source = String(data.source ?? data.reason ?? '').trim();
+                if (source !== 'website_purchase') {
+                    continue;
+                }
+                if (String(data.reason ?? '').trim() === 'purchase_bonus') {
+                    continue;
+                }
+                const pack = resolvePackBaseBonusFromDoc(data);
+                if (pack == null) {
+                    continue;
+                }
+                lemonBases += pack.base;
+                lemonBonuses += pack.bonus;
             }
-            if (data.bonusGrantApplied === true) {
-                continue;
-            }
-            const bonus = resolvePackBonusFromDoc(data);
-            if (bonus <= 0) {
-                continue;
-            }
-            // Avoid double-counting the same pack when purchase docs already matched.
-            if (purchaseUpdates.length > 0 && source === 'purchase') {
-                continue;
-            }
-            bonusToGrant += bonus;
-            txUpdates.push({ ref: doc.ref });
+        } catch (error) {
+            console.warn('maybeRebalancePackBonusGrant: credit_transactions query failed', error);
         }
-    } catch (error) {
-        console.warn('maybeRebalancePackBonusGrant: credit_transactions query failed', error);
     }
 
     const tokenBalance = clampNonNegativeInt(args.userData.tokenBalance);
     const tokenGrantBalance = clampNonNegativeInt(args.userData.tokenGrantBalance);
     const paidTokens = Math.max(0, tokenBalance - tokenGrantBalance);
-
-    // If docs didn't yield a bonus (old writes), infer from paid slice.
-    if (bonusToGrant <= 0) {
-        bonusToGrant = inferMisfiledPackBonus(paidTokens);
+    const subPaid = clampNonNegativeInt(args.userData.subscriptionTokenPaidRemaining);
+    const paidForPacks = Math.max(0, paidTokens - subPaid);
+    const lemonPaidIfGrant = playBases + lemonBases;
+    const lemonPaidIfPaid = playBases + lemonBases + lemonBonuses;
+    const distIfGrant = Math.abs(paidForPacks - lemonPaidIfGrant);
+    const distIfPaid = Math.abs(paidForPacks - lemonPaidIfPaid);
+    let bonusToPaid = 0;
+    if (lemonBonuses > 0 && distIfGrant < distIfPaid) {
+        bonusToPaid = Math.min(lemonBonuses, tokenGrantBalance);
     }
 
     const userRef = args.db.collection('users').doc(args.uid);
-    if (bonusToGrant <= 0) {
-        await userRef.set({
-            packBonusGrantRebalancedV1: true,
-            packBonusGrantRebalancedV2: true,
-        }, { merge: true });
-        return {
-            ...args.userData,
-            packBonusGrantRebalancedV1: true,
-            packBonusGrantRebalancedV2: true,
-        };
-    }
-
-    const nextGrantBalance = Math.min(tokenBalance, tokenGrantBalance + bonusToGrant);
+    const flags = {
+        packLemonBonusAsPaidV4: true,
+        packBonusGrantRebalancedV3: true,
+    };
+    const nextGrantBalance = Math.max(0, tokenGrantBalance - bonusToPaid);
     const patch = {
-        tokenGrantBalance: nextGrantBalance,
-        packBonusGrantRebalancedV1: true,
-        packBonusGrantRebalancedV2: true,
+        ...flags,
+        ...(bonusToPaid > 0 ? { tokenGrantBalance: nextGrantBalance } : {}),
     };
     const batch = args.db.batch();
     batch.set(userRef, patch, { merge: true });
-    for (const update of purchaseUpdates) {
-        batch.set(update.ref, { bonusGrantApplied: true }, { merge: true });
-    }
-    for (const update of txUpdates) {
-        batch.set(update.ref, { bonusGrantApplied: true }, { merge: true });
+    for (const update of lemonPurchaseUpdates) {
+        batch.set(update.ref, {
+            bonusGrantApplied: false,
+            bonusFiledAsPaid: true,
+        }, { merge: true });
     }
     await batch.commit();
-    console.info('maybeRebalancePackBonusGrant: moved pack bonus to grant', {
-        uid: args.uid,
-        bonusToGrant,
-        tokenGrantBalance,
-        nextGrantBalance,
-    });
+    if (bonusToPaid > 0) {
+        console.info('maybeRebalancePackBonusGrant: moved Lemon +10% to paid', {
+            uid: args.uid,
+            bonusToPaid,
+            tokenGrantBalance,
+            nextGrantBalance,
+        });
+    }
     return { ...args.userData, ...patch };
 }
 

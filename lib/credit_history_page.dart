@@ -120,12 +120,21 @@ class CreditHistoryBody extends StatelessWidget {
       case 'tokens_1m':
         return trans['package_tokens_1m'] ??
             '${trans['package_starter'] ?? 'Starter Pack'} (1M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      case '2048626':
+      case '1456186':
+        return '${trans['package_starter'] ?? 'Starter Pack'} (1.1M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
       case 'tokens_5m':
         return trans['package_tokens_5m'] ??
             '${trans['package_pro'] ?? 'Pro Pack'} (5M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      case '2048645':
+      case '1456188':
+        return '${trans['package_pro'] ?? 'Pro Pack'} (5.5M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
       case 'tokens_10m':
         return trans['package_tokens_10m'] ??
             '${trans['package_expert'] ?? 'Expert Pack'} (10M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
+      case '2048653':
+      case '1456194':
+        return '${trans['package_expert'] ?? 'Expert Pack'} (11M ${trans['wallet_token_label'] ?? trans['purchase_tokens_unit'] ?? 'Tokens'})';
       default:
         if (productId.startsWith('credits_')) {
           return trans['credits_pack_generic'] ?? 'Credit Pack';
@@ -370,7 +379,9 @@ class CreditHistoryBody extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final entries = snapshot.data ?? const <CreditHistoryEntry>[];
+            final entries = (snapshot.data ?? const <CreditHistoryEntry>[])
+                .where((entry) => !entry.isHiddenLemonExtraRow)
+                .toList();
             if (entries.isEmpty) {
               return Center(
                 child: Padding(

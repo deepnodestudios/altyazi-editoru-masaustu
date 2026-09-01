@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/subtitle_block.dart';
 import '../services/subtitle_builder.dart';
 
@@ -220,51 +221,33 @@ class TranslationRepository {
     String? deviceId,
     bool isBatch = false,
     Map<String, dynamic>? cost,
+    int chargedTokens = 0,
+    String? appVersion,
   }) async {
     if (encodingDetected != null && !_isModernEncoding(encodingDetected)) {
       return;
     }
     final cacheKey = _generateGlobalCacheKey(sourceHash, targetLanguage);
     final currentEmail = _auth.currentUser?.email?.trim().toLowerCase();
+    final appChargedTokens = chargedTokens < 0 ? 0 : chargedTokens;
+    final clientAppVersion = await _resolveClientAppVersion(appVersion);
 
     final docRef = _firestore.collection('global_translations').doc(cacheKey);
     final docSnapshot = await docRef.get();
-    final existing = docSnapshot.data() ?? const <String, dynamic>{};
 
     if (docSnapshot.exists) {
-      // Increment usage count if already exists
+      // Usage-only update keys must match firestore.rules allowlist.
       final updateData = <String, dynamic>{
         'usageCount': FieldValue.increment(1),
         'lastUsedAt': FieldValue.serverTimestamp(),
         'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
+        'chargedTokens': appChargedTokens,
+        'totalChargedTokens': FieldValue.increment(appChargedTokens),
+        if (clientAppVersion != null) 'appVersion': clientAppVersion,
       };
-      if (existing['sourceContent'] == null) {
-        updateData['sourceContent'] = sourceContent;
-      }
-      if (existing['translatedContent'] == null) {
-        updateData['translatedContent'] = translatedContent;
-      }
-      if (existing['originalName'] == null) {
-        updateData['originalName'] = originalName;
-      }
-      if (existing['targetLanguage'] == null) {
-        updateData['targetLanguage'] = targetLanguage;
-      }
-      if (existing['sourceHash'] == null) {
-        updateData['sourceHash'] = sourceHash;
-      }
-      if (existing['completedPlatform'] == null) {
-        updateData['completedPlatform'] = Platform.operatingSystem;
-      }
-      if (existing['isBatch'] == null) {
-        updateData['isBatch'] = isBatch;
-      }
       if (deviceId != null && deviceId.isNotEmpty) {
         updateData['deviceIds'] = FieldValue.arrayUnion([deviceId]);
         updateData['lastDeviceId'] = deviceId;
-        if (existing['creatorDeviceId'] == null) {
-          updateData['creatorDeviceId'] = deviceId;
-        }
       }
       if (currentEmail != null && currentEmail.isNotEmpty) {
         updateData['lastUserEmail'] = currentEmail;
@@ -284,6 +267,9 @@ class TranslationRepository {
         'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
         'isBatch': isBatch,
         'usageCount': 1,
+        'chargedTokens': appChargedTokens,
+        'totalChargedTokens': appChargedTokens,
+        if (clientAppVersion != null) 'appVersion': clientAppVersion,
         if (cost != null && cost.isNotEmpty) 'cost': cost,
         if (cost != null && cost['costUsd'] != null) 'costUsd': cost['costUsd'],
         if (cost != null && cost['costUsdProvider'] != null)
@@ -299,6 +285,49 @@ class TranslationRepository {
         setData['lastUserEmail'] = currentEmail;
       }
       await docRef.set(setData);
+    }
+  }
+
+  /// Cache-hit / usage-only bump (no content rewrite).
+  Future<void> recordGlobalCacheUsage({
+    required String sourceHash,
+    required String targetLanguage,
+    String? deviceId,
+    int chargedTokens = 0,
+    String? appVersion,
+  }) async {
+    final cacheKey = _generateGlobalCacheKey(sourceHash, targetLanguage);
+    final currentEmail = _auth.currentUser?.email?.trim().toLowerCase();
+    final appChargedTokens = chargedTokens < 0 ? 0 : chargedTokens;
+    final clientAppVersion = await _resolveClientAppVersion(appVersion);
+    final docRef = _firestore.collection('global_translations').doc(cacheKey);
+    final updateData = <String, dynamic>{
+      'usageCount': FieldValue.increment(1),
+      'lastUsedAt': FieldValue.serverTimestamp(),
+      'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
+      'chargedTokens': appChargedTokens,
+      'totalChargedTokens': FieldValue.increment(appChargedTokens),
+      if (clientAppVersion != null) 'appVersion': clientAppVersion,
+    };
+    if (deviceId != null && deviceId.isNotEmpty) {
+      updateData['deviceIds'] = FieldValue.arrayUnion([deviceId]);
+      updateData['lastDeviceId'] = deviceId;
+    }
+    if (currentEmail != null && currentEmail.isNotEmpty) {
+      updateData['lastUserEmail'] = currentEmail;
+    }
+    await docRef.update(updateData);
+  }
+
+  Future<String?> _resolveClientAppVersion(String? override) async {
+    final fromArg = override?.trim();
+    if (fromArg != null && fromArg.isNotEmpty) return fromArg;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final version = info.version.trim();
+      return version.isEmpty ? null : version;
+    } catch (_) {
+      return null;
     }
   }
 

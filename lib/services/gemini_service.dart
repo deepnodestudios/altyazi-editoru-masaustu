@@ -21,6 +21,11 @@ class GeminiService {
 
   String? _translationChargeKey;
   bool _approveChargeForTranslateCalls = false;
+  String? _lastChargeMode;
+  int _lastPlannedEstimatedTokens = 0;
+
+  String? get lastChargeMode => _lastChargeMode;
+  int get lastPlannedEstimatedTokens => _lastPlannedEstimatedTokens;
 
   // Usage tracking (mirrors mobile translation_engine).
   int _usageInputTokens = 0;
@@ -96,15 +101,21 @@ class GeminiService {
           'platform': platform.trim(),
       };
 
+      Map<String, dynamic>? accessData;
       if (io_platform.isDesktop) {
-        await _callCloudFunctionViaHttp('checkTranslationAccess', payload);
+        accessData = await _callCloudFunctionViaHttp('checkTranslationAccess', payload);
       } else {
         final callable = _functions.httpsCallable(
           'checkTranslationAccess',
           options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
         );
-        await callable.call(payload);
+        final result = await callable.call(payload);
+        final raw = result.data;
+        if (raw is Map) {
+          accessData = Map<String, dynamic>.from(raw);
+        }
       }
+      _capturePreparedChargePlan(accessData);
 
       setChargeKey(chargeKey);
       setTranslationChargeContext(chargeKey: chargeKey, approveCharge: true);
@@ -161,6 +172,23 @@ class GeminiService {
   void clearTranslationChargeContext() {
     _translationChargeKey = null;
     _approveChargeForTranslateCalls = false;
+  }
+
+  void _capturePreparedChargePlan(Map<String, dynamic>? data) {
+    if (data == null) {
+      _lastChargeMode = null;
+      _lastPlannedEstimatedTokens = 0;
+      return;
+    }
+    _lastChargeMode = (data['chargeMode'] as String?)?.trim();
+    final planned = data['estimatedTokens'];
+    if (planned is int) {
+      _lastPlannedEstimatedTokens = planned < 0 ? 0 : planned;
+    } else if (planned is num) {
+      _lastPlannedEstimatedTokens = planned.floor().clamp(0, 1 << 62);
+    } else {
+      _lastPlannedEstimatedTokens = 0;
+    }
   }
 
   Future<void> _ensureAuthReady() async {

@@ -150,6 +150,20 @@ class TranslationController extends ChangeNotifier {
   // Best-effort cached source content for the currently running job.
   // Prevents completion from failing if the source copy is missing later.
   String? _currentJobSourceContent;
+  int? _activeCharCount;
+  int? _activeEstimatedTokens;
+  String? _activeChargeMode;
+
+  /// App-wallet tokens for this job (not Gemini usage). File-credit jobs → 0.
+  int get _appChargedTokensForGlobal {
+    final mode = (_activeChargeMode ?? _geminiService.lastChargeMode ?? '')
+        .trim()
+        .toLowerCase();
+    if (mode != 'tokens') return 0;
+    final estimated = _activeEstimatedTokens ??
+        _geminiService.lastPlannedEstimatedTokens;
+    return estimated < 0 ? 0 : estimated;
+  }
 
   static String _canonicalizeSubtitleContentForHash(String content) {
     var s = content;
@@ -858,6 +872,9 @@ class TranslationController extends ChangeNotifier {
 
       if (needsCreditForThisRun) {
         final charCount = (_currentJobSourceContent ?? '').length;
+        final estimatedTokens = estimateTokensFromCharCount(charCount);
+        _activeCharCount = charCount;
+        _activeEstimatedTokens = estimatedTokens;
         final estimateDecision =
             await TokenEstimateGateService.instance.confirmIfNeeded(
           billing: billingService,
@@ -877,8 +894,13 @@ class TranslationController extends ChangeNotifier {
           targetLanguage: job.targetLanguage,
           platform: Platform.operatingSystem,
           charCount: charCount,
-          estimatedTokens: estimateTokensFromCharCount(charCount),
+          estimatedTokens: estimatedTokens,
         );
+        _activeChargeMode = _geminiService.lastChargeMode;
+        if ((_activeEstimatedTokens ?? 0) <= 0 &&
+            _geminiService.lastPlannedEstimatedTokens > 0) {
+          _activeEstimatedTokens = _geminiService.lastPlannedEstimatedTokens;
+        }
       } else {
         _geminiService.setTranslationChargeContext(
           chargeKey: creditChargeKey,
@@ -1528,13 +1550,27 @@ class TranslationController extends ChangeNotifier {
       translatedBlocks = SubtitleParser.parseSrt(translatedContent);
       await File(generatedFilePath!).writeAsString(translatedContent);
 
-      await billingService.consumeCredit(
+      final chargedTokens = await billingService.consumeCredit(
         1,
         reason: 'cache_hit',
         chargeKey: chargeKey,
         fileName: _bestFriendlyDisplayNameForJob(job: job, hash: hash),
         targetLanguage: job.targetLanguage,
+        charCount: _activeCharCount,
+        estimatedTokens: _activeEstimatedTokens,
       );
+
+      try {
+        await _repository.recordGlobalCacheUsage(
+          sourceHash: hash,
+          targetLanguage: job.targetLanguage,
+          deviceId: billingService.deviceId,
+          chargedTokens: chargedTokens,
+        );
+      } catch (e) {
+        _onLog?.call(
+            'cloud_error_with_details', jsonEncode({'error': e.toString()}));
+      }
 
       _syncProjectToSettings(
         file: workingFile,
@@ -1683,7 +1719,9 @@ class TranslationController extends ChangeNotifier {
       }
     }
 
-    if (allowGlobalCache && sourceContent.trim().isNotEmpty) {
+    if (allowGlobalCache &&
+        !_isCloudBatchMode &&
+        sourceContent.trim().isNotEmpty) {
       // Gerçek AI maliyeti: yalnızca bu çevrilen dosyaya, global_translations
       // dokümanının içine düz alan olarak yazılır (cache-hit'te AI çağrısı yoktur).
       final usage = _engine.usageSnapshot;
@@ -1721,6 +1759,7 @@ class TranslationController extends ChangeNotifier {
           deviceId: billingService.deviceId,
           isBatch: _isCloudBatchMode,
           cost: cost,
+          chargedTokens: _appChargedTokensForGlobal,
         );
       } catch (e) {
         _onLog?.call(
@@ -1736,6 +1775,7 @@ class TranslationController extends ChangeNotifier {
             deviceId: billingService.deviceId,
             isBatch: _isCloudBatchMode,
             cost: cost,
+            chargedTokens: _appChargedTokensForGlobal,
           ),
         );
       }
@@ -1783,6 +1823,9 @@ class TranslationController extends ChangeNotifier {
     await _saveResumeStateToCache();
 
     _currentJobSourceContent = null;
+    _activeCharCount = null;
+    _activeEstimatedTokens = null;
+    _activeChargeMode = null;
 
     _finishSuccess(false);
     _onLog?.call('log_translation_complete');

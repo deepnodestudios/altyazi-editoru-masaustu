@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { GoogleGenAI } from '@google/genai';
 import { defineSecret } from 'firebase-functions/params';
 import { normalizePlatform } from '../billing/creditUtils';
+import { globalTranslationAppChargeFields } from '../billing/tokenWallet';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 
@@ -93,6 +94,11 @@ export const pollBatchJobs = onSchedule({
                             : null;
                         
                         if (jobData.sourceContent && jobData.originalNameForGlobalCache) {
+                            const chargedTokens = Math.max(
+                                0,
+                                Math.floor(Number(jobData.chargedTokens ?? 0) || 0),
+                            );
+                            const jobAppVersion = String(jobData.appVersion ?? '').trim();
                             const globalCacheRef = db.collection('global_translations').doc(cacheKey);
                             await db.runTransaction(async (t) => {
                                 const snap = await t.get(globalCacheRef);
@@ -108,6 +114,8 @@ export const pollBatchJobs = onSchedule({
                                             lastDeviceId: normalizedDeviceId,
                                         } : {}),
                                         ...(actorEmail ? { lastUserEmail: actorEmail } : {}),
+                                        ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                        ...globalTranslationAppChargeFields(chargedTokens, false),
                                     });
                                 } else {
                                     t.set(globalCacheRef, {
@@ -128,6 +136,8 @@ export const pollBatchJobs = onSchedule({
                                             creatorDeviceId: normalizedDeviceId,
                                         } : {}),
                                         ...(actorEmail ? { creatorEmail: actorEmail, lastUserEmail: actorEmail } : {}),
+                                        ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                        ...globalTranslationAppChargeFields(chargedTokens, true),
                                     });
                                 }
                             });

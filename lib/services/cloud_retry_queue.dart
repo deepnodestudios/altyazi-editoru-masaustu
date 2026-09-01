@@ -75,6 +75,8 @@ class CloudRetryQueue {
     String? deviceId,
     bool isBatch = false,
     Map<String, dynamic>? cost,
+    int chargedTokens = 0,
+    String? appVersion,
   }) async {
     await init();
     _queue.add({
@@ -89,6 +91,9 @@ class CloudRetryQueue {
         if (deviceId != null) 'deviceId': deviceId,
         'isBatch': isBatch,
         if (cost != null && cost.isNotEmpty) 'cost': cost,
+        'chargedTokens': chargedTokens < 0 ? 0 : chargedTokens,
+        if (appVersion != null && appVersion.trim().isNotEmpty)
+          'appVersion': appVersion.trim(),
       },
       'attempt': 0,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -109,6 +114,8 @@ class CloudRetryQueue {
     int? totalLines,
     bool? isActive,
     bool? clearSdh,
+    String? partialTranslatedContent,
+    String? sourceContentForResume,
   }) async {
     await init();
     _queue.add({
@@ -124,6 +131,8 @@ class CloudRetryQueue {
         if (totalLines != null) 'totalLines': totalLines,
         if (isActive != null) 'isActive': isActive,
         if (clearSdh != null) 'clearSdh': clearSdh,
+      if (partialTranslatedContent != null) 'partialTranslatedContent': partialTranslatedContent,
+      if (sourceContentForResume != null) 'sourceContentForResume': sourceContentForResume,
       },
       'attempt': 0,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -184,6 +193,10 @@ class CloudRetryQueue {
 
         try {
           if (type == 'saveToGlobalCache') {
+            final chargedRaw = payload['chargedTokens'];
+            final chargedTokens = chargedRaw is int
+                ? chargedRaw
+                : (chargedRaw is num ? chargedRaw.floor() : 0);
             await _repo.saveToGlobalCache(
               sourceHash: payload['sourceHash'] as String,
               sourceContent: payload['sourceContent'] as String,
@@ -194,6 +207,8 @@ class CloudRetryQueue {
               deviceId: payload['deviceId'] as String?,
               isBatch: payload['isBatch'] as bool? ?? false,
               cost: (payload['cost'] as Map?)?.cast<String, dynamic>(),
+              chargedTokens: chargedTokens < 0 ? 0 : chargedTokens,
+              appVersion: payload['appVersion'] as String?,
             );
           } else if (type == 'addToUserHistory') {
             final translatedLinesRaw = payload['translatedLines'];
@@ -207,13 +222,14 @@ class CloudRetryQueue {
               resumeState: (payload['resumeState'] as Map?)?.cast<String, dynamic>(),
               translatedLines: translatedLinesRaw is num ? translatedLinesRaw.toInt() : null,
               totalLines: totalLinesRaw is num ? totalLinesRaw.toInt() : null,
-              isActive: payload['isActive'] as bool?,
+              isActive: payload['isActive'] as bool? ?? false,
               clearSdh: payload['clearSdh'] as bool?,
+              partialTranslatedContent: payload['partialTranslatedContent'] as String?,
+              sourceContentForResume: payload['sourceContentForResume'] as String?,
             );
           } else if (type == 'setUserHistoryActive') {
             await _repo.setUserHistoryActive(
-              sourceHash: payload['sourceHash'] as String,
-              targetLanguage: payload['targetLanguage'] as String,
+              historyDocId: '_',
               isActive: payload['isActive'] as bool? ?? false,
             );
           }
