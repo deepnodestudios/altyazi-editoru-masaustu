@@ -114,8 +114,6 @@ class CloudRetryQueue {
     int? totalLines,
     bool? isActive,
     bool? clearSdh,
-    String? partialTranslatedContent,
-    String? sourceContentForResume,
   }) async {
     await init();
     _queue.add({
@@ -131,8 +129,6 @@ class CloudRetryQueue {
         if (totalLines != null) 'totalLines': totalLines,
         if (isActive != null) 'isActive': isActive,
         if (clearSdh != null) 'clearSdh': clearSdh,
-      if (partialTranslatedContent != null) 'partialTranslatedContent': partialTranslatedContent,
-      if (sourceContentForResume != null) 'sourceContentForResume': sourceContentForResume,
       },
       'attempt': 0,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -224,12 +220,11 @@ class CloudRetryQueue {
               totalLines: totalLinesRaw is num ? totalLinesRaw.toInt() : null,
               isActive: payload['isActive'] as bool? ?? false,
               clearSdh: payload['clearSdh'] as bool?,
-              partialTranslatedContent: payload['partialTranslatedContent'] as String?,
-              sourceContentForResume: payload['sourceContentForResume'] as String?,
             );
           } else if (type == 'setUserHistoryActive') {
             await _repo.setUserHistoryActive(
-              historyDocId: '_',
+              sourceHash: payload['sourceHash'] as String,
+              targetLanguage: payload['targetLanguage'] as String,
               isActive: payload['isActive'] as bool? ?? false,
             );
           }

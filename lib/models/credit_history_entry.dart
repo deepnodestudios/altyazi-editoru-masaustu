@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum CreditTransactionType { add, spend }
+enum CreditHistoryEntryType { add, spend }
 
 class CreditHistoryEntry {
   final String id;
-  final CreditTransactionType type;
+  final CreditHistoryEntryType type;
   final int amount;
   final DateTime? timestamp;
   final String? source;
@@ -33,9 +33,9 @@ class CreditHistoryEntry {
     this.raw = const {},
   });
 
-  bool get isSpend => type == CreditTransactionType.spend;
+  bool get isSpend => type == CreditHistoryEntryType.spend;
 
-  bool get isAdd => type == CreditTransactionType.add;
+  bool get isAdd => type == CreditHistoryEntryType.add;
 
   bool get isTokenLedger {
     final unit = _normalizeString(raw['unit'])?.toLowerCase();
@@ -121,8 +121,8 @@ class CreditHistoryEntry {
     final data = doc.data();
     final typeValue = _normalizeString(data['type']);
     final type = (typeValue == 'spend' || typeValue == 'revoke')
-        ? CreditTransactionType.spend
-        : CreditTransactionType.add;
+        ? CreditHistoryEntryType.spend
+        : CreditHistoryEntryType.add;
 
     return CreditHistoryEntry(
       id: doc.id,
@@ -148,7 +148,7 @@ class CreditHistoryEntry {
 
     return CreditHistoryEntry(
       id: doc.id,
-      type: CreditTransactionType.add,
+      type: CreditHistoryEntryType.add,
       amount: _parseAmount(
         data['amount'] ??
             data['credits'] ??
@@ -180,7 +180,7 @@ class CreditHistoryEntry {
 
     return CreditHistoryEntry(
       id: doc.id,
-      type: CreditTransactionType.spend,
+      type: CreditHistoryEntryType.spend,
       amount: _parseAmount(
         data['amount'] ??
             data['credits'] ??
