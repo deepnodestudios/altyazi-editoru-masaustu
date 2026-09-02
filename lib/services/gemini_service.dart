@@ -10,6 +10,87 @@ import '../constants/ai_language_options.dart';
 import '../utils/io_platform_stub.dart'
   if (dart.library.io) '../utils/io_platform_io.dart' as io_platform;
 
+class TranslationQuote {
+  const TranslationQuote({
+    required this.quoteProtocolVersion,
+    required this.quoteVersion,
+    required this.quoteId,
+    required this.contentHash,
+    required this.quotedCharacterCount,
+    required this.characterMultiplier,
+    required this.quotedAppTokens,
+    required this.sufficient,
+    required this.chargeMode,
+    required this.fromPaidTokens,
+    required this.fromGrantTokens,
+    required this.requiresRewardedAd,
+    required this.translationCreditType,
+    required this.spendableTokens,
+    required this.sourceContent,
+  });
+
+  final int quoteProtocolVersion;
+  final String quoteVersion;
+  final String quoteId;
+  final String contentHash;
+  final int quotedCharacterCount;
+  final double characterMultiplier;
+  final int quotedAppTokens;
+  final bool sufficient;
+  final String chargeMode;
+  final int fromPaidTokens;
+  final int fromGrantTokens;
+  final bool requiresRewardedAd;
+  final String? translationCreditType;
+  final int spendableTokens;
+  final String sourceContent;
+
+  bool get chargesTokens => chargeMode == 'tokens';
+
+  static int intValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.floor();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  factory TranslationQuote.fromCallable(
+    dynamic raw, {
+    required String sourceContent,
+  }) {
+    if (raw is! Map) {
+      throw const FormatException('Invalid translation quote response.');
+    }
+    final creditType = raw['translationCreditType']?.toString().trim();
+    final quote = TranslationQuote(
+      quoteProtocolVersion: intValue(raw['quoteProtocolVersion']),
+      quoteVersion: raw['quoteVersion']?.toString() ?? '',
+      quoteId: raw['quoteId']?.toString() ?? '',
+      contentHash: raw['contentHash']?.toString() ?? '',
+      quotedCharacterCount: intValue(raw['quotedCharacterCount']),
+      characterMultiplier:
+          (raw['characterMultiplier'] as num?)?.toDouble() ?? 0,
+      quotedAppTokens: intValue(raw['quotedAppTokens']),
+      sufficient: raw['sufficient'] == true,
+      chargeMode: raw['chargeMode']?.toString() ?? 'tokens',
+      fromPaidTokens: intValue(raw['fromPaidTokens']),
+      fromGrantTokens: intValue(raw['fromGrantTokens']),
+      requiresRewardedAd: raw['requiresRewardedAd'] == true,
+      translationCreditType:
+          creditType == 'paid' || creditType == 'free' ? creditType : null,
+      spendableTokens: intValue(raw['spendableTokens']),
+      sourceContent: sourceContent,
+    );
+    if (quote.quoteProtocolVersion != 1 ||
+        quote.quoteId.isEmpty ||
+        quote.contentHash.isEmpty ||
+        quote.quotedCharacterCount <= 0 ||
+        quote.quotedAppTokens <= 0) {
+      throw const FormatException('Incomplete translation quote response.');
+    }
+    return quote;
+  }
+}
+
 class GeminiService {
   final FirebaseApp _app;
   late final FirebaseAuth _auth;
@@ -23,9 +104,19 @@ class GeminiService {
   bool _approveChargeForTranslateCalls = false;
   String? _lastChargeMode;
   int _lastPlannedEstimatedTokens = 0;
+  TranslationQuote? _pendingQuote;
+  Map<String, dynamic>? _lastChargeReceipt;
 
   String? get lastChargeMode => _lastChargeMode;
   int get lastPlannedEstimatedTokens => _lastPlannedEstimatedTokens;
+  TranslationQuote? get pendingQuote => _pendingQuote;
+  Map<String, dynamic>? get lastChargeReceipt => _lastChargeReceipt;
+  int get lastChargedAmount =>
+      TranslationQuote.intValue(_lastChargeReceipt?['chargedAmount']);
+  String? get lastTranslationCreditType {
+    final raw = _lastChargeReceipt?['translationCreditType']?.toString().trim();
+    return raw == 'paid' || raw == 'free' ? raw : null;
+  }
 
   // Usage tracking (mirrors mobile translation_engine).
   int _usageInputTokens = 0;
@@ -74,16 +165,66 @@ class GeminiService {
     };
   }
 
-  Future<void> prepareTranslationAccess({
+  Future<TranslationQuote> quoteTranslationCost({
     required String chargeKey,
+    required String sourceContent,
+    required String sourceHash,
+    required String targetLanguage,
+    required String platform,
+    bool preferFreeCreditsFirst = false,
+    String? fileName,
+  }) async {
+    await _ensureAuthReady();
+    final payload = {
+      'quoteProtocolVersion': 1,
+      'deviceId': _deviceId,
+      'chargeKey': chargeKey,
+      'sourceContent': sourceContent,
+      'sourceHash': sourceHash,
+      'targetLanguage': targetLanguage,
+      'platform': platform,
+      if (fileName != null && fileName.trim().isNotEmpty)
+        'fileName': fileName.trim(),
+      if (platform == 'android' || platform == 'ios')
+        'preferFreeCreditsFirst': preferFreeCreditsFirst,
+      ...await _walletGateFields(),
+    };
+    dynamic raw;
+    if (io_platform.isDesktop) {
+      raw = await _callCloudFunctionViaHttp('quoteTranslationCost', payload);
+    } else {
+      final callable = _functions.httpsCallable(
+        'quoteTranslationCost',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+      raw = (await callable.call(payload)).data;
+    }
+    final quote = TranslationQuote.fromCallable(
+      raw,
+      sourceContent: sourceContent,
+    );
+    _chargeKey = chargeKey;
+    _pendingQuote = quote;
+    _lastChargeMode = quote.chargeMode;
+    _lastPlannedEstimatedTokens = quote.quotedAppTokens;
+    _lastChargeReceipt = null;
+    return quote;
+  }
+
+  Future<String?> prepareTranslationAccess({
+    required String chargeKey,
+    bool useRewardedAd = false,
+    bool preferFreeCreditsFirst = false,
     String? fileName,
     String? targetLanguage,
     String? platform,
     int? charCount,
     int? estimatedTokens,
+    TranslationQuote? quote,
   }) async {
     await _ensureAuthReady();
     try {
+      final exactQuote = quote ?? _pendingQuote;
       final payload = {
         'deviceId': _deviceId,
         'chargeKey': chargeKey,
@@ -96,6 +237,14 @@ class GeminiService {
         if (charCount != null && charCount > 0) 'charCount': charCount,
         if (estimatedTokens != null && estimatedTokens > 0)
           'estimatedTokens': estimatedTokens,
+        if (exactQuote != null) ...{
+          'quoteProtocolVersion': exactQuote.quoteProtocolVersion,
+          'quoteId': exactQuote.quoteId,
+          'contentHash': exactQuote.contentHash,
+        },
+        'useRewardedAd': useRewardedAd,
+        if (platform == 'android' || platform == 'ios')
+          'preferFreeCreditsFirst': preferFreeCreditsFirst,
         ...await _walletGateFields(),
         if (platform != null && platform.trim().isNotEmpty)
           'platform': platform.trim(),
@@ -116,9 +265,15 @@ class GeminiService {
         }
       }
       _capturePreparedChargePlan(accessData);
+      _pendingQuote = exactQuote;
 
       setChargeKey(chargeKey);
       setTranslationChargeContext(chargeKey: chargeKey, approveCharge: true);
+      final creditType =
+          accessData?['translationCreditType']?.toString().trim();
+      return creditType == 'paid' || creditType == 'free'
+          ? creditType
+          : null;
     } on FirebaseFunctionsException catch (e) {
       final message = e.message ?? '';
       if (e.code == 'failed-precondition' &&
@@ -262,6 +417,13 @@ class GeminiService {
         if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
         // Keep the field stable (mobile sends it always).
         'approveCharge': approveCharge == true,
+        if (_pendingQuote != null) ...{
+          'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
+          'quoteId': _pendingQuote!.quoteId,
+          'contentHash': _pendingQuote!.contentHash,
+        },
+        if (approveCharge && _pendingQuote != null)
+          'quoteSourceContent': _pendingQuote!.sourceContent,
         ...await _walletGateFields(),
       },
     });
@@ -288,6 +450,15 @@ class GeminiService {
       final result = resultRaw is Map
           ? Map<String, dynamic>.from(resultRaw)
           : <String, dynamic>{};
+      final receipt = result['chargeReceipt'];
+      if (receipt is Map) {
+        _lastChargeReceipt = Map<String, dynamic>.from(receipt);
+        _lastChargeMode =
+            _lastChargeReceipt?['chargeMode']?.toString().trim();
+        _lastPlannedEstimatedTokens = TranslationQuote.intValue(
+          _lastChargeReceipt?['chargedAmount'],
+        );
+      }
 
       return (
         text: (result['text'] as String?) ?? '',
@@ -394,11 +565,19 @@ class GeminiService {
         if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
         // Keep the field stable (mobile sends it always).
         'approveCharge': approveCharge == true,
+        if (_pendingQuote != null) ...{
+          'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
+          'quoteId': _pendingQuote!.quoteId,
+          'contentHash': _pendingQuote!.contentHash,
+        },
+        if (approveCharge && _pendingQuote != null)
+          'quoteSourceContent': _pendingQuote!.sourceContent,
         ...await _walletGateFields(),
       })
           .timeout(const Duration(minutes: 2));
 
       final data = result.data as Map;
+      _captureChargeReceipt(data);
       final translated = (
         text: (data['text'] as String?) ?? '',
         inputTokens: (data['inputTokens'] as int?) ?? 0,
@@ -438,10 +617,18 @@ class GeminiService {
               'deviceId': _deviceId,
             if (effectiveChargeKey != null) 'chargeKey': effectiveChargeKey,
             'approveCharge': approveCharge == true,
+            if (_pendingQuote != null) ...{
+              'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
+              'quoteId': _pendingQuote!.quoteId,
+              'contentHash': _pendingQuote!.contentHash,
+            },
+            if (approveCharge && _pendingQuote != null)
+              'quoteSourceContent': _pendingQuote!.sourceContent,
             ...await _walletGateFields(),
           });
 
           final retryData = retryResult.data as Map;
+          _captureChargeReceipt(retryData);
           final retried = (
             text: (retryData['text'] as String?) ?? '',
             inputTokens: (retryData['inputTokens'] as int?) ?? 0,
@@ -462,6 +649,16 @@ class GeminiService {
       }
       throw Exception('Bağlantı Hatası: $e');
     }
+  }
+
+  void _captureChargeReceipt(Map<dynamic, dynamic> data) {
+    final receipt = data['chargeReceipt'];
+    if (receipt is! Map) return;
+    _lastChargeReceipt = Map<String, dynamic>.from(receipt);
+    _lastChargeMode = _lastChargeReceipt?['chargeMode']?.toString().trim();
+    _lastPlannedEstimatedTokens = TranslationQuote.intValue(
+      _lastChargeReceipt?['chargedAmount'],
+    );
   }
 
   Stream<String> streamSrtTranslation(String content, {String targetLanguage = 'Turkish'}) async* {
@@ -814,6 +1011,12 @@ ${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
           'canWriteUserHistory': canWriteUserHistory,
         if (completedPlatform != null) 'completedPlatform': completedPlatform,
         if (isMultiFileBatch != null) 'isMultiFileBatch': isMultiFileBatch,
+        if (_pendingQuote != null) ...{
+          'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
+          'quoteId': _pendingQuote!.quoteId,
+          'contentHash': _pendingQuote!.contentHash,
+        },
+        ...await _walletGateFields(),
       };
 
       Map resultData;
@@ -826,6 +1029,7 @@ ${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
       }
 
       if (resultData['success'] == true) {
+        _captureChargeReceipt(resultData);
         return resultData['jobName'] as String;
       }
       throw Exception('Failed to start batch job');

@@ -14,6 +14,10 @@ interface ConsumeCreditsData {
   preferFreeCreditsFirst?: boolean;
   charCount?: number;
   estimatedTokens?: number;
+  quoteProtocolVersion?: number;
+  quoteId?: string;
+  contentHash?: string;
+  sourceContent?: string;
 }
 
 /**
@@ -21,7 +25,7 @@ interface ConsumeCreditsData {
  */
 export const consumeCredit = onCall<ConsumeCreditsData>({ invoker: 'public', enforceAppCheck: false }, async (request) => {
   const { data, auth } = request;
-  const { amount, reason, deviceId, chargeKey, fileName, targetLanguage, platform, appVersion, preferFreeCreditsFirst, charCount, estimatedTokens } = data;
+  const { amount, reason, deviceId, chargeKey, fileName, targetLanguage, platform, appVersion, preferFreeCreditsFirst, charCount, estimatedTokens, quoteProtocolVersion, quoteId, contentHash, sourceContent } = data;
 
   const trimmedDeviceId = (deviceId ?? '').trim();
 
@@ -41,6 +45,10 @@ export const consumeCredit = onCall<ConsumeCreditsData>({ invoker: 'public', enf
       preferFreeCreditsFirst,
       charCount,
       estimatedTokens,
+      quoteProtocolVersion,
+      quoteId,
+      contentHash,
+      sourceContent,
     });
 
     console.log(`✅ Credits consumed: deviceId=${trimmedDeviceId}, amount=${amount}`);

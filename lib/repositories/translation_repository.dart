@@ -195,6 +195,41 @@ class TranslationRepository {
     return mobilePayload ?? desktopPayload;
   }
 
+  Map<String, dynamic>? _normalizeChargeReceipt(
+      Map<String, dynamic>? receipt) {
+    if (receipt == null || receipt.isEmpty) return null;
+    int asInt(String key) {
+      final value = receipt[key];
+      if (value is int) return value < 0 ? 0 : value;
+      if (value is num) {
+        final parsed = value.floor();
+        return parsed < 0 ? 0 : parsed;
+      }
+      final parsed = int.tryParse(value?.toString() ?? '') ?? 0;
+      return parsed < 0 ? 0 : parsed;
+    }
+
+    final creditType = receipt['translationCreditType']?.toString().trim();
+    return {
+      'chargedAmount': asInt('chargedAmount'),
+      'chargeMode': receipt['chargeMode']?.toString() ?? '',
+      'fromPaidTokens': asInt('fromPaidTokens'),
+      'fromGrantTokens': asInt('fromGrantTokens'),
+      if (creditType == 'paid' || creditType == 'free')
+        'creditType': creditType,
+      'quoteProtocolVersion': asInt('quoteProtocolVersion'),
+      if ((receipt['quoteVersion']?.toString() ?? '').isNotEmpty)
+        'quoteVersion': receipt['quoteVersion'].toString(),
+      if ((receipt['quoteId']?.toString() ?? '').isNotEmpty)
+        'quoteId': receipt['quoteId'].toString(),
+      if ((receipt['contentHash']?.toString() ?? '').isNotEmpty)
+        'contentHash': receipt['contentHash'].toString(),
+      'quotedCharacterCount': asInt('quotedCharacterCount'),
+      'characterMultiplier':
+          (receipt['characterMultiplier'] as num?)?.toDouble() ?? 0,
+    };
+  }
+
   /// Check if translation exists in global cache (shared across all users)
   Future<Map<String, dynamic>?> checkGlobalCache({
     required String sourceHash,
@@ -220,9 +255,11 @@ class TranslationRepository {
     String? encodingDetected,
     String? deviceId,
     bool isBatch = false,
+    String? translationCreditType,
     Map<String, dynamic>? cost,
     int chargedTokens = 0,
     String? appVersion,
+    Map<String, dynamic>? chargeReceipt,
   }) async {
     if (encodingDetected != null && !_isModernEncoding(encodingDetected)) {
       return;
@@ -230,6 +267,15 @@ class TranslationRepository {
     final cacheKey = _generateGlobalCacheKey(sourceHash, targetLanguage);
     final currentEmail = _auth.currentUser?.email?.trim().toLowerCase();
     final appChargedTokens = chargedTokens < 0 ? 0 : chargedTokens;
+    final appCharge = _normalizeChargeReceipt(chargeReceipt);
+    final receiptCreditType = appCharge?['creditType']?.toString();
+    final normalizedCreditType =
+        receiptCreditType == 'paid' || receiptCreditType == 'free'
+            ? receiptCreditType
+            : (translationCreditType == 'paid' ||
+                    translationCreditType == 'free'
+                ? translationCreditType
+                : null);
     final clientAppVersion = await _resolveClientAppVersion(appVersion);
 
     final docRef = _firestore.collection('global_translations').doc(cacheKey);
@@ -243,6 +289,11 @@ class TranslationRepository {
         'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
         'chargedTokens': appChargedTokens,
         'totalChargedTokens': FieldValue.increment(appChargedTokens),
+        if (normalizedCreditType != null) ...{
+          'translationCreditType': normalizedCreditType,
+          'a_meta.creditType': normalizedCreditType,
+        },
+        if (appCharge != null) 'appCharge': appCharge,
         if (clientAppVersion != null) 'appVersion': clientAppVersion,
       };
       if (deviceId != null && deviceId.isNotEmpty) {
@@ -269,6 +320,11 @@ class TranslationRepository {
         'usageCount': 1,
         'chargedTokens': appChargedTokens,
         'totalChargedTokens': appChargedTokens,
+        if (normalizedCreditType != null)
+          'translationCreditType': normalizedCreditType,
+        if (normalizedCreditType != null)
+          'a_meta': {'creditType': normalizedCreditType, 'usageCount': 1},
+        if (appCharge != null) 'appCharge': appCharge,
         if (clientAppVersion != null) 'appVersion': clientAppVersion,
         if (cost != null && cost.isNotEmpty) 'cost': cost,
         if (cost != null && cost['costUsd'] != null) 'costUsd': cost['costUsd'],
@@ -295,10 +351,21 @@ class TranslationRepository {
     String? deviceId,
     int chargedTokens = 0,
     String? appVersion,
+    String? translationCreditType,
+    Map<String, dynamic>? chargeReceipt,
   }) async {
     final cacheKey = _generateGlobalCacheKey(sourceHash, targetLanguage);
     final currentEmail = _auth.currentUser?.email?.trim().toLowerCase();
     final appChargedTokens = chargedTokens < 0 ? 0 : chargedTokens;
+    final appCharge = _normalizeChargeReceipt(chargeReceipt);
+    final receiptCreditType = appCharge?['creditType']?.toString();
+    final normalizedCreditType =
+        receiptCreditType == 'paid' || receiptCreditType == 'free'
+            ? receiptCreditType
+            : (translationCreditType == 'paid' ||
+                    translationCreditType == 'free'
+                ? translationCreditType
+                : null);
     final clientAppVersion = await _resolveClientAppVersion(appVersion);
     final docRef = _firestore.collection('global_translations').doc(cacheKey);
     final updateData = <String, dynamic>{
@@ -307,6 +374,11 @@ class TranslationRepository {
       'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
       'chargedTokens': appChargedTokens,
       'totalChargedTokens': FieldValue.increment(appChargedTokens),
+      if (normalizedCreditType != null) ...{
+        'translationCreditType': normalizedCreditType,
+        'a_meta.creditType': normalizedCreditType,
+      },
+      if (appCharge != null) 'appCharge': appCharge,
       if (clientAppVersion != null) 'appVersion': clientAppVersion,
     };
     if (deviceId != null && deviceId.isNotEmpty) {

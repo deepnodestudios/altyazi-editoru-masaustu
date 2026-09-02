@@ -153,9 +153,13 @@ class TranslationController extends ChangeNotifier {
   int? _activeCharCount;
   int? _activeEstimatedTokens;
   String? _activeChargeMode;
+  int? _activeChargedTokens;
+  TranslationQuote? _activeTranslationQuote;
 
   /// App-wallet tokens for this job (not Gemini usage). File-credit jobs → 0.
   int get _appChargedTokensForGlobal {
+    final charged = _activeChargedTokens ?? _geminiService.lastChargedAmount;
+    if (charged > 0) return charged;
     final mode = (_activeChargeMode ?? _geminiService.lastChargeMode ?? '')
         .trim()
         .toLowerCase();
@@ -163,6 +167,26 @@ class TranslationController extends ChangeNotifier {
     final estimated = _activeEstimatedTokens ??
         _geminiService.lastPlannedEstimatedTokens;
     return estimated < 0 ? 0 : estimated;
+  }
+
+  Map<String, dynamic>? get _activeChargeReceiptForGlobal {
+    final receipt = _geminiService.lastChargeReceipt;
+    if (receipt != null) return receipt;
+    final quote = _activeTranslationQuote;
+    if (quote == null) return null;
+    return {
+      'chargedAmount': _appChargedTokensForGlobal,
+      'chargeMode': _activeChargeMode ?? quote.chargeMode,
+      'fromPaidTokens': quote.fromPaidTokens,
+      'fromGrantTokens': quote.fromGrantTokens,
+      'translationCreditType': quote.translationCreditType,
+      'quoteProtocolVersion': quote.quoteProtocolVersion,
+      'quoteVersion': quote.quoteVersion,
+      'quoteId': quote.quoteId,
+      'contentHash': quote.contentHash,
+      'quotedCharacterCount': quote.quotedCharacterCount,
+      'characterMultiplier': quote.characterMultiplier,
+    };
   }
 
   static String _canonicalizeSubtitleContentForHash(String content) {
@@ -871,15 +895,24 @@ class TranslationController extends ChangeNotifier {
       }
 
       if (needsCreditForThisRun) {
-        final charCount = (_currentJobSourceContent ?? '').length;
-        final estimatedTokens = estimateTokensFromCharCount(charCount);
-        _activeCharCount = charCount;
-        _activeEstimatedTokens = estimatedTokens;
+        final sourceContent = _currentJobSourceContent ?? '';
+        final quote = await _geminiService.quoteTranslationCost(
+          chargeKey: creditChargeKey,
+          sourceContent: sourceContent,
+          sourceHash: hash,
+          targetLanguage: job.targetLanguage,
+          platform: Platform.operatingSystem,
+          fileName: job.fileName,
+        );
+        _activeTranslationQuote = quote;
+        _activeCharCount = quote.quotedCharacterCount;
+        _activeEstimatedTokens = quote.quotedAppTokens;
+        _activeChargeMode = quote.chargeMode;
         final estimateDecision =
             await TokenEstimateGateService.instance.confirmIfNeeded(
           billing: billingService,
           trans: _settings?.trans ?? const {},
-          charCount: charCount,
+          quote: quote,
         );
         if (estimateDecision != TokenEstimateDecision.proceed) {
           _stopRequested = true;
@@ -890,11 +923,13 @@ class TranslationController extends ChangeNotifier {
 
         await _geminiService.prepareTranslationAccess(
           chargeKey: creditChargeKey,
+          useRewardedAd: false,
           fileName: job.fileName,
           targetLanguage: job.targetLanguage,
           platform: Platform.operatingSystem,
-          charCount: charCount,
-          estimatedTokens: estimatedTokens,
+          charCount: quote.quotedCharacterCount,
+          estimatedTokens: quote.quotedAppTokens,
+          quote: quote,
         );
         _activeChargeMode = _geminiService.lastChargeMode;
         if ((_activeEstimatedTokens ?? 0) <= 0 &&
@@ -1558,7 +1593,13 @@ class TranslationController extends ChangeNotifier {
         targetLanguage: job.targetLanguage,
         charCount: _activeCharCount,
         estimatedTokens: _activeEstimatedTokens,
+        quoteProtocolVersion:
+            _activeTranslationQuote?.quoteProtocolVersion,
+        quoteId: _activeTranslationQuote?.quoteId,
+        contentHash: _activeTranslationQuote?.contentHash,
+        sourceContent: _activeTranslationQuote?.sourceContent,
       );
+      _activeChargedTokens = chargedTokens;
 
       try {
         await _repository.recordGlobalCacheUsage(
@@ -1566,6 +1607,7 @@ class TranslationController extends ChangeNotifier {
           targetLanguage: job.targetLanguage,
           deviceId: billingService.deviceId,
           chargedTokens: chargedTokens,
+          chargeReceipt: billingService.lastConsumptionReceipt,
         );
       } catch (e) {
         _onLog?.call(
@@ -1733,6 +1775,12 @@ class TranslationController extends ChangeNotifier {
         'calls': usage['apiCalls'],
         'retries': usage['apiRetries'],
         'resendRounds': usage['resendRounds'],
+        'splitRepairCalls': usage['splitRepairCalls'],
+        'alignmentRepairCalls': usage['alignmentRepairCalls'],
+        'untranslatedRepairCalls': usage['untranslatedRepairCalls'],
+        'wrongLanguageRetries': usage['wrongLanguageRetries'],
+        'repairBudgetInitial': usage['repairBudgetInitial'],
+        'repairBudgetRemaining': usage['repairBudgetRemaining'],
         'costUsd': formatUsd6(ledgerCostUsd(
           inputTokens: inputTokens,
           outputTokens: outputTokens,
@@ -1760,6 +1808,9 @@ class TranslationController extends ChangeNotifier {
           isBatch: _isCloudBatchMode,
           cost: cost,
           chargedTokens: _appChargedTokensForGlobal,
+          translationCreditType:
+              _geminiService.lastTranslationCreditType,
+          chargeReceipt: _activeChargeReceiptForGlobal,
         );
       } catch (e) {
         _onLog?.call(
@@ -1776,6 +1827,7 @@ class TranslationController extends ChangeNotifier {
             isBatch: _isCloudBatchMode,
             cost: cost,
             chargedTokens: _appChargedTokensForGlobal,
+            chargeReceipt: _activeChargeReceiptForGlobal,
           ),
         );
       }
@@ -1826,6 +1878,8 @@ class TranslationController extends ChangeNotifier {
     _activeCharCount = null;
     _activeEstimatedTokens = null;
     _activeChargeMode = null;
+    _activeChargedTokens = null;
+    _activeTranslationQuote = null;
 
     _finishSuccess(false);
     _onLog?.call('log_translation_complete');
@@ -2055,15 +2109,18 @@ class TranslationController extends ChangeNotifier {
     try {
       for (final batchF in filesToProcess) {
         final file = File(batchF.path);
-        var content = await file.readAsString();
+        final readResult =
+            await _subtitleRepository.readFileWithEncoding(file.path);
+        var content = readResult.content;
 
         if (clearSdh) {
           content = SubtitleParser.clearSdh(content);
         }
 
         // Her dosya için kendi hash'i üzerinden chargeKey oluşturuyoruz
-        final fileHash = content.hashCode.toString();
-        final fileChargeKey = _buildSessionChargeKey(fileHash, targetLanguage);
+        final sourceHash = _stableSubtitleHash(content);
+        final fileChargeKey =
+            _buildSessionChargeKey(sourceHash, targetLanguage);
         _activeTranslationChargeKey = fileChargeKey;
         _geminiService.setChargeKey(fileChargeKey);
 
@@ -2087,7 +2144,6 @@ class TranslationController extends ChangeNotifier {
           });
         }
 
-        final sourceHash = _stableSubtitleHash(content);
         final displayName = batchF.name;
         final originalNameForGlobalCache =
             StringUtils.ensureHashSuffixInFileName(
@@ -2097,11 +2153,23 @@ class TranslationController extends ChangeNotifier {
 
         final isMultiFile = filesToProcess.length > 1;
 
+        final quote = await _geminiService.quoteTranslationCost(
+          chargeKey: fileChargeKey,
+          sourceContent: content,
+          sourceHash: sourceHash,
+          targetLanguage: targetLanguage,
+          platform: Platform.operatingSystem,
+          fileName: displayName,
+        );
+        _activeTranslationQuote = quote;
+        _activeCharCount = quote.quotedCharacterCount;
+        _activeEstimatedTokens = quote.quotedAppTokens;
+        _activeChargeMode = quote.chargeMode;
         final estimateDecision =
             await TokenEstimateGateService.instance.confirmIfNeeded(
           billing: billingService,
           trans: _settings?.trans ?? const {},
-          charCount: content.length,
+          quote: quote,
         );
         if (estimateDecision != TokenEstimateDecision.proceed) {
           _stopRequested = true;
@@ -2112,11 +2180,13 @@ class TranslationController extends ChangeNotifier {
 
         await _geminiService.prepareTranslationAccess(
           chargeKey: fileChargeKey,
+          useRewardedAd: false,
           fileName: displayName,
           targetLanguage: targetLanguage,
           platform: Platform.operatingSystem,
-          charCount: content.length,
-          estimatedTokens: estimateTokensFromCharCount(content.length),
+          charCount: quote.quotedCharacterCount,
+          estimatedTokens: quote.quotedAppTokens,
+          quote: quote,
         );
 
         if (isMultiFile && filesToProcess.indexOf(batchF) > 0) {

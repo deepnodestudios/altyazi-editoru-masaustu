@@ -16,6 +16,13 @@ import {
     tokenWalletDeviceFields,
     tokenWalletUserFields,
 } from './tokenWallet';
+import {
+    ensureGrantLotsConsistentInTx,
+    expireDueGrantLotsInTx,
+    loadActiveGrantLots,
+    recordGrantLotInTx,
+    type GrantLotDoc,
+} from './tokenGrantLots';
 
 const MOBILE_STARTER_BONUS_LEGACY = 5;
 const MOBILE_STARTER_BONUS_V160 = 2;
@@ -325,6 +332,12 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             // Token-wallet era: no Google login token grant (all regions).
             const googleLoginTokensToGive = 0;
 
+            // All lot reads must happen before any writes in this transaction.
+            let activeGrantLots: GrantLotDoc[] = [];
+            if (useWallet) {
+                activeGrantLots = await loadActiveGrantLots(transaction, userRef);
+            }
+
             if (trackingRef && (!trackingDoc?.exists || googleLoginBonusToGive > 0)) {
                 transaction.set(
                     trackingRef,
@@ -430,11 +443,57 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             if (useWallet) {
                 deviceCredits = 0;
             }
+            const grantNow = new Date();
+            if (walletState) {
+                activeGrantLots = ensureGrantLotsConsistentInTx(
+                    transaction,
+                    userRef,
+                    walletState,
+                    activeGrantLots,
+                    grantNow,
+                );
+                const expired = expireDueGrantLotsInTx(
+                    transaction,
+                    userRef,
+                    walletState,
+                    activeGrantLots,
+                    grantNow,
+                );
+                walletState = expired.next;
+                activeGrantLots = expired.lots;
+                if (walletState.convertedBonusTokens > 0) {
+                    const conversionLot = recordGrantLotInTx(transaction, userRef, {
+                        amount: walletState.convertedBonusTokens,
+                        source: 'legacy_conversion',
+                        originId: `legacy_conversion_${userId}`,
+                        grantedAt: grantNow,
+                        existingLots: activeGrantLots,
+                    });
+                    if (conversionLot && !activeGrantLots.some((lot) => lot.id === conversionLot.id)) {
+                        activeGrantLots = [...activeGrantLots, conversionLot];
+                    }
+                }
+            }
             if (walletState && starterTokensToGive > 0) {
                 walletState = addGrantTokens(walletState, starterTokensToGive);
+                recordGrantLotInTx(transaction, userRef, {
+                    amount: starterTokensToGive,
+                    source: 'starter_bonus',
+                    originId: `starter_${normalizedDeviceId || userId}`,
+                    grantedAt: grantNow,
+                    deviceId: normalizedDeviceId || null,
+                    existingLots: activeGrantLots,
+                });
             }
             if (walletState && googleLoginTokensToGive > 0) {
                 walletState = addGrantTokens(walletState, googleLoginTokensToGive);
+                recordGrantLotInTx(transaction, userRef, {
+                    amount: googleLoginTokensToGive,
+                    source: 'google_login_bonus',
+                    originId: `google_login_${userId}`,
+                    grantedAt: grantNow,
+                    existingLots: activeGrantLots,
+                });
             }
             if (walletState && (starterTokensToGive > 0 || googleLoginTokensToGive > 0 || walletState.snapshotPending || walletState.convertedBonusTokens > 0)) {
                 transaction.set(userRef, {

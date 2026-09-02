@@ -3,66 +3,58 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../widgets/purchase_dialog.dart';
 import 'billing_service.dart';
+import 'gemini_service.dart';
 import 'token_wallet_math.dart';
 
 enum TokenEstimateDecision { proceed, cancelled, openedShop }
 
-/// Start-Translate confirm: local `ceil(chars * 1.30)` before any server upload.
+/// Start-Translate confirm for the server-authoritative exact quote.
 class TokenEstimateGateService {
   TokenEstimateGateService._();
   static final TokenEstimateGateService instance = TokenEstimateGateService._();
 
   int paidTokenBalance(BillingService billing) {
+    if (billing.offerTokenPacks) {
+      return billing.displayPaidTokenBalance;
+    }
     return (billing.tokenBalance - billing.tokenGrantBalance)
         .clamp(0, billing.tokenBalance);
+  }
+
+  int grantTokenBalance(BillingService billing) {
+    if (billing.isDesktopClient) return 0;
+    if (billing.offerTokenPacks) return billing.displayBonusTokenBalance;
+    return billing.tokenGrantBalance;
   }
 
   int spendableTokens(BillingService billing) {
     if (billing.isDesktopClient) {
       return paidTokenBalance(billing);
     }
-    return billing.tokenBalance;
-  }
-
-  bool willChargeFileCredit({
-    required BillingService billing,
-    required int estimatedTokens,
-  }) {
-    if (!billing.usesTokenWallet) return false;
-    final desktop = billing.isDesktopClient;
-    final paidFiles = billing.legacyFlatRateRemaining;
-    final bonusFiles = desktop ? 0 : billing.freeCredits;
-    final paidTokens = paidTokenBalance(billing);
-    final grantTokens = desktop ? 0 : billing.tokenGrantBalance;
-
-    if (desktop) {
-      return paidFiles > 0;
-    }
-    if (billing.preferFreeCreditsFirst) {
-      if (bonusFiles > 0) return true;
-      if (estimatedTokens > 0 && grantTokens >= estimatedTokens) return false;
-      return paidFiles > 0;
-    }
-    if (paidFiles > 0) return true;
-    if (estimatedTokens > 0 && paidTokens >= estimatedTokens) return false;
-    return bonusFiles > 0;
+    return billing.displayTokenBalance;
   }
 
   Future<TokenEstimateDecision> confirmIfNeeded({
     required BillingService billing,
     required Map<String, String> trans,
-    required int charCount,
+    required TranslationQuote quote,
   }) async {
-    if (!billing.usesTokenWallet) {
+    if (!billing.usesTokenWallet && !billing.offerTokenPacks) {
       return TokenEstimateDecision.proceed;
     }
-    final estimated = estimateTokensFromCharCount(charCount);
-    if (willChargeFileCredit(billing: billing, estimatedTokens: estimated)) {
+    final estimated = quote.quotedAppTokens;
+    if (!quote.chargesTokens) {
       return TokenEstimateDecision.proceed;
     }
 
-    final remaining = spendableTokens(billing);
-    final insufficient = estimated <= 0 || remaining < estimated;
+    final remaining = quote.spendableTokens;
+    final insufficient = !quote.sufficient;
+    final allocation = TokenChargeAllocation(
+      fromPaidTokens: quote.fromPaidTokens,
+      fromGrantTokens: quote.fromGrantTokens,
+    );
+    final mixedPayment = !insufficient && allocation.isMixed;
+    final paidFirstMix = mixedPayment && !billing.preferFreeCreditsFirst;
     final context = globalNavigatorKey.currentContext;
     if (context == null || !context.mounted) {
       return insufficient
@@ -75,21 +67,43 @@ class TokenEstimateGateService {
       barrierDismissible: false,
       builder: (ctx) {
         final colorScheme = Theme.of(ctx).colorScheme;
-        final title = insufficient
-            ? (trans['token_insufficient_title'] ?? 'Not enough tokens')
-            : (trans['token_estimate_title'] ?? 'Estimated token use');
-        final body = insufficient
-            ? (trans['token_insufficient_body'] ??
-                    'This file needs {needed} tokens. You have {balance}.')
-                .replaceAll('{needed}', formatTokenCount(estimated))
-                .replaceAll('{balance}', formatTokenCount(remaining))
-            : (trans['token_estimate_body'] ??
-                    'This file will use about {tokens} tokens. Remaining after: {remaining}.')
-                .replaceAll('{tokens}', formatTokenCount(estimated))
-                .replaceAll(
-                  '{remaining}',
-                  formatTokenCount(remaining - estimated),
-                );
+        final String title;
+        final String body;
+        if (insufficient) {
+          title = trans['token_insufficient_title'] ?? 'Not enough tokens';
+          body = (trans['token_insufficient_body'] ??
+                  'This file needs {needed} tokens. You have {balance}.')
+              .replaceAll('{needed}', formatTokenCount(estimated))
+              .replaceAll('{balance}', formatTokenCount(remaining));
+        } else if (mixedPayment) {
+          title = paidFirstMix
+              ? (trans['token_mix_bonus_title'] ?? 'Paid tokens are not enough')
+              : (trans['token_mix_paid_title'] ??
+                  'Bonus tokens are not enough');
+          final allocationBody = (trans['token_mix_paid_body'] ??
+                  'This file needs exactly {needed} tokens: {bonus} from bonus tokens, {paid} from paid tokens.')
+              .replaceAll('{needed}', formatTokenCount(estimated))
+              .replaceAll(
+                '{bonus}',
+                formatTokenCount(allocation.fromGrantTokens),
+              )
+              .replaceAll(
+                '{paid}',
+                formatTokenCount(allocation.fromPaidTokens),
+              );
+          final adNotice = trans['token_mix_rewarded_ad_notice'] ??
+              'Because bonus tokens will be used, a rewarded ad will be shown before processing.';
+          body = '$allocationBody\n\n$adNotice';
+        } else {
+          title = trans['token_estimate_title'] ?? 'Exact token use';
+          body = (trans['token_estimate_body'] ??
+                  'This file will use exactly {tokens} tokens. Remaining after: {remaining}.')
+              .replaceAll('{tokens}', formatTokenCount(estimated))
+              .replaceAll(
+                '{remaining}',
+                formatTokenCount(remaining - estimated),
+              );
+        }
         return AlertDialog(
           title: Text(title),
           content: Text(body),
@@ -117,7 +131,13 @@ class TokenEstimateGateService {
                   backgroundColor: colorScheme.primary,
                 ),
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: Text(trans['token_estimate_confirm'] ?? 'Start'),
+                child: Text(
+                  mixedPayment
+                      ? (trans['token_mix_paid_confirm'] ??
+                          trans['token_estimate_confirm'] ??
+                          'Continue')
+                      : (trans['token_estimate_confirm'] ?? 'Start'),
+                ),
               ),
           ],
         );

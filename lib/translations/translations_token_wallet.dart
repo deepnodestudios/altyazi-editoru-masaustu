@@ -11,7 +11,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'You can watch up to 10 ads a day and 40 a week. Bonus tokens are valid for 1 month. You can save them up and use them over that period; after 1 month, any remaining bonus tokens are removed from your account.',
     'ad_reward_each_ad_hint': 'Each ad adds {tokens} tokens.',
     'token_mix_paid_title': 'Bonus tokens won\'t cover it all',
-    'token_mix_paid_body': 'This file needs about {needed} tokens: {bonus} from bonus tokens, {paid} from paid tokens.',
+    'token_mix_paid_body':
+        'This file needs exactly {needed} tokens: {bonus} from bonus tokens, {paid} from paid tokens.',
     'token_mix_paid_confirm': 'Continue',
     'referral_cta_tokens': 'Refer and Earn Tokens',
     'referral_dialog_desc_tokens':
@@ -45,9 +46,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Add Tokens',
     'credit_explanation_tokens':
         'Tokens scale with file length. Leftover paid credits still cover one full file each.',
-    'token_estimate_title': 'Estimated token use',
+    'token_estimate_title': 'Exact token use',
     'token_estimate_body':
-        'This file will use about {tokens} tokens. Remaining after: {remaining}.',
+        'This file will use exactly {tokens} tokens. Remaining after: {remaining}.',
     'token_estimate_cancel': 'Cancel',
     'token_estimate_confirm': 'Start',
     'token_insufficient_title': 'Not enough tokens',
@@ -81,7 +82,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Günde en fazla 10, haftada en fazla 40 reklam izleyebilirsiniz. Kazanılan bonus tokenler 1 ay geçerlidir, biriktirilerek kullanılabilir; 1 ay sonunda hesabınızdan silinir.',
     'ad_reward_each_ad_hint': 'Her reklam {tokens} token ekler.',
     'token_mix_paid_title': 'Bonus token yetmiyor',
-    'token_mix_paid_body': 'Bu dosya yaklaşık {needed} token gerektirir. {bonus} bonus tokenden, {paid} ücretli tokenden düşülecek.',
+    'token_mix_paid_body':
+        'Bu dosya tam olarak {needed} token gerektirir. {bonus} bonus tokenden, {paid} ücretli tokenden düşülecek.',
     'token_mix_paid_confirm': 'Devam et',
     'referral_cta_tokens': 'Referans Ol\nToken Kazan',
     'referral_dialog_desc_tokens':
@@ -115,9 +117,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Token Ekle',
     'credit_explanation_tokens':
         'Token kullanımı dosya uzunluğuna göre değişir. Kalan ücretli krediler bitene kadar 1 dosya = 1 kredi olarak durur.',
-    'token_estimate_title': 'Tahmini token kullanımı',
+    'token_estimate_title': 'Kesin token kullanımı',
     'token_estimate_body':
-        'Bu dosya yaklaşık {tokens} token harcar. Sonra kalan: {remaining}.',
+        'Bu dosya tam olarak {tokens} token harcar. Sonra kalan: {remaining}.',
     'token_estimate_cancel': 'İptal',
     'token_estimate_confirm': 'Başlat',
     'token_insufficient_title': 'Yetersiz token',
@@ -151,7 +153,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Jusqu’à 10 pubs par jour et 40 par semaine. Les jetons bonus sont valables un mois. Vous pouvez les cumuler et les utiliser pendant cette période ; passé un mois, ceux qui restent sont retirés de votre compte.',
     'ad_reward_each_ad_hint': 'Chaque pub ajoute {tokens} jetons.',
     'token_mix_paid_title': 'Jetons bonus insuffisants',
-    'token_mix_paid_body': 'Ce fichier nécessite environ {needed} jetons : {bonus} sur vos jetons bonus, {paid} sur vos jetons payés.',
+    'token_mix_paid_body':
+        'Ce fichier nécessite exactement {needed} jetons : {bonus} sur vos jetons bonus, {paid} sur vos jetons payés.',
     'token_mix_paid_confirm': 'Continuer',
     'referral_cta_tokens': 'Parrainer et\nGagner des jetons',
     'referral_dialog_desc_tokens':
@@ -177,9 +180,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Ajouter des jetons',
     'credit_explanation_tokens':
         'Les jetons dépendent de la longueur du fichier. Les crédits payés restants couvrent encore un fichier entier chacun.',
-    'token_estimate_title': 'Estimation des jetons',
+    'token_estimate_title': 'Utilisation exacte des jetons',
     'token_estimate_body':
-        'Ce fichier utilisera environ {tokens} jetons. Il restera : {remaining}.',
+        'Ce fichier utilisera exactement {tokens} jetons. Il restera : {remaining}.',
     'token_estimate_cancel': 'Annuler',
     'token_estimate_confirm': 'Démarrer',
     'token_insufficient_title': 'Pas assez de jetons',
@@ -213,7 +216,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Höchstens 10 Anzeigen am Tag und 40 in der Woche. Bonus-Token sind einen Monat gültig. Sie können sie sammeln und in diesem Zeitraum nutzen; nach einem Monat werden ungenutzte Bonus-Token von Ihrem Konto entfernt.',
     'ad_reward_each_ad_hint': 'Jede Anzeige fügt {tokens} Token hinzu.',
     'token_mix_paid_title': 'Bonus-Token reichen nicht aus',
-    'token_mix_paid_body': 'Diese Datei benötigt etwa {needed} Token: {bonus} aus Bonus-Token, {paid} aus bezahlten Token.',
+    'token_mix_paid_body':
+        'Diese Datei benötigt genau {needed} Token: {bonus} aus Bonus-Token, {paid} aus bezahlten Token.',
     'token_mix_paid_confirm': 'Weiter',
     'referral_cta_tokens': 'Empfehlen und\nToken verdienen',
     'referral_dialog_desc_tokens':
@@ -239,9 +243,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Token hinzufügen',
     'credit_explanation_tokens':
         'Token richten sich nach der Dateilänge. Übrige bezahlte Credits gelten weiter als 1 Datei = 1 Credit.',
-    'token_estimate_title': 'Geschätzter Tokenverbrauch',
+    'token_estimate_title': 'Exakter Tokenverbrauch',
     'token_estimate_body':
-        'Diese Datei verbraucht etwa {tokens} Token. Danach bleiben: {remaining}.',
+        'Diese Datei verbraucht genau {tokens} Token. Danach bleiben: {remaining}.',
     'token_estimate_cancel': 'Abbrechen',
     'token_estimate_confirm': 'Starten',
     'token_insufficient_title': 'Nicht genug Token',
@@ -275,7 +279,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Fino a 10 annunci al giorno e 40 a settimana. I token bonus sono validi per 1 mese. Puoi accumularli e usarli in questo periodo; dopo 1 mese, quelli rimasti vengono rimossi dal tuo account.',
     'ad_reward_each_ad_hint': 'Ogni annuncio aggiunge {tokens} token.',
     'token_mix_paid_title': 'I token bonus non bastano',
-    'token_mix_paid_body': 'Questo file richiede circa {needed} token: {bonus} dai token bonus, {paid} dai token a pagamento.',
+    'token_mix_paid_body':
+        'Questo file richiede esattamente {needed} token: {bonus} dai token bonus, {paid} dai token a pagamento.',
     'token_mix_paid_confirm': 'Continua',
     'referral_cta_tokens': 'Invita e\nGuadagna token',
     'referral_dialog_desc_tokens':
@@ -301,9 +306,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Aggiungi token',
     'credit_explanation_tokens':
         'I token dipendono dalla lunghezza del file. I crediti a pagamento rimasti coprono ancora 1 file = 1 credito.',
-    'token_estimate_title': 'Stima dei token',
+    'token_estimate_title': 'Uso esatto dei token',
     'token_estimate_body':
-        'Questo file userà circa {tokens} token. Rimanenti dopo: {remaining}.',
+        'Questo file userà esattamente {tokens} token. Rimanenti dopo: {remaining}.',
     'token_estimate_cancel': 'Annulla',
     'token_estimate_confirm': 'Avvia',
     'token_insufficient_title': 'Token insufficienti',
@@ -337,7 +342,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Hasta 10 anuncios al día y 40 a la semana. Los tokens bonus son válidos durante 1 mes. Puedes acumularlos y usarlos en ese plazo; al cumplirse el mes, los que queden se eliminan de tu cuenta.',
     'ad_reward_each_ad_hint': 'Cada anuncio suma {tokens} tokens.',
     'token_mix_paid_title': 'Los tokens bonus no alcanzan',
-    'token_mix_paid_body': 'Este archivo necesita unos {needed} tokens: {bonus} de tokens bonus y {paid} de tokens de pago.',
+    'token_mix_paid_body':
+        'Este archivo necesita exactamente {needed} tokens: {bonus} de tokens bonus y {paid} de tokens de pago.',
     'token_mix_paid_confirm': 'Continuar',
     'referral_cta_tokens': 'Referir y\nGanar tokens',
     'referral_dialog_desc_tokens':
@@ -363,9 +369,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Añadir tokens',
     'credit_explanation_tokens':
         'Los tokens dependen de la longitud del archivo. Los créditos de pago restantes siguen cubriendo 1 archivo = 1 crédito.',
-    'token_estimate_title': 'Uso estimado de tokens',
+    'token_estimate_title': 'Uso exacto de tokens',
     'token_estimate_body':
-        'Este archivo usará unos {tokens} tokens. Quedarán: {remaining}.',
+        'Este archivo usará exactamente {tokens} tokens. Quedarán: {remaining}.',
     'token_estimate_cancel': 'Cancelar',
     'token_estimate_confirm': 'Iniciar',
     'token_insufficient_title': 'No hay tokens suficientes',
@@ -399,7 +405,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Até 10 anúncios por dia e 40 por semana. Os tokens bónus são válidos durante 1 mês. Pode acumulá-los e utilizá-los nesse período; ao fim de 1 mês, os que restarem são removidos da sua conta.',
     'ad_reward_each_ad_hint': 'Cada anúncio acrescenta {tokens} tokens.',
     'token_mix_paid_title': 'Tokens bónus insuficientes',
-    'token_mix_paid_body': 'Este ficheiro precisa de cerca de {needed} tokens: {bonus} dos tokens bónus, {paid} dos tokens pagos.',
+    'token_mix_paid_body':
+        'Este ficheiro precisa de exatamente {needed} tokens: {bonus} dos tokens bónus, {paid} dos tokens pagos.',
     'token_mix_paid_confirm': 'Continuar',
     'referral_cta_tokens': 'Indicar e\nGanhar tokens',
     'referral_dialog_desc_tokens':
@@ -425,9 +432,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Adicionar tokens',
     'credit_explanation_tokens':
         'Os tokens variam com o tamanho do ficheiro. Os créditos pagos restantes ainda cobrem 1 ficheiro = 1 crédito.',
-    'token_estimate_title': 'Uso estimado de tokens',
+    'token_estimate_title': 'Uso exato de tokens',
     'token_estimate_body':
-        'Este ficheiro usará cerca de {tokens} tokens. Restantes depois: {remaining}.',
+        'Este ficheiro usará exatamente {tokens} tokens. Restantes depois: {remaining}.',
     'token_estimate_cancel': 'Cancelar',
     'token_estimate_confirm': 'Iniciar',
     'token_insufficient_title': 'Tokens insuficientes',
@@ -461,7 +468,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Не больше 10 роликов в день и 40 в неделю. Бонусные токены действуют 1 месяц. Их можно копить и тратить в течение этого срока; по истечении месяца неиспользованные бонусные токены удаляются с вашего аккаунта.',
     'ad_reward_each_ad_hint': 'Каждый ролик добавляет {tokens} токенов.',
     'token_mix_paid_title': 'Бонусных токенов не хватает',
-    'token_mix_paid_body': 'Этому файлу нужно около {needed} токенов: {bonus} с бонусных, {paid} с платных.',
+    'token_mix_paid_body':
+        'Этому файлу нужно ровно {needed} токенов: {bonus} с бонусных, {paid} с платных.',
     'token_mix_paid_confirm': 'Продолжить',
     'referral_cta_tokens': 'Пригласить и\nзаработать токены',
     'referral_dialog_desc_tokens':
@@ -487,9 +495,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Добавить токены',
     'credit_explanation_tokens':
         'Расход токенов зависит от длины файла. Оставшиеся платные кредиты по-прежнему: 1 файл = 1 кредит.',
-    'token_estimate_title': 'Оценка расхода токенов',
+    'token_estimate_title': 'Точное использование токенов',
     'token_estimate_body':
-        'Этот файл потратит около {tokens} токенов. Останется: {remaining}.',
+        'Этот файл потратит ровно {tokens} токенов. Останется: {remaining}.',
     'token_estimate_cancel': 'Отмена',
     'token_estimate_confirm': 'Начать',
     'token_insufficient_title': 'Недостаточно токенов',
@@ -523,7 +531,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Έως 10 διαφημίσεις τη μέρα και 40 την εβδομάδα. Τα token μπόνους ισχύουν για 1 μήνα. Μπορείτε να τα συσσωρεύετε και να τα χρησιμοποιείτε σε αυτό το διάστημα· μετά από 1 μήνα, όσα απομένουν διαγράφονται από τον λογαριασμό σας.',
     'ad_reward_each_ad_hint': 'Κάθε διαφήμιση προσθέτει {tokens} token.',
     'token_mix_paid_title': 'Τα token μπόνους δεν επαρκούν',
-    'token_mix_paid_body': 'Αυτό το αρχείο χρειάζεται περίπου {needed} token: {bonus} από token μπόνους, {paid} από πληρωμένα token.',
+    'token_mix_paid_body':
+        'Αυτό το αρχείο χρειάζεται ακριβώς {needed} token: {bonus} από token μπόνους, {paid} από πληρωμένα token.',
     'token_mix_paid_confirm': 'Συνέχεια',
     'referral_cta_tokens': 'Πρόσκληση και\nκέρδος token',
     'referral_dialog_desc_tokens':
@@ -549,9 +558,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Προσθήκη token',
     'credit_explanation_tokens':
         'Τα token εξαρτώνται από το μήκος του αρχείου. Τα υπόλοιπα επί πληρωμή credits καλύπτουν ακόμα 1 αρχείο = 1 credit.',
-    'token_estimate_title': 'Εκτιμώμενη χρήση token',
+    'token_estimate_title': 'Ακριβής χρήση token',
     'token_estimate_body':
-        'Αυτό το αρχείο θα χρησιμοποιήσει περίπου {tokens} token. Υπόλοιπο μετά: {remaining}.',
+        'Αυτό το αρχείο θα χρησιμοποιήσει ακριβώς {tokens} token. Υπόλοιπο μετά: {remaining}.',
     'token_estimate_cancel': 'Ακύρωση',
     'token_estimate_confirm': 'Έναρξη',
     'token_insufficient_title': 'Δεν επαρκούν τα token',
@@ -585,7 +594,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'حتى 10 إعلانات في اليوم و40 في الأسبوع. رموز المكافأة صالحة لمدة شهر واحد. يمكنك تجميعها واستخدامها خلال هذه المدة؛ وبعد مرور شهر تُحذف ما تبقى من رصيدك.',
     'ad_reward_each_ad_hint': 'كل إعلان يضيف {tokens} رمزًا.',
     'token_mix_paid_title': 'رموز المكافأة لا تكفي',
-    'token_mix_paid_body': 'يحتاج هذا الملف إلى نحو {needed} رمز: {bonus} من رموز المكافأة و{paid} من الرموز المدفوعة.',
+    'token_mix_paid_body':
+        'يحتاج هذا الملف إلى بالضبط {needed} رمز: {bonus} من رموز المكافأة و{paid} من الرموز المدفوعة.',
     'token_mix_paid_confirm': 'متابعة',
     'referral_cta_tokens': 'أحِل و\nاكسب رموزاً',
     'referral_dialog_desc_tokens': 'شارك رمزك مع صديق. عندما يدخل التطبيق ويستخدم الرمز، يحصل كل منكما على 150,000 رمز.',
@@ -610,9 +620,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'إضافة رموز',
     'credit_explanation_tokens':
         'استهلاك الرموز يتناسب مع طول الملف. الأرصدة المدفوعة المتبقية ما زالت تغطي ملفاً كاملاً لكل رصيد.',
-    'token_estimate_title': 'تقدير استهلاك الرموز',
+    'token_estimate_title': 'الاستخدام الدقيق للرموز',
     'token_estimate_body':
-        'سيستخدم هذا الملف نحو {tokens} رمزاً. المتبقي بعدها: {remaining}.',
+        'سيستخدم هذا الملف بالضبط {tokens} رمزاً. المتبقي بعدها: {remaining}.',
     'token_estimate_cancel': 'إلغاء',
     'token_estimate_confirm': 'بدء',
     'token_insufficient_title': 'رموز غير كافية',
@@ -646,7 +656,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'दिन में अधिकतम 10 और हफ़्ते में 40 विज्ञापन। बोनस टोकन 1 महीने तक मान्य रहते हैं। इस दौरान इन्हें जमा करके इस्तेमाल किया जा सकता है; 1 महीने बाद बचे हुए बोनस टोकन आपके खाते से हटा दिए जाते हैं।',
     'ad_reward_each_ad_hint': 'हर विज्ञापन {tokens} टोकन जोड़ता है।',
     'token_mix_paid_title': 'बोनस टोकन काफ़ी नहीं हैं',
-    'token_mix_paid_body': 'इस फ़ाइल को लगभग {needed} टोकन चाहिए: {bonus} बोनस से, {paid} भुगतान से।',
+    'token_mix_paid_body':
+        'इस फ़ाइल को ठीक {needed} टोकन चाहिए: {bonus} बोनस से, {paid} भुगतान से।',
     'token_mix_paid_confirm': 'जारी रखें',
     'referral_cta_tokens': 'रेफर करें और\nटोकन कमाएँ',
     'referral_dialog_desc_tokens':
@@ -672,9 +683,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'टोकन जोड़ें',
     'credit_explanation_tokens':
         'टोकन फ़ाइल की लंबाई के अनुसार खर्च होते हैं। बचे भुगतान क्रेडिट अभी भी 1 फ़ाइल = 1 क्रेडिट हैं।',
-    'token_estimate_title': 'अनुमानित टोकन उपयोग',
+    'token_estimate_title': 'सटीक टोकन उपयोग',
     'token_estimate_body':
-        'यह फ़ाइल लगभग {tokens} टोकन खर्च करेगी। बाद में शेष: {remaining}.',
+        'यह फ़ाइल ठीक {tokens} टोकन खर्च करेगी। बाद में शेष: {remaining}.',
     'token_estimate_cancel': 'रद्द करें',
     'token_estimate_confirm': 'शुरू करें',
     'token_insufficient_title': 'पर्याप्त टोकन नहीं',
@@ -708,7 +719,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Maksimal 10 iklan per hari dan 40 per minggu. Token bonus berlaku selama 1 bulan. Anda bisa mengumpulkannya dan memakainya selama masa itu; setelah 1 bulan, sisa token bonus dihapus dari akun Anda.',
     'ad_reward_each_ad_hint': 'Setiap iklan menambah {tokens} token.',
     'token_mix_paid_title': 'Token bonus tidak cukup',
-    'token_mix_paid_body': 'File ini membutuhkan sekitar {needed} token: {bonus} dari token bonus, {paid} dari token berbayar.',
+    'token_mix_paid_body':
+        'File ini membutuhkan tepat {needed} token: {bonus} dari token bonus, {paid} dari token berbayar.',
     'token_mix_paid_confirm': 'Lanjutkan',
     'referral_cta_tokens': 'Referensikan dan\nDapatkan token',
     'referral_dialog_desc_tokens':
@@ -734,9 +746,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Tambah token',
     'credit_explanation_tokens':
         'Pemakaian token mengikuti panjang file. Sisa kredit berbayar tetap 1 file = 1 kredit.',
-    'token_estimate_title': 'Perkiraan pemakaian token',
+    'token_estimate_title': 'Penggunaan token pasti',
     'token_estimate_body':
-        'File ini akan memakai sekitar {tokens} token. Sisa setelahnya: {remaining}.',
+        'File ini akan memakai tepat {tokens} token. Sisa setelahnya: {remaining}.',
     'token_estimate_cancel': 'Batal',
     'token_estimate_confirm': 'Mulai',
     'token_insufficient_title': 'Token tidak cukup',
@@ -770,7 +782,7 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': '每天最多观看 10 条，每周最多 40 条。奖励代币有效期为 1 个月，可累积使用；满 1 个月后，账户中未用完的奖励代币将被清除。',
     'ad_reward_each_ad_hint': '每条广告增加 {tokens} 代币。',
     'token_mix_paid_title': '奖励代币不足',
-    'token_mix_paid_body': '此文件约需 {needed} 代币：{bonus} 从奖励代币扣除，{paid} 从付费代币扣除。',
+    'token_mix_paid_body': '此文件需要 {needed} 代币：{bonus} 从奖励代币扣除，{paid} 从付费代币扣除。',
     'token_mix_paid_confirm': '继续',
     'referral_cta_tokens': '推荐并\n赚取代币',
     'referral_dialog_desc_tokens': '把邀请码发给朋友。对方加入并兑换后，你们各得 150,000 代币。',
@@ -793,9 +805,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': '添加代币',
     'credit_explanation_tokens':
         '代币按文件长度计费。剩余付费额度仍按 1 个文件 = 1 额度。',
-    'token_estimate_title': '预计代币用量',
-    'token_estimate_body':
-        '此文件大约使用 {tokens} 代币。之后剩余：{remaining}。',
+    'token_estimate_title': '确切代币用量',
+    'token_estimate_body': '此文件使用 {tokens} 代币。之后剩余：{remaining}。',
     'token_estimate_cancel': '取消',
     'token_estimate_confirm': '开始',
     'token_insufficient_title': '代币不足',
@@ -829,7 +840,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': '1日最大10本、週最大40本まで視聴できます。ボーナストークンの有効期限は1か月です。この期間中は貯めて使えます。1か月経過後、残っているボーナストークンはアカウントから削除されます。',
     'ad_reward_each_ad_hint': '広告1本で{tokens}トークンが入ります。',
     'token_mix_paid_title': 'ボーナストークンが足りません',
-    'token_mix_paid_body': 'このファイルは約 {needed} トークン必要です。{bonus} はボーナス、{paid} は有料トークンから差し引かれます。',
+    'token_mix_paid_body':
+        'このファイルは正確に {needed} トークン必要です。{bonus} はボーナス、{paid} は有料トークンから差し引かれます。',
     'token_mix_paid_confirm': '続行',
     'referral_cta_tokens': '紹介して\nトークンを獲得',
     'referral_dialog_desc_tokens': 'コードを友だちに共有してください。アプリに参加してコードを使うと、お互いに 150,000 トークンが入ります。',
@@ -853,9 +865,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'トークンを追加',
     'credit_explanation_tokens':
         'トークンはファイルの長さに応じて消費されます。残りの有料クレジットは 1 ファイル = 1 クレジットのままです。',
-    'token_estimate_title': 'トークン使用量の見積もり',
-    'token_estimate_body':
-        'このファイルは約 {tokens} トークンを使います。残り: {remaining}。',
+    'token_estimate_title': '正確なトークン使用量',
+    'token_estimate_body': 'このファイルは正確に {tokens} トークンを使います。残り: {remaining}。',
     'token_estimate_cancel': 'キャンセル',
     'token_estimate_confirm': '開始',
     'token_insufficient_title': 'トークンが足りません',
@@ -889,7 +900,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': '하루 최대 10회, 주 최대 40회 시청할 수 있습니다. 보너스 토큰은 1개월 동안 유효합니다. 이 기간 동안 모아서 사용할 수 있으며, 1개월이 지나면 남은 보너스 토큰은 계정에서 삭제됩니다.',
     'ad_reward_each_ad_hint': '광고 1회마다 {tokens}토큰이 추가됩니다.',
     'token_mix_paid_title': '보너스 토큰이 부족합니다',
-    'token_mix_paid_body': '이 파일은 약 {needed} 토큰이 필요합니다. {bonus}는 보너스에서, {paid}는 유료에서 차감됩니다.',
+    'token_mix_paid_body':
+        '이 파일은 정확히 {needed} 토큰이 필요합니다. {bonus}는 보너스에서, {paid}는 유료에서 차감됩니다.',
     'token_mix_paid_confirm': '계속',
     'referral_cta_tokens': '추천하고\n토큰 받기',
     'referral_dialog_desc_tokens': '코드를 친구와 공유하세요. 앱에 가입해 코드를 쓰면 두 분 모두 150,000토큰을 받습니다.',
@@ -913,9 +925,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': '토큰 추가',
     'credit_explanation_tokens':
         '토큰은 파일 길이에 따라 사용됩니다. 남은 유료 크레딧은 여전히 파일 1개 = 크레딧 1개입니다.',
-    'token_estimate_title': '예상 토큰 사용량',
-    'token_estimate_body':
-        '이 파일은 약 {tokens} 토큰을 사용합니다. 이후 잔액: {remaining}.',
+    'token_estimate_title': '정확한 토큰 사용량',
+    'token_estimate_body': '이 파일은 정확히 {tokens} 토큰을 사용합니다. 이후 잔액: {remaining}.',
     'token_estimate_cancel': '취소',
     'token_estimate_confirm': '시작',
     'token_insufficient_title': '토큰이 부족합니다',
@@ -949,7 +960,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Maximaal 10 advertenties per dag en 40 per week. Bonustokens zijn 1 maand geldig. Je kunt ze sparen en in die periode gebruiken; na 1 maand worden ongebruikte bonustokens van je account verwijderd.',
     'ad_reward_each_ad_hint': 'Elke advertentie voegt {tokens} tokens toe.',
     'token_mix_paid_title': 'Bonustokens zijn onvoldoende',
-    'token_mix_paid_body': 'Dit bestand heeft ongeveer {needed} tokens nodig: {bonus} van bonustokens, {paid} van betaalde tokens.',
+    'token_mix_paid_body':
+        'Dit bestand heeft precies {needed} tokens nodig: {bonus} van bonustokens, {paid} van betaalde tokens.',
     'token_mix_paid_confirm': 'Doorgaan',
     'referral_cta_tokens': 'Verwijs en\nverdien tokens',
     'referral_dialog_desc_tokens':
@@ -975,9 +987,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Tokens toevoegen',
     'credit_explanation_tokens':
         'Tokens hangen af van de bestandslengte. Overgebleven betaalde credits blijven 1 bestand = 1 credit.',
-    'token_estimate_title': 'Geschat tokenverbruik',
+    'token_estimate_title': 'Exact tokenverbruik',
     'token_estimate_body':
-        'Dit bestand gebruikt ongeveer {tokens} tokens. Daarna over: {remaining}.',
+        'Dit bestand gebruikt precies {tokens} tokens. Daarna over: {remaining}.',
     'token_estimate_cancel': 'Annuleren',
     'token_estimate_confirm': 'Starten',
     'token_insufficient_title': 'Niet genoeg tokens',
@@ -1011,7 +1023,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Högst 10 annonser per dag och 40 per vecka. Bonustoken gäller i 1 månad. Du kan samla dem och använda dem under den tiden; efter 1 månad tas oanvända bonustoken bort från ditt konto.',
     'ad_reward_each_ad_hint': 'Varje annons lägger till {tokens} token.',
     'token_mix_paid_title': 'Bonustoken räcker inte',
-    'token_mix_paid_body': 'Den här filen behöver cirka {needed} tokens: {bonus} från bonustokens, {paid} från betalda tokens.',
+    'token_mix_paid_body':
+        'Den här filen behöver exakt {needed} tokens: {bonus} från bonustokens, {paid} från betalda tokens.',
     'token_mix_paid_confirm': 'Fortsätt',
     'referral_cta_tokens': 'Referera och\nTjäna token',
     'referral_dialog_desc_tokens': 'Dela din kod med en vän. När hen går med och löser in den får ni båda 150 000 token.',
@@ -1036,9 +1049,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Lägg till token',
     'credit_explanation_tokens':
         'Token beror på fillängden. Kvarvarande betalda krediter täcker fortfarande 1 fil = 1 kredit.',
-    'token_estimate_title': 'Beräknad tokenanvändning',
+    'token_estimate_title': 'Exakt tokenanvändning',
     'token_estimate_body':
-        'Den här filen använder cirka {tokens} token. Kvar efteråt: {remaining}.',
+        'Den här filen använder exakt {tokens} token. Kvar efteråt: {remaining}.',
     'token_estimate_cancel': 'Avbryt',
     'token_estimate_confirm': 'Starta',
     'token_insufficient_title': 'Inte tillräckligt med token',
@@ -1072,7 +1085,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Maksymalnie 10 reklam dziennie i 40 tygodniowo. Tokeny bonusowe są ważne przez 1 miesiąc. Możesz je zbierać i wykorzystywać w tym czasie; po upływie miesiąca niewykorzystane tokeny bonusowe są usuwane z konta.',
     'ad_reward_each_ad_hint': 'Każda reklama dodaje {tokens} tokenów.',
     'token_mix_paid_title': 'Bonusowych tokenów brakuje',
-    'token_mix_paid_body': 'Ten plik wymaga około {needed} tokenów: {bonus} z bonusowych, {paid} z płatnych.',
+    'token_mix_paid_body':
+        'Ten plik wymaga dokładnie {needed} tokenów: {bonus} z bonusowych, {paid} z płatnych.',
     'token_mix_paid_confirm': 'Kontynuuj',
     'referral_cta_tokens': 'Poleć i\nZdobądź tokeny',
     'referral_dialog_desc_tokens':
@@ -1098,9 +1112,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Dodaj tokeny',
     'credit_explanation_tokens':
         'Zużycie tokenów zależy od długości pliku. Pozostałe płatne kredyty nadal: 1 plik = 1 kredyt.',
-    'token_estimate_title': 'Szacowane zużycie tokenów',
+    'token_estimate_title': 'Dokładne zużycie tokenów',
     'token_estimate_body':
-        'Ten plik zużyje około {tokens} tokenów. Zostanie: {remaining}.',
+        'Ten plik zużyje dokładnie {tokens} tokenów. Zostanie: {remaining}.',
     'token_estimate_cancel': 'Anuluj',
     'token_estimate_confirm': 'Start',
     'token_insufficient_title': 'Za mało tokenów',
@@ -1134,7 +1148,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'עד 10 פרסומות ביום ו־40 בשבוע. טוקני בונוס תקפים לחודש. ניתן לצבור אותם ולהשתמש בהם במהלך תקופה זו; לאחר חודש, טוקני הבונוס שנותרו יימחקו מהחשבון.',
     'ad_reward_each_ad_hint': 'כל פרסומת מוסיפה {tokens} טוקנים.',
     'token_mix_paid_title': 'טוקני הבונוס לא מספיקים',
-    'token_mix_paid_body': 'קובץ זה דורש כ-{needed} טוקנים: {bonus} מטוקני בונוס, {paid} מטוקנים בתשלום.',
+    'token_mix_paid_body':
+        'קובץ זה דורש בדיוק {needed} טוקנים: {bonus} מטוקני בונוס, {paid} מטוקנים בתשלום.',
     'token_mix_paid_confirm': 'המשך',
     'referral_cta_tokens': 'הפנה ו\nהרווח טוקנים',
     'referral_dialog_desc_tokens': 'שתפו את הקוד עם חבר. כשהוא מצטרף לאפליקציה ומממש אותו, שניכם מקבלים 150,000 טוקנים.',
@@ -1159,9 +1174,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'הוסף טוקנים',
     'credit_explanation_tokens':
         'צריכת הטוקנים תלויה באורך הקובץ. קרדיטים בתשלום שנותרו עדיין מכסים קובץ אחד לכל קרדיט.',
-    'token_estimate_title': 'הערכת שימוש בטוקנים',
+    'token_estimate_title': 'שימוש מדויק בטוקנים',
     'token_estimate_body':
-        'הקובץ ישתמש בכ־{tokens} טוקנים. יישארו: {remaining}.',
+        'הקובץ ישתמש בדיוק {tokens} טוקנים. יישארו: {remaining}.',
     'token_estimate_cancel': 'ביטול',
     'token_estimate_confirm': 'התחל',
     'token_insufficient_title': 'אין מספיק טוקנים',
@@ -1195,7 +1210,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'روزانه تا ۱۰ و هفتگی تا ۴۰ تبلیغ. توکن پاداش یک ماه اعتبار دارد. می‌توانید آن‌ها را جمع کنید و در این مدت استفاده کنید؛ پس از یک ماه، توکن‌های پاداش باقی‌مانده از حساب شما حذف می‌شوند.',
     'ad_reward_each_ad_hint': 'هر تبلیغ {tokens} توکن اضافه می‌کند.',
     'token_mix_paid_title': 'توکن پاداش کافی نیست',
-    'token_mix_paid_body': 'این فایل حدود {needed} توکن می‌خواهد: {bonus} از پاداش، {paid} از توکن پولی.',
+    'token_mix_paid_body':
+        'این فایل دقیقاً {needed} توکن می‌خواهد: {bonus} از پاداش، {paid} از توکن پولی.',
     'token_mix_paid_confirm': 'ادامه',
     'referral_cta_tokens': 'معرفی کن و\nتوکن بگیر',
     'referral_dialog_desc_tokens':
@@ -1221,9 +1237,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'افزودن توکن',
     'credit_explanation_tokens':
         'مصرف توکن به طول فایل بستگی دارد. اعتبارهای پرداخت‌شده باقی‌مانده هنوز ۱ فایل = ۱ اعتبار است.',
-    'token_estimate_title': 'برآورد مصرف توکن',
+    'token_estimate_title': 'مصرف دقیق توکن',
     'token_estimate_body':
-        'این فایل حدود {tokens} توکن مصرف می‌کند. باقی‌مانده پس از آن: {remaining}.',
+        'این فایل دقیقاً {tokens} توکن مصرف می‌کند. باقی‌مانده پس از آن: {remaining}.',
     'token_estimate_cancel': 'لغو',
     'token_estimate_confirm': 'شروع',
     'token_insufficient_title': 'توکن کافی نیست',
@@ -1257,7 +1273,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'วันละไม่เกิน 10 ครั้ง สัปดาห์ละ 40 ครั้ง โทเค็นโบนัสใช้ได้ 1 เดือน สะสมและใช้ระหว่างนี้ได้ ครบ 1 เดือนแล้วโทเค็นโบนัสที่เหลือจะถูกลบออกจากบัญชีของคุณ',
     'ad_reward_each_ad_hint': 'โฆษณาแต่ละครั้งเพิ่ม {tokens} โทเค็น',
     'token_mix_paid_title': 'โทเค็นโบนัสไม่พอ',
-    'token_mix_paid_body': 'ไฟล์นี้ต้องการประมาณ {needed} โทเค็น: {bonus} จากโบนัส {paid} จากที่ซื้อ',
+    'token_mix_paid_body':
+        'ไฟล์นี้ต้องการทั้งหมด {needed} โทเค็น: {bonus} จากโบนัส {paid} จากที่ซื้อ',
     'token_mix_paid_confirm': 'ดำเนินการต่อ',
     'referral_cta_tokens': 'แนะนำและ\nรับโทเค็น',
     'referral_dialog_desc_tokens': 'แชร์รหัสกับเพื่อน เมื่อเขาเข้าแอปแล้วใช้รหัส ทั้งคู่จะได้ 150,000 โทเค็น',
@@ -1282,9 +1299,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'เพิ่มโทเค็น',
     'credit_explanation_tokens':
         'โทเค็นคิดตามความยาวไฟล์ เครดิตที่ซื้อไว้แล้วยังใช้แบบ 1 ไฟล์ = 1 เครดิต',
-    'token_estimate_title': 'ประมาณการใช้โทเค็น',
+    'token_estimate_title': 'การใช้โทเค็นที่แน่นอน',
     'token_estimate_body':
-        'ไฟล์นี้จะใช้ประมาณ {tokens} โทเค็น เหลือหลังจากนั้น: {remaining}',
+        'ไฟล์นี้จะใช้ทั้งหมด {tokens} โทเค็น เหลือหลังจากนั้น: {remaining}',
     'token_estimate_cancel': 'ยกเลิก',
     'token_estimate_confirm': 'เริ่ม',
     'token_insufficient_title': 'โทเค็นไม่พอ',
@@ -1318,7 +1335,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Tối đa 10 quảng cáo mỗi ngày và 40 mỗi tuần. Token thưởng có hiệu lực trong 1 tháng. Bạn có thể tích lũy và dùng trong thời gian đó; sau 1 tháng, token thưởng còn lại sẽ bị xóa khỏi tài khoản.',
     'ad_reward_each_ad_hint': 'Mỗi quảng cáo cộng {tokens} token.',
     'token_mix_paid_title': 'Token thưởng không đủ',
-    'token_mix_paid_body': 'Tệp này cần khoảng {needed} token: {bonus} từ token thưởng, {paid} từ token trả phí.',
+    'token_mix_paid_body':
+        'Tệp này cần chính xác {needed} token: {bonus} từ token thưởng, {paid} từ token trả phí.',
     'token_mix_paid_confirm': 'Tiếp tục',
     'referral_cta_tokens': 'Giới thiệu và\nNhận token',
     'referral_dialog_desc_tokens': 'Chia sẻ mã với bạn. Khi họ vào ứng dụng và dùng mã, cả hai đều nhận 150.000 token.',
@@ -1343,9 +1361,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Thêm token',
     'credit_explanation_tokens':
         'Token tính theo độ dài tệp. Tín dụng trả phí còn lại vẫn là 1 tệp = 1 tín dụng.',
-    'token_estimate_title': 'Ước tính dùng token',
+    'token_estimate_title': 'Mức dùng token chính xác',
     'token_estimate_body':
-        'Tệp này sẽ dùng khoảng {tokens} token. Còn lại sau đó: {remaining}.',
+        'Tệp này sẽ dùng chính xác {tokens} token. Còn lại sau đó: {remaining}.',
     'token_estimate_cancel': 'Hủy',
     'token_estimate_confirm': 'Bắt đầu',
     'token_insufficient_title': 'Không đủ token',
@@ -1379,7 +1397,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'ஒரு நாளில் அதிகபட்சம் 10, வாரத்தில் 40 விளம்பரம். போனஸ் டோக்கன் 1 மாதம் வரை செல்லும். இந்த காலத்தில் சேர்த்து பயன்படுத்தலாம்; 1 மாதம் முடிந்ததும் மீதமுள்ள போனஸ் டோக்கன் உங்கள் கணக்கிலிருந்து நீக்கப்படும்.',
     'ad_reward_each_ad_hint': 'ஒவ்வொரு விளம்பரமும் {tokens} டோக்கன் சேர்க்கும்.',
     'token_mix_paid_title': 'போனஸ் டோக்கன் போதாது',
-    'token_mix_paid_body': 'இந்த கோப்புக்கு சுமார் {needed} டோக்கன் தேவை: {bonus} போனஸிலிருந்து, {paid} கட்டணத்திலிருந்து.',
+    'token_mix_paid_body':
+        'இந்த கோப்புக்கு சரியாக {needed} டோக்கன் தேவை: {bonus} போனஸிலிருந்து, {paid} கட்டணத்திலிருந்து.',
     'token_mix_paid_confirm': 'தொடரவும்',
     'referral_cta_tokens': 'பரிந்துரைத்து\nடோக்கன் பெறுங்கள்',
     'referral_dialog_desc_tokens':
@@ -1405,9 +1424,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'டோக்கன் சேர்',
     'credit_explanation_tokens':
         'டோக்கன் கோப்பு நீளத்தைப் பொறுத்தது. மீதமுள்ள கட்டண கிரெடிட்கள் இன்னும் 1 கோப்பு = 1 கிரெடிட்.',
-    'token_estimate_title': 'மதிப்பிடப்பட்ட டோக்கன் பயன்பாடு',
+    'token_estimate_title': 'சரியான டோக்கன் பயன்பாடு',
     'token_estimate_body':
-        'இந்தக் கோப்பு சுமார் {tokens} டோக்கன் பயன்படுத்தும். பிறகு மீதம்: {remaining}.',
+        'இந்தக் கோப்பு சரியாக {tokens} டோக்கன் பயன்படுத்தும். பிறகு மீதம்: {remaining}.',
     'token_estimate_cancel': 'ரத்து',
     'token_estimate_confirm': 'தொடங்கு',
     'token_insufficient_title': 'போதிய டோக்கன் இல்லை',
@@ -1441,7 +1460,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'రోజుకు గరిష్టం 10, వారానికి 40 ప్రకటనలు. బోనస్ టోకెన్లు 1 నెల పాటు చెల్లుబాటు అవుతాయి. ఈ కాలంలో వాటిని కూడబెట్టి వాడొచ్చు; 1 నెల తర్వాత మిగిలిన బోనస్ టోకెన్లు మీ ఖాతా నుండి తొలగించబడతాయి.',
     'ad_reward_each_ad_hint': 'ప్రతి ప్రకటన {tokens} టోకెన్లు జోడిస్తుంది.',
     'token_mix_paid_title': 'బోనస్ టోకెన్లు సరిపోవు లేదు',
-    'token_mix_paid_body': 'ఈ ఫైల్‌కు సుమారు {needed} టోకెన్లు కావాలి: {bonus} బోనస్ నుండి, {paid} చెల్లింపు నుండి.',
+    'token_mix_paid_body':
+        'ఈ ఫైల్‌కు ఖచ్చితంగా {needed} టోకెన్లు కావాలి: {bonus} బోనస్ నుండి, {paid} చెల్లింపు నుండి.',
     'token_mix_paid_confirm': 'కొనసాగించు',
     'referral_cta_tokens': 'రెఫర్ చేసి\nటోకెన్లు సంపాదించండి',
     'referral_dialog_desc_tokens':
@@ -1467,9 +1487,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'టోకెన్లు జోడించు',
     'credit_explanation_tokens':
         'టోకెన్లు ఫైల్ పొడవును బట్టి ఖర్చవుతాయి. మిగిలిన చెల్లింపు క్రెడిట్లు ఇంకా 1 ఫైల్ = 1 క్రెడిట్.',
-    'token_estimate_title': 'అంచనా టోకెన్ వాడకం',
+    'token_estimate_title': 'ఖచ్చితమైన టోకెన్ వినియోగం',
     'token_estimate_body':
-        'ఈ ఫైల్ సుమారు {tokens} టోకెన్లు వాడుతుంది. తర్వాత మిగిలేది: {remaining}.',
+        'ఈ ఫైల్ ఖచ్చితంగా {tokens} టోకెన్లు వాడుతుంది. తర్వాత మిగిలేది: {remaining}.',
     'token_estimate_cancel': 'రద్దు',
     'token_estimate_confirm': 'ప్రారంభించు',
     'token_insufficient_title': 'టోకెన్లు సరిపోవు',
@@ -1503,7 +1523,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'ഒരു ദിവസം പരമാവധി 10, ആഴ്ചയിൽ 40 പരസ്യം. ബോണസ് ടോക്കൺ 1 മാസം വരെ സാധുവാണ്. ഈ കാലത്ത് ശേഖരിച്ച് ഉപയോഗിക്കാം; 1 മാസം കഴിഞ്ഞാൽ ബാക്കിയുള്ള ബോണസ് ടോക്കൺ നിങ്ങളുടെ അക്കൗണ്ടിൽ നിന്ന് നീക്കം ചെയ്യും.',
     'ad_reward_each_ad_hint': 'ഓരോ പരസ്യവും {tokens} ടോക്കൺ ചേർക്കും.',
     'token_mix_paid_title': 'ബോണസ് ടോക്കൺ മതിയല്ല',
-    'token_mix_paid_body': 'ഈ ഫയലിന് ഏകദേശം {needed} ടോക്കൺ വേണം: {bonus} ബോണസിൽ നിന്ന്, {paid} പണമടച്ചതിൽ നിന്ന്.',
+    'token_mix_paid_body':
+        'ഈ ഫയലിന് കൃത്യമായി {needed} ടോക്കൺ വേണം: {bonus} ബോണസിൽ നിന്ന്, {paid} പണമടച്ചതിൽ നിന്ന്.',
     'token_mix_paid_confirm': 'തുടരുക',
     'referral_cta_tokens': 'റഫർ ചെയ്ത്\nടോക്കൺ നേടുക',
     'referral_dialog_desc_tokens':
@@ -1529,9 +1550,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'ടോക്കൺ ചേർക്കുക',
     'credit_explanation_tokens':
         'ടോക്കൺ ഫയൽ നീളം അനുസരിച്ച് ചെലവാകും. ബാക്കി പണമടച്ച ക്രെഡിറ്റുകൾ ഇപ്പോഴും 1 ഫയൽ = 1 ക്രെഡിറ്റ്.',
-    'token_estimate_title': 'കണക്കാക്കിയ ടോക്കൺ ഉപയോഗം',
+    'token_estimate_title': 'കൃത്യമായ ടോക്കൺ ഉപയോഗം',
     'token_estimate_body':
-        'ഈ ഫയൽ ഏകദേശം {tokens} ടോക്കൺ ഉപയോഗിക്കും. ശേഷം ബാക്കി: {remaining}.',
+        'ഈ ഫയൽ കൃത്യമായി {tokens} ടോക്കൺ ഉപയോഗിക്കും. ശേഷം ബാക്കി: {remaining}.',
     'token_estimate_cancel': 'റദ്ദാക്കുക',
     'token_estimate_confirm': 'ആരംഭിക്കുക',
     'token_insufficient_title': 'മതിയായ ടോക്കൺ ഇല്ല',
@@ -1565,7 +1586,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'ದಿನಕ್ಕೆ ಗರಿಷ್ಠ 10, ವಾರಕ್ಕೆ 40 ಜಾಹೀರಾತು. ಬೋನಸ್ ಟೋಕನ್ 1 ತಿಂಗಳವರೆಗೆ ಮಾನ್ಯವಾಗಿರುತ್ತದೆ. ಈ ಅವಧಿಯಲ್ಲಿ ಸಂಗ್ರಹಿಸಿ ಬಳಸಬಹುದು; 1 ತಿಂಗಳ ಬಳಿಕ ಉಳಿದ ಬೋನಸ್ ಟೋಕನ್ ನಿಮ್ಮ ಖಾತೆಯಿಂದ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ.',
     'ad_reward_each_ad_hint': 'ಪ್ರತಿ ಜಾಹೀರಾತು {tokens} ಟೋಕನ್ ಸೇರಿಸುತ್ತದೆ.',
     'token_mix_paid_title': 'ಬೋನಸ್ ಟೋಕನ್ ಸಾಕಾಗಿಲ್ಲ',
-    'token_mix_paid_body': 'ಈ ಫೈಲ್‌ಗೆ ಸುಮಾರು {needed} ಟೋಕನ್ ಬೇಕು: {bonus} ಬೋನಸ್‌ನಿಂದ, {paid} ಪಾವತಿಸಿದದ್ದರಿಂದ.',
+    'token_mix_paid_body':
+        'ಈ ಫೈಲ್‌ಗೆ ನಿಖರವಾಗಿ {needed} ಟೋಕನ್ ಬೇಕು: {bonus} ಬೋನಸ್‌ನಿಂದ, {paid} ಪಾವತಿಸಿದದ್ದರಿಂದ.',
     'token_mix_paid_confirm': 'ಮುಂದುವರಿಸಿ',
     'referral_cta_tokens': 'ರೆಫರ್ ಮಾಡಿ\nಟೋಕನ್ ಗಳಿಸಿ',
     'referral_dialog_desc_tokens':
@@ -1591,9 +1613,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'ಟೋಕನ್ ಸೇರಿಸಿ',
     'credit_explanation_tokens':
         'ಟೋಕನ್ ಫೈಲ್ ಉದ್ದಕ್ಕೆ ಅನುಗುಣವಾಗಿ ಖರ್ಚಾಗುತ್ತದೆ. ಉಳಿದ ಪಾವತಿ ಕ್ರೆಡಿಟ್‌ಗಳು ಇನ್ನೂ 1 ಫೈಲ್ = 1 ಕ್ರೆಡಿಟ್.',
-    'token_estimate_title': 'ಅಂದಾಜು ಟೋಕನ್ ಬಳಕೆ',
+    'token_estimate_title': 'ನಿಖರ ಟೋಕನ್ ಬಳಕೆ',
     'token_estimate_body':
-        'ಈ ಫೈಲ್ ಸುಮಾರು {tokens} ಟೋಕನ್ ಬಳಸುತ್ತದೆ. ನಂತರ ಉಳಿಯುವುದು: {remaining}.',
+        'ಈ ಫೈಲ್ ನಿಖರವಾಗಿ {tokens} ಟೋಕನ್ ಬಳಸುತ್ತದೆ. ನಂತರ ಉಳಿಯುವುದು: {remaining}.',
     'token_estimate_cancel': 'ರದ್ದು',
     'token_estimate_confirm': 'ಪ್ರಾರಂಭಿಸಿ',
     'token_insufficient_title': 'ಸಾಕಷ್ಟು ಟೋಕನ್ ಇಲ್ಲ',
@@ -1627,7 +1649,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'ਦਿਨ ਵਿੱਚ ਵੱਧ ਤੋਂ ਵੱਧ 10 ਅਤੇ ਹਫ਼ਤੇ ਵਿੱਚ 40 ਇਸ਼ਤਿਹਾਰ। ਬੋਨਸ ਟੋਕਨ 1 ਮਹੀਨੇ ਲਈ ਮਾਨ્ય ਹਨ। ਇਸ ਮਿਆਦ ਦੌਰਾਨ ਇਹਨਾਂ ਨੂੰ ਇਕੱਠਾ ਕਰਕੇ ਵਰਤਿਆ ਜਾ ਸਕਦਾ ਹੈ; 1 ਮਹੀਨੇ ਬਾਅਦ ਬਚੇ ਹੋਏ ਬੋਨਸ ਟੋਕਨ ਤੁਹਾਡੇ ਖਾਤੇ ਤੋਂ ਹਟਾ ਦਿੱਤੇ ਜਾਂਦੇ ਹਨ।',
     'ad_reward_each_ad_hint': 'ਹਰ ਇਸ਼ਤਿਹਾਰ {tokens} ਟੋਕਨ ਜੋੜਦਾ ਹੈ।',
     'token_mix_paid_title': 'ਬੋਨਸ ਟੋਕਨ ਕਾਫ਼ੀ ਨਹੀਂ',
-    'token_mix_paid_body': 'ਇਸ ਫਾਈਲ ਨੂੰ ਲਗਭਗ {needed} ਟੋਕਨ ਚਾਹੀਦੇ: {bonus} ਬੋਨਸ ਤੋਂ, {paid} ਭੁਗਤਾਨ ਤੋਂ।',
+    'token_mix_paid_body':
+        'ਇਸ ਫਾਈਲ ਨੂੰ ਬਿਲਕੁਲ {needed} ਟੋਕਨ ਚਾਹੀਦੇ: {bonus} ਬੋਨਸ ਤੋਂ, {paid} ਭੁਗਤਾਨ ਤੋਂ।',
     'token_mix_paid_confirm': 'ਜਾਰੀ ਰੱਖੋ',
     'referral_cta_tokens': 'ਰੈਫਰ ਕਰੋ ਅਤੇ\nਟੋਕਨ ਕਮਾਓ',
     'referral_dialog_desc_tokens':
@@ -1653,9 +1676,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'ਟੋਕਨ ਜੋੜੋ',
     'credit_explanation_tokens':
         'ਟੋਕਨ ਫਾਈਲ ਦੀ ਲੰਬਾਈ ਅਨੁਸਾਰ ਖਰਚ ਹੁੰਦੇ ਹਨ। ਬਾਕੀ ਭੁਗਤਾਨ ਕ੍ਰੈਡਿਟ ਅਜੇ ਵੀ 1 ਫਾਈਲ = 1 ਕ੍ਰੈਡਿਟ ਹਨ।',
-    'token_estimate_title': 'ਅਨੁਮਾਨਿਤ ਟੋਕਨ ਵਰਤੋਂ',
+    'token_estimate_title': 'ਸਹੀ ਟੋਕਨ ਵਰਤੋਂ',
     'token_estimate_body':
-        'ਇਹ ਫਾਈਲ ਲਗਭਗ {tokens} ਟੋਕਨ ਵਰਤੇਗੀ। ਬਾਅਦ ਵਿੱਚ ਬਾਕੀ: {remaining}.',
+        'ਇਹ ਫਾਈਲ ਬਿਲਕੁਲ {tokens} ਟੋਕਨ ਵਰਤੇਗੀ। ਬਾਅਦ ਵਿੱਚ ਬਾਕੀ: {remaining}.',
     'token_estimate_cancel': 'ਰੱਦ',
     'token_estimate_confirm': 'ਸ਼ੁਰੂ',
     'token_insufficient_title': 'ਲੋੜੀਂਦੇ ਟੋਕਨ ਨਹੀਂ',
@@ -1689,7 +1712,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'દિવસે વધુમાં વધુ 10 અને અઠવાડિયે 40 જાહેરાત. બોનસ ટોકન 1 મહિનો સુધી માન્ય રહે છે. આ સમયગાળામાં તેમને ભેગા કરીને વાપરી શકાય છે; 1 મહિના પછી બાકીના બોનસ ટોકન તમારા ખાતામાંથી કાઢી નાખાય છે.',
     'ad_reward_each_ad_hint': 'દરેક જાહેરાત {tokens} ટોકન ઉમેરે છે.',
     'token_mix_paid_title': 'બોનસ ટોકન પૂરતા નથી',
-    'token_mix_paid_body': 'આ ફાઇલને લગભગ {needed} ટોકન જોઈએ: {bonus} બોનસમાંથી, {paid} ચૂકવેલમાંથી.',
+    'token_mix_paid_body':
+        'આ ફાઇલને ચોક્કસ {needed} ટોકન જોઈએ: {bonus} બોનસમાંથી, {paid} ચૂકવેલમાંથી.',
     'token_mix_paid_confirm': 'ચાલુ રાખો',
     'referral_cta_tokens': 'રેફર કરો અને\nટોકન કમાઓ',
     'referral_dialog_desc_tokens':
@@ -1715,9 +1739,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'ટોકન ઉમેરો',
     'credit_explanation_tokens':
         'ટોકન ફાઇલની લંબાઈ પ્રમાણે ખર્ચાય છે. બાકી ચૂકવેલ ક્રેડિટ હજુ 1 ફાઇલ = 1 ક્રેડિટ છે.',
-    'token_estimate_title': 'અંદાજિત ટોકન વપરાશ',
+    'token_estimate_title': 'ચોક્કસ ટોકન વપરાશ',
     'token_estimate_body':
-        'આ ફાઇલ આશરે {tokens} ટોકન વાપરશે. પછી બાકી: {remaining}.',
+        'આ ફાઇલ ચોક્કસ {tokens} ટોકન વાપરશે. પછી બાકી: {remaining}.',
     'token_estimate_cancel': 'રદ',
     'token_estimate_confirm': 'શરૂ કરો',
     'token_insufficient_title': 'પૂરતા ટોકન નથી',
@@ -1751,7 +1775,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'दिवसाला जास्तीत जास्त 10 आणि आठवड्याला 40 जाहिराती. बोनस टोकन 1 महिना वैध राहतात. या काळात ते जमा करून वापरता येतात; 1 महिना झाल्यावर उरलेले बोनस टोकन तुमच्या खात्यातून काढले जातात.',
     'ad_reward_each_ad_hint': 'प्रत्येक जाहिरात {tokens} टोकन जोडते.',
     'token_mix_paid_title': 'बोनस टोकन पुरे नाहीत',
-    'token_mix_paid_body': 'या फाइलला सुमारे {needed} टोकन लागतील: {bonus} बोनसमधून, {paid} सशुल्कमधून.',
+    'token_mix_paid_body':
+        'या फाइलला नेमके {needed} टोकन लागतील: {bonus} बोनसमधून, {paid} सशुल्कमधून.',
     'token_mix_paid_confirm': 'पुढे जा',
     'referral_cta_tokens': 'रेफर करा आणि\nटोकन मिळवा',
     'referral_dialog_desc_tokens':
@@ -1777,9 +1802,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'टोकन जोडा',
     'credit_explanation_tokens':
         'टोकन फाइलच्या लांबीनुसार खर्च होतात. उरलेली सशुल्क क्रेडिट अजूनही 1 फाइल = 1 क्रेडिट आहेत.',
-    'token_estimate_title': 'अंदाजे टोकन वापर',
+    'token_estimate_title': 'नेमका टोकन वापर',
     'token_estimate_body':
-        'ही फाइल सुमारे {tokens} टोकन वापरेल. नंतर शिल्लक: {remaining}.',
+        'ही फाइल नेमके {tokens} टोकन वापरेल. नंतर शिल्लक: {remaining}.',
     'token_estimate_cancel': 'रद्द',
     'token_estimate_confirm': 'सुरू करा',
     'token_insufficient_title': 'पुरेसे टोकन नाहीत',
@@ -1813,7 +1838,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Не більше 10 роликів на день і 40 на тиждень. Бонусні токени діють 1 місяць. Їх можна накопичувати та використовувати протягом цього часу; після місяця невикористані бонусні токени видаляються з вашого облікового запису.',
     'ad_reward_each_ad_hint': 'Кожен ролик додає {tokens} токенів.',
     'token_mix_paid_title': 'Бонусних токенів не вистачить',
-    'token_mix_paid_body': 'Цьому файлу потрібно близько {needed} токенів: {bonus} з бонусних, {paid} з платних.',
+    'token_mix_paid_body':
+        'Цьому файлу потрібно рівно {needed} токенів: {bonus} з бонусних, {paid} з платних.',
     'token_mix_paid_confirm': 'Продовжити',
     'referral_cta_tokens': 'Запросити та\nзаробити токени',
     'referral_dialog_desc_tokens':
@@ -1839,9 +1865,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Додати токени',
     'credit_explanation_tokens':
         'Витрата токенів залежить від довжини файлу. Залишок платних кредитів і далі: 1 файл = 1 кредит.',
-    'token_estimate_title': 'Оцінка витрати токенів',
+    'token_estimate_title': 'Точне використання токенів',
     'token_estimate_body':
-        'Цей файл витратить близько {tokens} токенів. Залишиться: {remaining}.',
+        'Цей файл витратить рівно {tokens} токенів. Залишиться: {remaining}.',
     'token_estimate_cancel': 'Скасувати',
     'token_estimate_confirm': 'Почати',
     'token_insufficient_title': 'Недостатньо токенів',
@@ -1875,7 +1901,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Cel mult 10 reclame pe zi și 40 pe săptămână. Tokenii bonus sunt valabili 1 lună. Îi poți acumula și folosi în această perioadă; după 1 lună, cei rămași sunt eliminați din contul tău.',
     'ad_reward_each_ad_hint': 'Fiecare reclamă adaugă {tokens} tokeni.',
     'token_mix_paid_title': 'Tokenii bonus nu ajung',
-    'token_mix_paid_body': 'Acest fișier necesită aproximativ {needed} tokeni: {bonus} din bonus, {paid} din cei plătiți.',
+    'token_mix_paid_body':
+        'Acest fișier necesită exact {needed} tokeni: {bonus} din bonus, {paid} din cei plătiți.',
     'token_mix_paid_confirm': 'Continuă',
     'referral_cta_tokens': 'Recomandă și\nCâștigă tokeni',
     'referral_dialog_desc_tokens':
@@ -1901,9 +1928,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Adaugă tokeni',
     'credit_explanation_tokens':
         'Tokenii depind de lungimea fișierului. Creditele plătite rămase acoperă încă 1 fișier = 1 credit.',
-    'token_estimate_title': 'Estimare consum de tokeni',
+    'token_estimate_title': 'Utilizare exactă a tokenilor',
     'token_estimate_body':
-        'Acest fișier va folosi circa {tokens} tokeni. Rămân după: {remaining}.',
+        'Acest fișier va folosi exact {tokens} tokeni. Rămân după: {remaining}.',
     'token_estimate_cancel': 'Anulează',
     'token_estimate_confirm': 'Start',
     'token_insufficient_title': 'Tokeni insuficienți',
@@ -1937,7 +1964,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Nejvýše 10 reklam denně a 40 týdně. Bonusové tokeny platí 1 měsíc. Můžete je sbírat a používat během této doby; po uplynutí měsíce se nepoužité bonusové tokeny z vašeho účtu odstraní.',
     'ad_reward_each_ad_hint': 'Každá reklama přidá {tokens} tokenů.',
     'token_mix_paid_title': 'Bonusové tokeny nestačí',
-    'token_mix_paid_body': 'Tento soubor potřebuje asi {needed} tokenů: {bonus} z bonusových, {paid} z placených.',
+    'token_mix_paid_body':
+        'Tento soubor potřebuje přesně {needed} tokenů: {bonus} z bonusových, {paid} z placených.',
     'token_mix_paid_confirm': 'Pokračovat',
     'referral_cta_tokens': 'Doporučit a\nZískat tokeny',
     'referral_dialog_desc_tokens':
@@ -1963,9 +1991,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Přidat tokeny',
     'credit_explanation_tokens':
         'Tokeny se odvíjejí od délky souboru. Zbývající placené kredity stále platí 1 soubor = 1 kredit.',
-    'token_estimate_title': 'Odhad spotřeby tokenů',
+    'token_estimate_title': 'Přesné použití tokenů',
     'token_estimate_body':
-        'Tento soubor spotřebuje asi {tokens} tokenů. Poté zbude: {remaining}.',
+        'Tento soubor spotřebuje přesně {tokens} tokenů. Poté zbude: {remaining}.',
     'token_estimate_cancel': 'Zrušit',
     'token_estimate_confirm': 'Spustit',
     'token_insufficient_title': 'Nedostatek tokenů',
@@ -1999,7 +2027,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Naponta legfeljebb 10, hetente 40 hirdetés. A bónusz tokenek 1 hónapig érvényesek. Ebben az időben összegyűjtheted és felhasználhatod őket; 1 hónap után a megmaradt bónusz tokenek törlődnek a fiókodból.',
     'ad_reward_each_ad_hint': 'Minden hirdetés {tokens} tokent ad hozzá.',
     'token_mix_paid_title': 'A bónusz tokenek nem elégségesek',
-    'token_mix_paid_body': 'Ehhez a fájlhoz kb. {needed} token kell: {bonus} bónuszból, {paid} fizetettből.',
+    'token_mix_paid_body':
+        'Ehhez a fájlhoz pontosan {needed} token kell: {bonus} bónuszból, {paid} fizetettből.',
     'token_mix_paid_confirm': 'Folytatás',
     'referral_cta_tokens': 'Ajánlás és\nToken szerzése',
     'referral_dialog_desc_tokens':
@@ -2025,9 +2054,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Token hozzáadása',
     'credit_explanation_tokens':
         'A tokenfelhasználás a fájl hosszától függ. A megmaradt fizetett kreditek továbbra is 1 fájl = 1 kredit.',
-    'token_estimate_title': 'Becsült tokenfelhasználás',
+    'token_estimate_title': 'Pontos tokenhasználat',
     'token_estimate_body':
-        'Ez a fájl körülbelül {tokens} tokent használ. Utána marad: {remaining}.',
+        'Ez a fájl pontosan {tokens} tokent használ. Utána marad: {remaining}.',
     'token_estimate_cancel': 'Mégse',
     'token_estimate_confirm': 'Indítás',
     'token_insufficient_title': 'Nincs elég token',
@@ -2061,7 +2090,8 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'ad_reward_limit_desc_tokens': 'Højst 10 annoncer om dagen og 40 om ugen. Bonustokens er gyldige i 1 måned. Du kan samle dem og bruge dem i den periode; efter 1 måned fjernes ubrugte bonustokens fra din konto.',
     'ad_reward_each_ad_hint': 'Hver annonce tilføjer {tokens} tokens.',
     'token_mix_paid_title': 'Bonustokens rækker ikke',
-    'token_mix_paid_body': 'Denne fil kræver ca. {needed} tokens: {bonus} fra bonus, {paid} fra betalte.',
+    'token_mix_paid_body':
+        'Denne fil kræver præcis {needed} tokens: {bonus} fra bonus, {paid} fra betalte.',
     'token_mix_paid_confirm': 'Fortsæt',
     'referral_cta_tokens': 'Henvis og\nTjen tokens',
     'referral_dialog_desc_tokens':
@@ -2087,9 +2117,9 @@ const Map<String, Map<String, String>> translationsTokenWallet = {
     'add_tokens': 'Tilføj tokens',
     'credit_explanation_tokens':
         'Tokens afhænger af fillængden. Tilbageværende betalte kreditter dækker stadig 1 fil = 1 kredit.',
-    'token_estimate_title': 'Anslået tokenforbrug',
+    'token_estimate_title': 'Præcist tokenforbrug',
     'token_estimate_body':
-        'Denne fil bruger ca. {tokens} tokens. Bagefter tilbage: {remaining}.',
+        'Denne fil bruger præcis {tokens} tokens. Bagefter tilbage: {remaining}.',
     'token_estimate_cancel': 'Annuller',
     'token_estimate_confirm': 'Start',
     'token_insufficient_title': 'Ikke nok tokens',

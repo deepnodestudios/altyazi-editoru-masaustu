@@ -71,6 +71,11 @@ class BillingService extends ChangeNotifier {
 
   int _tokenGrantBalance = 0;
   int get tokenGrantBalance => _tokenGrantBalance;
+  Map<String, dynamic>? _lastConsumptionReceipt;
+  Map<String, dynamic>? get lastConsumptionReceipt =>
+      _lastConsumptionReceipt == null
+          ? null
+          : Map<String, dynamic>.unmodifiable(_lastConsumptionReceipt!);
 
   int _legacyFlatRateRemaining = 0;
   int get legacyFlatRateRemaining => _legacyFlatRateRemaining;
@@ -614,8 +619,13 @@ class BillingService extends ChangeNotifier {
     String? platform,
     int? charCount,
     int? estimatedTokens,
+    int? quoteProtocolVersion,
+    String? quoteId,
+    String? contentHash,
+    String? sourceContent,
   }) async {
     try {
+      _lastConsumptionReceipt = null;
       if (_deviceId == null || _deviceId!.trim().isEmpty) return 0;
 
       String resolvePlatform() {
@@ -648,9 +658,18 @@ class BillingService extends ChangeNotifier {
         if (charCount != null && charCount > 0) 'charCount': charCount,
         if (estimatedTokens != null && estimatedTokens > 0)
           'estimatedTokens': estimatedTokens,
+        if (quoteProtocolVersion != null && quoteProtocolVersion > 0)
+          'quoteProtocolVersion': quoteProtocolVersion,
+        if (quoteId != null && quoteId.trim().isNotEmpty)
+          'quoteId': quoteId.trim(),
+        if (contentHash != null && contentHash.trim().isNotEmpty)
+          'contentHash': contentHash.trim(),
+        if (sourceContent != null && sourceContent.isNotEmpty)
+          'sourceContent': sourceContent,
       });
 
       if (data['success'] == true) {
+        _lastConsumptionReceipt = Map<String, dynamic>.from(data);
         if (data.containsKey('remainingPurchasedCredits')) {
           _purchasedCredits = _asInt(data['remainingPurchasedCredits']);
         }

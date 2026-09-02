@@ -99,6 +99,35 @@ export const pollBatchJobs = onSchedule({
                                 Math.floor(Number(jobData.chargedTokens ?? 0) || 0),
                             );
                             const jobAppVersion = String(jobData.appVersion ?? '').trim();
+                            const translationCreditType =
+                                jobData.translationCreditType === 'paid'
+                                || jobData.translationCreditType === 'free'
+                                    ? jobData.translationCreditType
+                                    : null;
+                            const appCharge = {
+                                chargedAmount: chargedTokens,
+                                chargeMode: jobData.chargeMode ?? null,
+                                fromPaidTokens:
+                                    Number(jobData.fromPaidTokens ?? 0) || 0,
+                                fromGrantTokens:
+                                    Number(jobData.fromGrantTokens ?? 0) || 0,
+                                creditType: translationCreditType,
+                                quoteProtocolVersion:
+                                    Number(
+                                        jobData.quoteProtocolVersion ?? 0,
+                                    ) || 0,
+                                quoteVersion: jobData.quoteVersion ?? null,
+                                quoteId: jobData.quoteId ?? null,
+                                contentHash: jobData.contentHash ?? null,
+                                quotedCharacterCount:
+                                    Number(
+                                        jobData.quotedCharacterCount ?? 0,
+                                    ) || 0,
+                                characterMultiplier:
+                                    Number(
+                                        jobData.characterMultiplier ?? 0,
+                                    ) || 0,
+                            };
                             const globalCacheRef = db.collection('global_translations').doc(cacheKey);
                             await db.runTransaction(async (t) => {
                                 const snap = await t.get(globalCacheRef);
@@ -115,6 +144,14 @@ export const pollBatchJobs = onSchedule({
                                         } : {}),
                                         ...(actorEmail ? { lastUserEmail: actorEmail } : {}),
                                         ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                        ...(translationCreditType
+                                            ? {
+                                                translationCreditType,
+                                                'a_meta.creditType':
+                                                    translationCreditType,
+                                            }
+                                            : {}),
+                                        appCharge,
                                         ...globalTranslationAppChargeFields(chargedTokens, false),
                                     });
                                 } else {
@@ -137,6 +174,17 @@ export const pollBatchJobs = onSchedule({
                                         } : {}),
                                         ...(actorEmail ? { creatorEmail: actorEmail, lastUserEmail: actorEmail } : {}),
                                         ...(jobAppVersion ? { appVersion: jobAppVersion } : {}),
+                                        ...(translationCreditType
+                                            ? {
+                                                translationCreditType,
+                                                a_meta: {
+                                                    creditType:
+                                                        translationCreditType,
+                                                    usageCount: 1,
+                                                },
+                                            }
+                                            : {}),
+                                        appCharge,
                                         ...globalTranslationAppChargeFields(chargedTokens, true),
                                     });
                                 }

@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 import {
+    meetsMinimumVersion,
     shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
     shouldUseV163AdRewardRules,
@@ -21,6 +22,23 @@ import {
     withGoogleLoginGrantSpend,
     type TokenChargeMode,
 } from './tokenWallet';
+import {
+    ensureGrantLotsConsistentInTx,
+    expireDueGrantLotsInTx,
+    loadActiveGrantLots,
+    loadGoogleLoginGrantLots,
+    reconcileSubscriptionGrantRemainingFromLots,
+    recordGrantLotInTx,
+    spendGrantLotsFifoInTx,
+    sumActiveLotRemainingBySources,
+    type GrantLotDoc,
+} from './tokenGrantLots';
+import {
+    translationContentHash,
+    TRANSLATION_QUOTE_MIN_DESKTOP_VERSION,
+    TRANSLATION_QUOTE_MIN_MOBILE_VERSION,
+    TRANSLATION_QUOTE_PROTOCOL_VERSION,
+} from '../ai/translationQuote';
 
 const STARTER_BONUS = 5;
 
@@ -95,11 +113,38 @@ type ConsumeCreditArgs = {
     allowAutoApproveSession?: boolean;
     charCount?: number | null;
     estimatedTokens?: number | null;
+    quoteProtocolVersion?: number | null;
+    quoteId?: string | null;
+    contentHash?: string | null;
+    sourceContent?: string | null;
 };
 
 export function normalizePlatform(platform?: string | null): string {
     const value = (platform ?? '').trim().toLowerCase();
     return value.length === 0 ? 'unknown' : value;
+}
+
+function exactTranslationQuoteRequired(
+    platform: string,
+    appVersion?: string | null,
+): boolean {
+    if (platform === 'android' || platform === 'ios') {
+        return meetsMinimumVersion(
+            appVersion,
+            TRANSLATION_QUOTE_MIN_MOBILE_VERSION,
+        );
+    }
+    if (
+        platform === 'windows'
+        || platform === 'macos'
+        || platform === 'linux'
+    ) {
+        return meetsMinimumVersion(
+            appVersion,
+            TRANSLATION_QUOTE_MIN_DESKTOP_VERSION,
+        );
+    }
+    return false;
 }
 
 export function getAuthEmail(auth?: AuthLike): string | null {
@@ -302,8 +347,10 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
     let googleLoginCredits = 0;
     let isPaidUser = false;
     let userData: Record<string, unknown> = {};
+    let googleLoginGrantLots: GrantLotDoc[] | undefined;
     if (uid) {
-        const userDoc = await db.collection('users').doc(uid).get();
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
         if (userDoc.exists) {
             userData = userDoc.data() ?? {};
             if (shouldUseTokenWallet({
@@ -320,6 +367,10 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
                     uid,
                     userData,
                 });
+                if (normalizedPlatform === 'web') {
+                    googleLoginGrantLots =
+                        await loadGoogleLoginGrantLots(userRef);
+                }
             }
             const purchasedA = Number.isFinite(Number(userData.purchasedCredits)) ? Number(userData.purchasedCredits) : 0;
             const purchasedB = Number.isFinite(Number(userData.credits)) ? Number(userData.credits) : 0;
@@ -366,7 +417,10 @@ export async function loadCreditSummary({ db, uid, deviceId, platform, appVersio
     const tokenBalance = wallet?.tokenBalance ?? 0;
     const tokenGrantBalance = wallet?.tokenGrantBalance ?? 0;
     const googleLoginTokenGrantBalance = usesTokenWallet
-        ? resolveGoogleLoginTokenGrantBalance(userData)
+        ? resolveGoogleLoginTokenGrantBalance(
+            userData,
+            googleLoginGrantLots,
+        )
         : 0;
     const legacyFlatRateRemaining = wallet?.legacyFlatRateRemaining ?? 0;
     const spendableTokens = wallet
@@ -455,6 +509,10 @@ export async function consumeCreditInternal({
     allowAutoApproveSession = false,
     charCount,
     estimatedTokens,
+    quoteProtocolVersion,
+    quoteId,
+    contentHash,
+    sourceContent,
 }: ConsumeCreditArgs) {
     const reasonText = (reason ?? 'usage').trim();
     const fileNameText = (fileName ?? '').trim();
@@ -488,6 +546,30 @@ export async function consumeCreditInternal({
     }
     if (trimmedChargeKey.includes('/')) {
         throw new HttpsError('invalid-argument', 'Invalid chargeKey');
+    }
+    if (
+        Math.floor(Number(quoteProtocolVersion ?? 0)) ===
+            TRANSLATION_QUOTE_PROTOCOL_VERSION
+        && !trimmedChargeKey
+    ) {
+        throw new HttpsError(
+            'failed-precondition',
+            'Translation quote is required.',
+        );
+    }
+    if (
+        usesTokenWallet
+        && exactTranslationQuoteRequired(platformText, appVersion)
+        && (
+            !trimmedChargeKey
+            || Math.floor(Number(quoteProtocolVersion ?? 0)) !==
+                TRANSLATION_QUOTE_PROTOCOL_VERSION
+        )
+    ) {
+        throw new HttpsError(
+            'failed-precondition',
+            'TRANSLATION_QUOTE_REQUIRED',
+        );
     }
 
     return db.runTransaction(async (transaction) => {
@@ -557,9 +639,37 @@ export async function consumeCreditInternal({
             adRewardCredits = clampNonNegativeInt(existingDeviceData.adRewardCredits);
         }
 
+        let authoritativeCharCount = charCount;
+        let authoritativeEstimatedTokens = estimatedTokens;
+        let appliedQuoteProtocolVersion = 0;
+        let appliedQuoteId = '';
+        let appliedContentHash = '';
+        let appliedQuoteVersion = '';
+        let appliedCharacterMultiplier = 0;
+        let expectedQuoteChargeMode = '';
+        let expectedQuoteFromPaidTokens = 0;
+        let expectedQuoteFromGrantTokens = 0;
+
         if (sessionRef) {
             const sessionDoc = await transaction.get(sessionRef);
             const sessionData = sessionDoc.data() ?? {};
+            const sessionQuoteProtocolVersion = Math.floor(
+                Number(sessionData.quoteProtocolVersion ?? 0),
+            );
+            const exactQuoteRequired = shouldUseTokenWallet({
+                appVersion,
+                platform: platformText,
+            }) && exactTranslationQuoteRequired(platformText, appVersion);
+            if (
+                exactQuoteRequired
+                && sessionQuoteProtocolVersion !==
+                    TRANSLATION_QUOTE_PROTOCOL_VERSION
+            ) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'TRANSLATION_QUOTE_REQUIRED',
+                );
+            }
 
             if (allowAutoApproveSession) {
                 if (!sessionDoc.exists) {
@@ -574,6 +684,92 @@ export async function consumeCreditInternal({
                 if (requiresFirstChunkApproval && !approved) {
                     throw new HttpsError('failed-precondition', 'First chunk not approved by server yet.');
                 }
+            }
+
+            if (
+                sessionQuoteProtocolVersion ===
+                TRANSLATION_QUOTE_PROTOCOL_VERSION
+            ) {
+                const requestedProtocolVersion = Math.floor(
+                    Number(quoteProtocolVersion ?? 0),
+                );
+                const requestedQuoteId = String(quoteId ?? '').trim();
+                const requestedContentHash = String(contentHash ?? '').trim();
+                const quotedAppTokens = clampNonNegativeInt(
+                    sessionData.quotedAppTokens,
+                );
+                const quotedCharacterCount = clampNonNegativeInt(
+                    sessionData.quotedCharacterCount,
+                );
+                if (
+                    requestedProtocolVersion !==
+                        TRANSLATION_QUOTE_PROTOCOL_VERSION
+                    || !requestedQuoteId
+                    || requestedQuoteId !== sessionData.quoteId
+                    || !requestedContentHash
+                    || requestedContentHash !== sessionData.contentHash
+                    || quotedAppTokens <= 0
+                    || quotedCharacterCount <= 0
+                ) {
+                    throw new HttpsError(
+                        'permission-denied',
+                        'Translation quote mismatch.',
+                    );
+                }
+                if (
+                    typeof sourceContent !== 'string'
+                    || !sourceContent
+                    || translationContentHash(sourceContent) !==
+                        requestedContentHash
+                ) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'QUOTE_CONTENT_MISMATCH',
+                    );
+                }
+                const quoteExpiresAtMillis =
+                    sessionData.quoteExpiresAt?.toMillis?.() ?? 0;
+                if (
+                    sessionData.charged !== true
+                    && (
+                        !quoteExpiresAtMillis
+                        || quoteExpiresAtMillis < Date.now()
+                    )
+                ) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'TRANSLATION_QUOTE_EXPIRED',
+                    );
+                }
+                authoritativeCharCount = quotedCharacterCount;
+                authoritativeEstimatedTokens = quotedAppTokens;
+                appliedQuoteProtocolVersion =
+                    sessionQuoteProtocolVersion;
+                appliedQuoteId = requestedQuoteId;
+                appliedContentHash = requestedContentHash;
+                appliedQuoteVersion = String(
+                    sessionData.quoteVersion ?? '',
+                );
+                appliedCharacterMultiplier = Number(
+                    sessionData.characterMultiplier ?? 0,
+                );
+                expectedQuoteChargeMode = String(
+                    sessionData.chargeMode ?? '',
+                );
+                expectedQuoteFromPaidTokens = clampNonNegativeInt(
+                    sessionData.fromPaidTokens,
+                );
+                expectedQuoteFromGrantTokens = clampNonNegativeInt(
+                    sessionData.fromGrantTokens,
+                );
+            } else if (
+                Math.floor(Number(quoteProtocolVersion ?? 0)) ===
+                TRANSLATION_QUOTE_PROTOCOL_VERSION
+            ) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'Translation quote is required.',
+                );
             }
         }
 
@@ -626,6 +822,27 @@ export async function consumeCreditInternal({
                         ? Math.max(0, Number(existing.remainingLegacyFlatRateRemaining))
                         : remainingPurchasedCredits,
                     chargeMode: existing.chargeMode ?? 'credits',
+                    chargedAmount: clampNonNegativeInt(
+                        existing.amount ?? existing.chargedAmount,
+                    ),
+                    fromPaidTokens: clampNonNegativeInt(
+                        existing.fromPaidTokens,
+                    ),
+                    fromGrantTokens: clampNonNegativeInt(
+                        existing.fromGrantTokens,
+                    ),
+                    translationCreditType:
+                        existing.translationCreditType ?? null,
+                    quoteProtocolVersion:
+                        clampNonNegativeInt(existing.quoteProtocolVersion),
+                    quoteVersion: existing.quoteVersion ?? null,
+                    quoteId: existing.quoteId ?? null,
+                    contentHash: existing.contentHash ?? null,
+                    quotedCharacterCount: clampNonNegativeInt(
+                        existing.quotedCharacterCount,
+                    ),
+                    characterMultiplier:
+                        Number(existing.characterMultiplier ?? 0) || 0,
                 };
             }
         }
@@ -658,12 +875,47 @@ export async function consumeCreditInternal({
         let conversionTokenBalance = 0;
         let conversionGrantBalance = 0;
         let conversionLegacyRemaining = 0;
+        let grantAllocations: Array<{ lotId: string; amount: number; source: string }> = [];
+        let activeGrantLots: GrantLotDoc[] = [];
+        let trackedGoogleLoginGrantLots: GrantLotDoc[] = [];
 
         if (usesTokenWallet) {
-            const walletState = hydrateTokenWallet({
+            // Lot query must run with other reads before any writes.
+            if (userRef) {
+                activeGrantLots = await loadActiveGrantLots(transaction, userRef);
+                const shouldTrackGoogleLoginGrant =
+                    platformText === 'web'
+                    || userData.googleLoginTokenGrantBalance != null
+                    || userData.googleLoginBonusGranted === true
+                    || userData.loginBonusGranted === true;
+                if (shouldTrackGoogleLoginGrant) {
+                    trackedGoogleLoginGrantLots =
+                        await loadGoogleLoginGrantLots(userRef, transaction);
+                }
+            }
+            const grantNow = new Date();
+            let walletState = hydrateTokenWallet({
                 userData,
                 deviceData: existingDeviceData,
             });
+            if (userRef) {
+                activeGrantLots = ensureGrantLotsConsistentInTx(
+                    transaction,
+                    userRef,
+                    walletState,
+                    activeGrantLots,
+                    grantNow,
+                );
+                const expired = expireDueGrantLotsInTx(
+                    transaction,
+                    userRef,
+                    walletState,
+                    activeGrantLots,
+                    grantNow,
+                );
+                walletState = expired.next;
+                activeGrantLots = expired.lots;
+            }
             convertedBonusTokens = walletState.convertedBonusTokens;
             convertedAdCredits = walletState.convertedAdCredits;
             convertedFreeCredits = walletState.convertedFreeCredits;
@@ -678,6 +930,18 @@ export async function consumeCreditInternal({
                 googleLoginCredits = 0;
                 deviceCredits = 0;
             }
+            if (userRef && walletState.convertedBonusTokens > 0) {
+                const conversionLot = recordGrantLotInTx(transaction, userRef, {
+                    amount: walletState.convertedBonusTokens,
+                    source: 'legacy_conversion',
+                    originId: `legacy_conversion_${uid}`,
+                    grantedAt: grantNow,
+                    existingLots: activeGrantLots,
+                });
+                if (conversionLot && !activeGrantLots.some((lot) => lot.id === conversionLot.id)) {
+                    activeGrantLots = [...activeGrantLots, conversionLot];
+                }
+            }
             const chargePlan = planTokenWalletCharge({
                 state: walletState,
                 bonus: {
@@ -686,12 +950,17 @@ export async function consumeCreditInternal({
                     googleLoginCredits: 0,
                     deviceCredits: 0,
                 },
-                charCount,
-                estimatedTokens,
+                charCount: authoritativeCharCount,
+                estimatedTokens: authoritativeEstimatedTokens,
                 platform: platformText,
                 appVersion,
                 preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
-                googleLoginTokenGrantBalance: resolveGoogleLoginTokenGrantBalance(userData),
+                googleLoginTokenGrantBalance:
+                    resolveGoogleLoginTokenGrantBalance(
+                        userData,
+                        activeGrantLots,
+                        trackedGoogleLoginGrantLots.length > 0,
+                    ),
             });
             chargeMode = chargePlan.mode;
             chargedAmount = chargePlan.mode === 'tokens'
@@ -699,6 +968,19 @@ export async function consumeCreditInternal({
                 : 1;
             fromPaidTokens = chargePlan.fromPaidTokens;
             fromGrantTokens = chargePlan.fromGrantTokens;
+            if (
+                appliedQuoteProtocolVersion > 0
+                && (
+                    expectedQuoteChargeMode !== chargePlan.mode
+                    || expectedQuoteFromPaidTokens !== fromPaidTokens
+                    || expectedQuoteFromGrantTokens !== fromGrantTokens
+                )
+            ) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'TRANSLATION_QUOTE_BALANCE_CHANGED',
+                );
+            }
             fromPurchased = chargePlan.fromLegacy;
             fromAdReward = chargePlan.fromAdReward;
             fromFree = chargePlan.fromFree;
@@ -720,23 +1002,71 @@ export async function consumeCreditInternal({
                 0,
                 walletState.extraPurchasedCredits - extraPurchasedCredits,
             );
-            remainingTokenBalance = chargePlan.next.tokenBalance;
-            remainingTokenGrantBalance = chargePlan.next.tokenGrantBalance;
-            remainingLegacyFlatRateRemaining = chargePlan.next.legacyFlatRateRemaining;
-            const loginGrantSpent = googleLoginGrantSpendAmount({
-                platform: platformText,
-                userData,
-                tokenGrantBalance: walletState.tokenGrantBalance,
-                fromGrantTokens,
-            });
-            walletUserPatch = {
-                ...tokenWalletUserFields(chargePlan.next),
-                googleLoginTokenGrantBalance: withGoogleLoginGrantSpend(
+            const trackedSubscriptionBeforeSpend =
+                sumActiveLotRemainingBySources(
+                    activeGrantLots,
+                    ['subscription_bonus'],
+                );
+            const legacySubscriptionBeforeSpend = Math.max(
+                0,
+                walletState.subscriptionTokenGrantRemaining
+                    - trackedSubscriptionBeforeSpend,
+            );
+            if (userRef && fromGrantTokens > 0) {
+                const spentLots = spendGrantLotsFifoInTx(
+                    transaction,
+                    userRef,
+                    activeGrantLots,
+                    fromGrantTokens,
+                    grantNow,
+                );
+                activeGrantLots = spentLots.lots;
+                grantAllocations = spentLots.allocations;
+            }
+            const sourceAwareWalletState =
+                reconcileSubscriptionGrantRemainingFromLots(
+                    {
+                        ...chargePlan.next,
+                        // applyTokenSpend cannot see FIFO lot sources. Preserve
+                        // the pre-spend slice and rebuild it from updated lots.
+                        subscriptionTokenGrantRemaining:
+                            walletState.subscriptionTokenGrantRemaining,
+                    },
+                    activeGrantLots,
+                    {
+                        legacyUnattributedLimit:
+                            legacySubscriptionBeforeSpend,
+                    },
+                );
+            remainingTokenBalance = sourceAwareWalletState.tokenBalance;
+            remainingTokenGrantBalance = sourceAwareWalletState.tokenGrantBalance;
+            remainingLegacyFlatRateRemaining =
+                sourceAwareWalletState.legacyFlatRateRemaining;
+            const googleLoginLotTrackingKnown =
+                trackedGoogleLoginGrantLots.length > 0
+                || activeGrantLots.some(
+                    (lot) => String(lot.source).trim().toLowerCase() ===
+                        'google_login_bonus',
+                );
+            const loginGrantSpent = googleLoginLotTrackingKnown
+                ? 0
+                : googleLoginGrantSpendAmount({
+                    platform: platformText,
                     userData,
-                    loginGrantSpent,
-                ),
+                    tokenGrantBalance: walletState.tokenGrantBalance,
+                    fromGrantTokens,
+                });
+            walletUserPatch = {
+                ...tokenWalletUserFields(sourceAwareWalletState),
+                googleLoginTokenGrantBalance: googleLoginLotTrackingKnown
+                    ? resolveGoogleLoginTokenGrantBalance(
+                        userData,
+                        activeGrantLots,
+                        true,
+                    )
+                    : withGoogleLoginGrantSpend(userData, loginGrantSpent),
             };
-            walletDevicePatch = tokenWalletDeviceFields(chargePlan.next);
+            walletDevicePatch = tokenWalletDeviceFields(sourceAwareWalletState);
         } else {
             if (currentTotal < amount) {
                 throw new HttpsError(
@@ -780,6 +1110,21 @@ export async function consumeCreditInternal({
             if (googleLoginCredits < 0) googleLoginCredits = 0;
         }
 
+        const translationCreditType =
+            chargeMode === 'paid_file'
+            || fromPurchased > 0
+            || fromPaidTokens > 0
+                ? 'paid'
+                : (
+                    chargeMode === 'bonus_file'
+                    || fromAdReward > 0
+                    || fromFree > 0
+                    || fromGoogleLogin > 0
+                    || fromDevice > 0
+                    || fromGrantTokens > 0
+                        ? 'free'
+                        : null
+                );
         const accessExpiry = admin.firestore.Timestamp.fromMillis(Date.now() + (3 * 60 * 60 * 1000));
 
         const deviceBonusUpdateData: Record<string, any> = {
@@ -866,6 +1211,17 @@ export async function consumeCreditInternal({
                 remainingTokenGrantBalance,
                 remainingLegacyFlatRateRemaining,
                 chargeMode,
+                translationCreditType,
+                quoteProtocolVersion: appliedQuoteProtocolVersion || null,
+                quoteVersion: appliedQuoteVersion || null,
+                quoteId: appliedQuoteId || null,
+                contentHash: appliedContentHash || null,
+                quotedCharacterCount:
+                    appliedQuoteProtocolVersion > 0
+                        ? clampNonNegativeInt(authoritativeCharCount)
+                        : null,
+                characterMultiplier:
+                    appliedCharacterMultiplier || null,
             });
 
             transaction.set(userRef.collection('credit_transactions').doc(usageRef.id), {
@@ -890,7 +1246,18 @@ export async function consumeCreditInternal({
                         : (fromAdReward > 0 ? 'ad_reward' : 'free')),
                 fromPaidTokens,
                 fromGrantTokens,
+                grantAllocations: grantAllocations.length > 0 ? grantAllocations : null,
                 estimatedTokens: chargeMode === 'tokens' ? chargedAmount : 0,
+                quotedCharacterCount:
+                    appliedQuoteProtocolVersion > 0
+                        ? clampNonNegativeInt(authoritativeCharCount)
+                        : null,
+                characterMultiplier:
+                    appliedCharacterMultiplier || null,
+                quoteProtocolVersion: appliedQuoteProtocolVersion || null,
+                quoteVersion: appliedQuoteVersion || null,
+                quoteId: appliedQuoteId || null,
+                contentHash: appliedContentHash || null,
                 fromSubscriptionPurchased,
                 fromExtraPurchased,
                 fromAdReward,
@@ -919,6 +1286,21 @@ export async function consumeCreditInternal({
                 targetLanguage: targetLanguageText || null,
                 platform: platformText || null,
                 charged: true,
+                chargedAmount,
+                chargeMode,
+                fromPaidTokens,
+                fromGrantTokens,
+                translationCreditType,
+                quoteProtocolVersion: appliedQuoteProtocolVersion || null,
+                quoteVersion: appliedQuoteVersion || null,
+                quoteId: appliedQuoteId || null,
+                contentHash: appliedContentHash || null,
+                quotedCharacterCount:
+                    appliedQuoteProtocolVersion > 0
+                        ? clampNonNegativeInt(authoritativeCharCount)
+                        : null,
+                characterMultiplier:
+                    appliedCharacterMultiplier || null,
                 chargedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
             };
@@ -949,6 +1331,20 @@ export async function consumeCreditInternal({
                 remainingTokenGrantBalance,
                 remainingLegacyFlatRateRemaining,
                 chargeMode,
+                chargedAmount,
+                fromPaidTokens,
+                fromGrantTokens,
+                translationCreditType,
+                quoteProtocolVersion: appliedQuoteProtocolVersion || null,
+                quoteVersion: appliedQuoteVersion || null,
+                quoteId: appliedQuoteId || null,
+                contentHash: appliedContentHash || null,
+                quotedCharacterCount:
+                    appliedQuoteProtocolVersion > 0
+                        ? clampNonNegativeInt(authoritativeCharCount)
+                        : null,
+                characterMultiplier:
+                    appliedCharacterMultiplier || null,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
         }
@@ -966,6 +1362,18 @@ export async function consumeCreditInternal({
             remainingLegacyFlatRateRemaining,
             chargeMode,
             chargedAmount,
+            fromPaidTokens,
+            fromGrantTokens,
+            translationCreditType,
+            quoteProtocolVersion: appliedQuoteProtocolVersion,
+            quoteVersion: appliedQuoteVersion || null,
+            quoteId: appliedQuoteId || null,
+            contentHash: appliedContentHash || null,
+            quotedCharacterCount:
+                appliedQuoteProtocolVersion > 0
+                    ? clampNonNegativeInt(authoritativeCharCount)
+                    : 0,
+            characterMultiplier: appliedCharacterMultiplier,
         };
     });
 }

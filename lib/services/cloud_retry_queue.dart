@@ -77,6 +77,7 @@ class CloudRetryQueue {
     Map<String, dynamic>? cost,
     int chargedTokens = 0,
     String? appVersion,
+    Map<String, dynamic>? chargeReceipt,
   }) async {
     await init();
     _queue.add({
@@ -94,6 +95,8 @@ class CloudRetryQueue {
         'chargedTokens': chargedTokens < 0 ? 0 : chargedTokens,
         if (appVersion != null && appVersion.trim().isNotEmpty)
           'appVersion': appVersion.trim(),
+        if (chargeReceipt != null && chargeReceipt.isNotEmpty)
+          'chargeReceipt': chargeReceipt,
       },
       'attempt': 0,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -205,6 +208,8 @@ class CloudRetryQueue {
               cost: (payload['cost'] as Map?)?.cast<String, dynamic>(),
               chargedTokens: chargedTokens < 0 ? 0 : chargedTokens,
               appVersion: payload['appVersion'] as String?,
+              chargeReceipt:
+                  (payload['chargeReceipt'] as Map?)?.cast<String, dynamic>(),
             );
           } else if (type == 'addToUserHistory') {
             final translatedLinesRaw = payload['translatedLines'];

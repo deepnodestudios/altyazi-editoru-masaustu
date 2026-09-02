@@ -1,12 +1,16 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { meetsVersionRequirement, grantFreeCredits, REFERRAL_REWARD } from './referralUtils';
+import { meetsVersionRequirement, REFERRAL_REWARD } from './referralUtils';
 import { assertFreeRewardsAllowed } from '../billing/regionPolicy';
 import {
   REFERRAL_TOKENS,
-  grantWalletTokens,
+  grantWalletTokensInTx,
   shouldUseTokenWallet,
 } from '../billing/tokenWallet';
+import {
+  loadActiveGrantLots,
+  type GrantLotDoc,
+} from '../billing/tokenGrantLots';
 
 interface ClaimReferralData {
   referralCode: string;
@@ -15,6 +19,33 @@ interface ClaimReferralData {
   platform?: string;
   countryCodes?: string[];
   timeZoneOffsetMinutes?: number;
+}
+
+function grantReferralCreditsInTx(args: {
+  tx: FirebaseFirestore.Transaction;
+  userRef: FirebaseFirestore.DocumentReference;
+  userData: FirebaseFirestore.DocumentData;
+  amount: number;
+  reason: string;
+  metadata: Record<string, unknown>;
+  auditId: string;
+}): void {
+  const currentFreeRaw = Number(args.userData.freeCredits ?? 0);
+  const currentFree = Number.isFinite(currentFreeRaw)
+    ? Math.max(0, Math.floor(currentFreeRaw))
+    : 0;
+  args.tx.set(args.userRef, {
+    freeCredits: currentFree + args.amount,
+  }, { merge: true });
+  args.tx.set(args.userRef.collection('credit_transactions').doc(args.auditId), {
+    type: 'add',
+    amount: args.amount,
+    reason: args.reason,
+    source: 'referral',
+    creditType: 'free',
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    ...args.metadata,
+  });
 }
 
 /**
@@ -65,112 +96,155 @@ export const claimReferral = onCall<ClaimReferralData>(
       appVersion,
     });
 
-    // 1. Validate referral code exists
     const codeRef = db.collection('referral_codes').doc(trimmedCode);
-    const codeDoc = await codeRef.get();
-    if (!codeDoc.exists) {
-      throw new HttpsError('not-found', 'REFERRAL_CODE_NOT_FOUND');
-    }
-
-    const codeData = codeDoc.data()!;
-    const referrerUid = codeData.ownerUid;
-
-    // Cannot use own code
-    if (referrerUid === auth.uid) {
-      throw new HttpsError('failed-precondition', 'CANNOT_USE_OWN_CODE');
-    }
-
-    // 2. Device fraud check: each device can only claim once
     const deviceClaimRef = db.collection('referral_device_claims').doc(trimmedDeviceId);
-    const deviceClaimDoc = await deviceClaimRef.get();
-    if (deviceClaimDoc.exists) {
-      throw new HttpsError('already-exists', 'DEVICE_ALREADY_CLAIMED');
-    }
-
-    // 3. User can only claim one referral code ever
-    const userClaimQuery = await db.collection('referral_claims')
+    const userClaimRef = db.collection('referral_claims_by_user').doc(auth.uid);
+    const legacyUserClaimQuery = db.collection('referral_claims')
       .where('claimerUid', '==', auth.uid)
-      .limit(1)
-      .get();
-    if (!userClaimQuery.empty) {
-      throw new HttpsError('already-exists', 'USER_ALREADY_CLAIMED');
-    }
-
-    // 4. All checks passed — grant rewards atomically
+      .limit(1);
     const claimRef = db.collection('referral_claims').doc();
-    const batch = db.batch();
-
-    // Record the claim
-    batch.set(claimRef, {
-      referralCode: trimmedCode,
-      referrerUid,
-      claimerUid: auth.uid,
-      claimerEmail: user.email ?? null,
-      deviceId: trimmedDeviceId,
-      claimedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Record device claim (fraud prevention)
-    batch.set(deviceClaimRef, {
-      claimerUid: auth.uid,
-      referralCode: trimmedCode,
-      claimedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Increment total claims on the code
-    batch.update(codeRef, {
-      totalClaims: admin.firestore.FieldValue.increment(1),
-    });
-
-    await batch.commit();
-
     const useWallet = shouldUseTokenWallet({ appVersion, platform });
-    if (useWallet) {
-      await Promise.all([
-        grantWalletTokens({
-          db,
+    const result = await db.runTransaction(async (tx) => {
+      // Read the code first because it identifies the second wallet owner.
+      const codeDoc = await tx.get(codeRef);
+      if (!codeDoc.exists) {
+        throw new HttpsError('not-found', 'REFERRAL_CODE_NOT_FOUND');
+      }
+      const referrerUid = String(codeDoc.data()?.ownerUid ?? '').trim();
+      if (!referrerUid) {
+        throw new HttpsError('failed-precondition', 'REFERRER_NOT_FOUND');
+      }
+      if (referrerUid === auth.uid) {
+        throw new HttpsError('failed-precondition', 'CANNOT_USE_OWN_CODE');
+      }
+
+      const claimerRef = db.collection('users').doc(auth.uid);
+      const referrerRef = db.collection('users').doc(referrerUid);
+
+      // Firestore transactions require every read before the first write.
+      const deviceClaimDoc = await tx.get(deviceClaimRef);
+      const userClaimDoc = await tx.get(userClaimRef);
+      const legacyUserClaim = await tx.get(legacyUserClaimQuery);
+      const claimerDoc = await tx.get(claimerRef);
+      const referrerDoc = await tx.get(referrerRef);
+      let claimerLots: GrantLotDoc[] = [];
+      let referrerLots: GrantLotDoc[] = [];
+      if (useWallet) {
+        claimerLots = await loadActiveGrantLots(tx, claimerRef);
+        referrerLots = await loadActiveGrantLots(tx, referrerRef);
+      }
+
+      if (deviceClaimDoc.exists) {
+        throw new HttpsError('already-exists', 'DEVICE_ALREADY_CLAIMED');
+      }
+      if (userClaimDoc.exists || !legacyUserClaim.empty) {
+        throw new HttpsError('already-exists', 'USER_ALREADY_CLAIMED');
+      }
+
+      const claimedAt = admin.firestore.FieldValue.serverTimestamp();
+      const claimData = {
+        claimId: claimRef.id,
+        referralCode: trimmedCode,
+        referrerUid,
+        claimerUid: auth.uid,
+        claimerEmail: user.email ?? null,
+        deviceId: trimmedDeviceId,
+        claimedAt,
+      };
+      tx.create(claimRef, claimData);
+      tx.create(deviceClaimRef, {
+        claimId: claimRef.id,
+        claimerUid: auth.uid,
+        referralCode: trimmedCode,
+        claimedAt,
+      });
+      tx.create(userClaimRef, claimData);
+      tx.update(codeRef, {
+        totalClaims: admin.firestore.FieldValue.increment(1),
+      });
+
+      const claimerData = claimerDoc.exists ? (claimerDoc.data() ?? {}) : {};
+      const referrerData = referrerDoc.exists ? (referrerDoc.data() ?? {}) : {};
+      if (useWallet) {
+        const now = new Date();
+        const claimerOriginId = `referral_claim_${claimRef.id}`;
+        const referrerOriginId = `referral_reward_${claimRef.id}`;
+        grantWalletTokensInTx({
+          tx,
+          userRef: claimerRef,
           uid: auth.uid,
+          userData: claimerData,
           tokens: REFERRAL_TOKENS,
           reason: 'referral_claim',
           source: 'referral',
           asGrant: true,
-          metadata: { referralCode: trimmedCode, role: 'claimer' },
-        }),
-        grantWalletTokens({
-          db,
+          grantOriginId: claimerOriginId,
+          metadata: {
+            referralCode: trimmedCode,
+            role: 'claimer',
+            originId: claimerOriginId,
+          },
+          activeGrantLots: claimerLots,
+          now,
+        });
+        grantWalletTokensInTx({
+          tx,
+          userRef: referrerRef,
           uid: referrerUid,
+          userData: referrerData,
           tokens: REFERRAL_TOKENS,
           reason: 'referral_reward',
           source: 'referral',
           asGrant: true,
-          metadata: { referralCode: trimmedCode, role: 'referrer', claimerUid: auth.uid },
-        }),
-      ]);
-      console.log(`✅ Referral claimed (tokens): code=${trimmedCode}, claimer=${auth.uid}, referrer=${referrerUid}`);
-      return { success: true, creditsAwarded: 0, tokensAwarded: REFERRAL_TOKENS };
+          grantOriginId: referrerOriginId,
+          metadata: {
+            referralCode: trimmedCode,
+            role: 'referrer',
+            claimerUid: auth.uid,
+            originId: referrerOriginId,
+          },
+          activeGrantLots: referrerLots,
+          now,
+        });
+      } else {
+        grantReferralCreditsInTx({
+          tx,
+          userRef: claimerRef,
+          userData: claimerData,
+          amount: REFERRAL_REWARD,
+          reason: 'referral_claim',
+          metadata: { referralCode: trimmedCode, role: 'claimer' },
+          auditId: `referral_claim_${claimRef.id}`,
+        });
+        grantReferralCreditsInTx({
+          tx,
+          userRef: referrerRef,
+          userData: referrerData,
+          amount: REFERRAL_REWARD,
+          reason: 'referral_reward',
+          metadata: {
+            referralCode: trimmedCode,
+            role: 'referrer',
+            claimerUid: auth.uid,
+          },
+          auditId: `referral_reward_${claimRef.id}`,
+        });
+      }
+
+      return { referrerUid };
+    });
+
+    console.log(
+      `✅ Referral claimed${useWallet ? ' (tokens)' : ''}: `
+      + `code=${trimmedCode}, claimer=${auth.uid}, referrer=${result.referrerUid}`,
+    );
+    if (useWallet) {
+      return {
+        success: true,
+        creditsAwarded: 0,
+        tokensAwarded: REFERRAL_TOKENS,
+      };
     }
-
-    // Grant free credits to both parties (non-transactional, idempotent via audit)
-    await Promise.all([
-      grantFreeCredits({
-        db,
-        uid: auth.uid,
-        amount: REFERRAL_REWARD,
-        reason: 'referral_claim',
-        source: 'referral',
-        metadata: { referralCode: trimmedCode, role: 'claimer' },
-      }),
-      grantFreeCredits({
-        db,
-        uid: referrerUid,
-        amount: REFERRAL_REWARD,
-        reason: 'referral_reward',
-        source: 'referral',
-        metadata: { referralCode: trimmedCode, role: 'referrer', claimerUid: auth.uid },
-      }),
-    ]);
-
-    console.log(`✅ Referral claimed: code=${trimmedCode}, claimer=${auth.uid}, referrer=${referrerUid}`);
     return { success: true, creditsAwarded: REFERRAL_REWARD, tokensAwarded: 0 };
   }
 );

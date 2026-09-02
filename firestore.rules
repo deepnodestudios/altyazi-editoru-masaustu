@@ -34,6 +34,23 @@ service cloud.firestore {
             && request.resource.data.creatorEmail.size() > 0));
     }
 
+    function isLegacyCacheWrite() {
+      return request.resource.data.keys().hasOnly([
+          'sourceHash',
+          'translatedContent',
+          'originalName',
+          'targetLanguage',
+          'encoding',
+          'createdAt',
+          'createdBy'
+        ])
+        && ('translatedContent' in request.resource.data)
+        && ('targetLanguage' in request.resource.data)
+        && ('sourceHash' in request.resource.data)
+        && (!('creatorDeviceId' in request.resource.data))
+        && (!('completedPlatform' in request.resource.data));
+    }
+
     // Global translations (shared cache)
     match /global_translations/{translationId} {
       allow read: if isSignedIn();
@@ -41,14 +58,30 @@ service cloud.firestore {
       // Create new cache entries from clients (including anonymous users).
       allow create: if isSignedIn()
         && encodingAllowed()
-        && ('translatedContent' in request.resource.data)
-        && ('targetLanguage' in request.resource.data)
-        && ('sourceHash' in request.resource.data)
-        && hasRequiredCacheIdentity();
+        && ((('translatedContent' in request.resource.data)
+          && ('targetLanguage' in request.resource.data)
+          && ('sourceHash' in request.resource.data)
+          && hasRequiredCacheIdentity())
+          || isLegacyCacheWrite());
 
       // Allow only lightweight usage tracking updates; prevent overwriting translation content.
       allow update: if isSignedIn()
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['usageCount', 'lastUsedAt', 'platforms', 'completedPlatform', 'deviceIds', 'lastDeviceId', 'lastUserEmail']);
+        && (request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'usageCount',
+          'lastUsedAt',
+          'platforms',
+          'completedPlatform',
+          'deviceIds',
+          'lastDeviceId',
+          'lastUserEmail',
+          'chargedTokens',
+          'totalChargedTokens',
+          'translationCreditType',
+          'a_meta',
+          'appCharge',
+          'appVersion',
+        ])
+          || isLegacyCacheWrite());
       allow delete: if false;
     }
 
@@ -70,7 +103,8 @@ service cloud.firestore {
           'lastSignIn',
           'lastAppOpen',
           'platforms',
-          'lastPlatform'
+          'lastPlatform',
+          'appLanguage'
         ]);
 
       allow delete: if false;
@@ -102,6 +136,12 @@ service cloud.firestore {
         allow write, delete: if false;
       }
 
+      // Bonus token lots (30-day TTL). Cloud Functions only write.
+      match /token_grant_lots/{lotId} {
+        allow read: if isOwner(userId);
+        allow write, delete: if false;
+      }
+
       // Device-scoped credits (starter bonus and other non-transferable credits)
       // Readable by the owner so the app can show device-only remaining credits.
       // Written by Cloud Functions only.
@@ -128,6 +168,48 @@ service cloud.firestore {
       allow update: if isOwner(userId) 
         && (!('credits' in request.resource.data) || request.resource.data.credits == resource.data.credits)
         && (!('purchasedCredits' in request.resource.data) || request.resource.data.purchasedCredits == resource.data.purchasedCredits);
+    }
+
+    // ── Referral System (v1.6.0+) ──
+    // Cloud Functions only — clients cannot tamper with referral data
+    match /referral_codes/{codeId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /referral_claims/{claimId} {
+      allow read, write: if false;
+    }
+
+    match /referral_claims_by_user/{userId} {
+      allow read, write: if false;
+    }
+
+    match /referral_device_claims/{deviceId} {
+      allow read, write: if false;
+    }
+
+    // ── Subscriptions (v1.6.0+) ──
+    match /subscriptions/{subId} {
+      allow read, write: if false;
+    }
+
+    // ── Monthly Bonuses (v1.6.0+) ──
+    match /monthly_bonuses/{bonusId} {
+      allow read, write: if false;
+    }
+
+    // ── Daily Ad Usage (v1.6.0+) ──
+    match /daily_ad_usage/{usageId} {
+      allow read, write: if false;
+    }
+
+    // ── FCM Tokens (v1.6.0+) ──
+    match /fcm_tokens/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt']);
+      allow delete: if false;
     }
 
     // Desktop install telemetry (anonymous auth OK)

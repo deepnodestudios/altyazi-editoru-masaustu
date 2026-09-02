@@ -19,6 +19,9 @@ import {
     shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
 } from '../referral/referralUtils';
+import {
+    TRANSLATION_QUOTE_PROTOCOL_VERSION,
+} from './translationQuote';
 
 type CheckTranslationAccessData = {
     deviceId?: string;
@@ -31,6 +34,9 @@ type CheckTranslationAccessData = {
     preferFreeCreditsFirst?: boolean;
     charCount?: number;
     estimatedTokens?: number;
+    quoteProtocolVersion?: number;
+    quoteId?: string;
+    contentHash?: string;
 };
 
 export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppCheck: false }, async (request: CallableRequest<CheckTranslationAccessData>) => {
@@ -55,14 +61,80 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
     const preferFreeCreditsFirst = paidCreditsOnly
         ? false
         : request.data.preferFreeCreditsFirst === true;
-    const charCount = request.data.charCount;
-    const estimatedTokens = request.data.estimatedTokens;
+    const quoteProtocolVersion = Math.floor(
+        Number(request.data.quoteProtocolVersion ?? 0),
+    );
+    const usesExactQuote =
+        quoteProtocolVersion === TRANSLATION_QUOTE_PROTOCOL_VERSION;
+    let charCount = request.data.charCount;
+    let estimatedTokens = request.data.estimatedTokens;
+    let quoteSessionData: FirebaseFirestore.DocumentData | null = null;
 
     if (chargeKey.includes('/')) {
         throw new HttpsError('invalid-argument', 'Invalid chargeKey');
     }
 
     const db = admin.firestore();
+    if (usesExactQuote) {
+        if (!chargeKey) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Translation quote is required.',
+            );
+        }
+        const quoteSessionSnap = await db
+            .collection('device_bonuses')
+            .doc(deviceId)
+            .collection('translation_sessions')
+            .doc(chargeKey)
+            .get();
+        const data = quoteSessionSnap.data() ?? {};
+        const requestedQuoteId = String(request.data.quoteId ?? '').trim();
+        const requestedContentHash = String(
+            request.data.contentHash ?? '',
+        ).trim();
+        if (
+            !quoteSessionSnap.exists
+            || data.uid !== request.auth.uid
+            || !requestedQuoteId
+            || data.quoteId !== requestedQuoteId
+            || !requestedContentHash
+            || data.contentHash !== requestedContentHash
+        ) {
+            throw new HttpsError(
+                'permission-denied',
+                'Translation quote mismatch.',
+            );
+        }
+        const expiryMillis = data.quoteExpiresAt?.toMillis?.() ?? 0;
+        if (
+            data.charged !== true
+            && (!expiryMillis || expiryMillis < Date.now())
+        ) {
+            throw new HttpsError(
+                'failed-precondition',
+                'TRANSLATION_QUOTE_EXPIRED',
+            );
+        }
+        const quotedAppTokens = Math.max(
+            0,
+            Math.floor(Number(data.quotedAppTokens ?? 0)),
+        );
+        const quotedCharacterCount = Math.max(
+            0,
+            Math.floor(Number(data.quotedCharacterCount ?? 0)),
+        );
+        if (quotedAppTokens <= 0 || quotedCharacterCount <= 0) {
+            throw new HttpsError(
+                'failed-precondition',
+                'Translation quote is invalid.',
+            );
+        }
+        quoteSessionData = data;
+        charCount = quotedCharacterCount;
+        estimatedTokens = quotedAppTokens;
+    }
+
     const summary = await loadCreditSummary({
         db,
         uid: request.auth.uid,
@@ -89,7 +161,7 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             summary.legacyFlatRateRemaining <= 0
             && bonusFiles <= 0
             && spendableTokens <= 0
-            && !summary.accessActive
+            && !(summary.accessActive && !usesExactQuote)
         ) {
             throw new HttpsError('failed-precondition', 'INSUFFICIENT_CREDIT');
         }
@@ -101,14 +173,18 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         appVersion,
         platform,
     });
+    const supportsRewardedAd =
+        platform === 'android' || platform === 'ios';
 
     let requiresRewardedAd = false;
     let translationCreditType: 'paid' | 'free' | null = null;
     let usesAdRewardCredits = false;
     let chargeMode: string = 'credits';
     let plannedEstimatedTokens = 0;
+    let plannedFromPaidTokens = 0;
+    let plannedFromGrantTokens = 0;
 
-    if (summary.usesTokenWallet && !summary.accessActive) {
+    if (summary.usesTokenWallet) {
         const userSnap = await db.collection('users').doc(request.auth.uid).get();
         const chargePlan = planTokenWalletCharge({
             state: {
@@ -134,11 +210,15 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         });
         chargeMode = chargePlan.mode;
         plannedEstimatedTokens = chargePlan.estimatedTokens;
+        plannedFromPaidTokens = chargePlan.fromPaidTokens;
+        plannedFromGrantTokens = chargePlan.fromGrantTokens;
         requiresRewardedAd = !paidCreditsOnly
+            && supportsRewardedAd
             && isModernClient
             && tokenChargeRequiresRewardedAd(chargePlan);
         usesAdRewardCredits = chargePlan.fromAdReward > 0;
-        translationCreditType = meetsMinimumVersion(appVersion, '1.6.4')
+        translationCreditType = (usesExactQuote
+            || meetsMinimumVersion(appVersion, '1.6.4'))
             ? (chargePlan.mode === 'paid_file' || chargePlan.fromPaidTokens > 0
                 ? 'paid'
                 : 'free')
@@ -158,17 +238,53 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         });
 
         requiresRewardedAd = !paidCreditsOnly &&
+            supportsRewardedAd &&
             isModernClient &&
             !summary.accessActive &&
             (usagePlan.fromFree + usagePlan.fromGoogleLogin + usagePlan.fromDevice) > 0;
         usesAdRewardCredits = usagePlan.fromAdReward > 0;
-        translationCreditType = meetsMinimumVersion(appVersion, '1.6.4')
+        translationCreditType = (usesExactQuote
+            || meetsMinimumVersion(appVersion, '1.6.4'))
             ? (usagePlan.fromPurchased > 0
                 ? 'paid'
                 : ((usagePlan.fromAdReward + usagePlan.fromFree + usagePlan.fromGoogleLogin + usagePlan.fromDevice) > 0
                     ? 'free'
                     : null))
             : null;
+    }
+
+    if (usesExactQuote && quoteSessionData != null) {
+        const quotedChargeMode = String(
+            quoteSessionData.quotedChargeMode ?? '',
+        );
+        const quotedFromPaidTokens = Math.max(
+            0,
+            Math.floor(Number(
+                quoteSessionData.quotedFromPaidTokens ?? 0,
+            )),
+        );
+        const quotedFromGrantTokens = Math.max(
+            0,
+            Math.floor(Number(
+                quoteSessionData.quotedFromGrantTokens ?? 0,
+            )),
+        );
+        const quotedCreditType =
+            quoteSessionData.quotedTranslationCreditType ?? null;
+        if (
+            quoteSessionData.quotedSufficient !== true
+            || quotedChargeMode !== chargeMode
+            || quotedFromPaidTokens !== plannedFromPaidTokens
+            || quotedFromGrantTokens !== plannedFromGrantTokens
+            || quoteSessionData.quotedRequiresRewardedAd !==
+                requiresRewardedAd
+            || quotedCreditType !== translationCreditType
+        ) {
+            throw new HttpsError(
+                'failed-precondition',
+                'TRANSLATION_QUOTE_BALANCE_CHANGED',
+            );
+        }
     }
 
     if (requiresRewardedAd && !useRewardedAd) {
@@ -183,7 +299,9 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             .doc(chargeKey);
 
         const existingSessionSnap = await sessionRef.get();
-        const existingSessionData = existingSessionSnap.data() ?? {};
+        const existingSessionData = existingSessionSnap.data()
+            ?? quoteSessionData
+            ?? {};
         const alreadyCharged = existingSessionSnap.exists && existingSessionData.charged === true;
 
         await sessionRef.set({
@@ -207,6 +325,22 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             charCount: charCount ?? existingSessionData.charCount ?? null,
             estimatedTokens: plannedEstimatedTokens || existingSessionData.estimatedTokens || null,
             chargeMode,
+            fromPaidTokens: plannedFromPaidTokens,
+            fromGrantTokens: plannedFromGrantTokens,
+            ...(usesExactQuote
+                ? {
+                    quoteProtocolVersion,
+                    quoteId: existingSessionData.quoteId,
+                    contentHash: existingSessionData.contentHash,
+                    quotedCharacterCount:
+                        existingSessionData.quotedCharacterCount,
+                    characterMultiplier:
+                        existingSessionData.characterMultiplier,
+                    quotedAppTokens: existingSessionData.quotedAppTokens,
+                    quoteConfirmedAt:
+                        admin.firestore.FieldValue.serverTimestamp(),
+                }
+                : {}),
             lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
             preparedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
@@ -231,5 +365,21 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         legacyFlatRateRemaining: summary.legacyFlatRateRemaining,
         chargeMode,
         estimatedTokens: plannedEstimatedTokens,
+        requiresRewardedAd,
+        fromPaidTokens: plannedFromPaidTokens,
+        fromGrantTokens: plannedFromGrantTokens,
+        ...(usesExactQuote
+            ? {
+                quoteProtocolVersion,
+                quoteId: quoteSessionData?.quoteId ?? null,
+                contentHash: quoteSessionData?.contentHash ?? null,
+                quotedCharacterCount:
+                    quoteSessionData?.quotedCharacterCount ?? null,
+                characterMultiplier:
+                    quoteSessionData?.characterMultiplier ?? null,
+                quotedAppTokens:
+                    quoteSessionData?.quotedAppTokens ?? plannedEstimatedTokens,
+            }
+            : {}),
     };
 });

@@ -6,6 +6,15 @@ import {
     meetsMinimumVersion,
     shouldEnforceDesktopPaidCreditsOnly,
 } from '../referral/referralUtils';
+import {
+    ensureGrantLotsConsistentInTx,
+    expireDueGrantLotsInTx,
+    GOOGLE_LOGIN_GRANT_SOURCE,
+    loadActiveGrantLots,
+    recordGrantLotInTx,
+    sumActiveLotRemainingBySources,
+    type GrantLotDoc,
+} from './tokenGrantLots';
 
 /** First token-wallet app version on **mobile** (Android/iOS). Live 1.7.9 stays 1 credit = 1 file. */
 export const MIN_TOKEN_WALLET_APP_VERSION = '1.8.0';
@@ -305,10 +314,40 @@ export function paidTokenBalance(state: Pick<TokenWalletState, 'tokenBalance' | 
  * Remaining web Google-login grant (100k). Converted ads/starter/pack bonuses
  * stay in tokenGrantBalance for mobile and are not labeled as this bonus.
  */
-export function resolveGoogleLoginTokenGrantBalance(userData: Record<string, unknown> = {}): number {
+export function resolveGoogleLoginTokenGrantBalance(
+    userData: Record<string, unknown> = {},
+    grantLots?: GrantLotDoc[],
+    hasTrackedGrantHistory = false,
+): number {
+    const lotTrackingKnown = hasTrackedGrantHistory || (
+        grantLots?.some(
+            (lot) => String(lot.source).trim().toLowerCase() ===
+                GOOGLE_LOGIN_GRANT_SOURCE,
+        ) ?? false
+    );
+    if (lotTrackingKnown) {
+        const nowMs = Date.now();
+        const unexpiredLots = (grantLots ?? []).filter(
+            (lot) => lot.status === 'active' &&
+                lot.remaining > 0 &&
+                lot.expiresAt.toMillis() > nowMs,
+        );
+        return Math.min(
+            WEB_GOOGLE_LOGIN_TOKENS,
+            sumActiveLotRemainingBySources(
+                unexpiredLots,
+                [GOOGLE_LOGIN_GRANT_SOURCE],
+            ),
+        );
+    }
+
+    const aggregateGrant = Math.min(
+        clampNonNegativeInt(userData.tokenBalance),
+        clampNonNegativeInt(userData.tokenGrantBalance),
+    );
     const explicit = userData.googleLoginTokenGrantBalance;
     if (explicit !== undefined && explicit !== null) {
-        return clampNonNegativeInt(explicit);
+        return Math.min(clampNonNegativeInt(explicit), aggregateGrant);
     }
     const granted =
         userData.googleLoginBonusGranted === true ||
@@ -316,11 +355,7 @@ export function resolveGoogleLoginTokenGrantBalance(userData: Record<string, unk
     if (!granted) {
         return 0;
     }
-    const grant = Math.min(
-        clampNonNegativeInt(userData.tokenBalance),
-        clampNonNegativeInt(userData.tokenGrantBalance),
-    );
-    return Math.min(WEB_GOOGLE_LOGIN_TOKENS, grant);
+    return Math.min(WEB_GOOGLE_LOGIN_TOKENS, aggregateGrant);
 }
 
 export function withGoogleLoginGrantSpend(
@@ -1396,6 +1431,7 @@ export async function grantWalletTokens(args: {
     asGrant: boolean;
     metadata?: Record<string, unknown>;
     deviceData?: Record<string, unknown> | null;
+    grantOriginId?: string;
 }): Promise<TokenWalletState> {
     const { db, uid, tokens, reason, source, asGrant, metadata } = args;
     const amount = clampNonNegativeInt(tokens);
@@ -1407,28 +1443,130 @@ export async function grantWalletTokens(args: {
         const userRef = db.collection('users').doc(uid);
         const userDoc = await tx.get(userRef);
         const userData = userDoc.exists ? (userDoc.data() ?? {}) : {};
-        let state = hydrateTokenWallet({
+        const activeGrantLots = asGrant
+            ? await loadActiveGrantLots(tx, userRef)
+            : [];
+        return grantWalletTokensInTx({
+            tx,
+            userRef,
+            uid,
             userData,
-            deviceData: args.deviceData ?? {},
-        });
-        state = asGrant ? addGrantTokens(state, amount) : addPurchasedTokens(state, amount);
-        tx.set(userRef, {
-            ...tokenWalletUserFields(state),
-        }, { merge: true });
-        const txRef = userRef.collection('credit_transactions').doc();
-        tx.set(txRef, {
-            type: 'add',
-            amount,
+            tokens: amount,
             reason,
             source,
-            creditType: asGrant ? 'token_grant' : 'token_purchased',
-            unit: 'token',
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            remainingTokenBalance: state.tokenBalance,
-            remainingTokenGrantBalance: state.tokenGrantBalance,
-            remainingLegacyFlatRateRemaining: state.legacyFlatRateRemaining,
-            ...(metadata ?? {}),
+            asGrant,
+            metadata,
+            deviceData: args.deviceData,
+            grantOriginId: args.grantOriginId,
+            activeGrantLots,
         });
-        return state;
     });
+}
+
+/**
+ * Grant tokens inside a caller-owned transaction. The caller must load the user
+ * and all active grant lots before any writes in that transaction.
+ */
+export function grantWalletTokensInTx(args: {
+    tx: FirebaseFirestore.Transaction;
+    userRef: FirebaseFirestore.DocumentReference;
+    uid: string;
+    userData: FirebaseFirestore.DocumentData;
+    tokens: number;
+    reason: string;
+    source: string;
+    asGrant: boolean;
+    metadata?: Record<string, unknown>;
+    deviceData?: Record<string, unknown> | null;
+    grantOriginId?: string;
+    activeGrantLots: GrantLotDoc[];
+    now?: Date;
+}): TokenWalletState {
+    const {
+        tx,
+        userRef,
+        uid,
+        userData,
+        reason,
+        source,
+        asGrant,
+        metadata,
+    } = args;
+    const amount = clampNonNegativeInt(args.tokens);
+    if (amount <= 0) {
+        throw new HttpsError('invalid-argument', 'INVALID_TOKEN_AMOUNT');
+    }
+
+    const now = args.now ?? new Date();
+    let state = hydrateTokenWallet({
+        userData,
+        deviceData: args.deviceData ?? {},
+    });
+    let lots = asGrant ? [...args.activeGrantLots] : [];
+    if (asGrant) {
+        lots = ensureGrantLotsConsistentInTx(tx, userRef, state, lots, now);
+        const expired = expireDueGrantLotsInTx(
+            tx,
+            userRef,
+            state,
+            lots,
+            now,
+        );
+        state = expired.next;
+        lots = expired.lots;
+        if (state.convertedBonusTokens > 0) {
+            const conversionLot = recordGrantLotInTx(tx, userRef, {
+                amount: state.convertedBonusTokens,
+                source: 'legacy_conversion',
+                originId: `legacy_conversion_${uid}`,
+                grantedAt: now,
+                existingLots: lots,
+            });
+            if (
+                conversionLot &&
+                !lots.some((lot) => lot.id === conversionLot.id)
+            ) {
+                lots = [...lots, conversionLot];
+            }
+        }
+        state = addGrantTokens(state, amount);
+        const originId = String(
+            args.grantOriginId
+            ?? metadata?.originId
+            ?? metadata?.referralCode
+            ?? `${source}_${reason}_${now.getTime()}`,
+        );
+        recordGrantLotInTx(tx, userRef, {
+            amount,
+            source,
+            originId,
+            grantedAt: now,
+            productId: metadata?.productId == null
+                ? null
+                : String(metadata.productId),
+            deviceId: metadata?.deviceId == null
+                ? null
+                : String(metadata.deviceId),
+            existingLots: lots,
+        });
+    } else {
+        state = addPurchasedTokens(state, amount);
+    }
+
+    tx.set(userRef, tokenWalletUserFields(state), { merge: true });
+    const txRef = userRef.collection('credit_transactions').doc();
+    tx.set(txRef, {
+        type: 'add',
+        amount,
+        reason,
+        source,
+        creditType: asGrant ? 'token_grant' : 'token_purchased',
+        unit: 'token',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        remainingTokenBalance: state.tokenBalance,
+        remainingTokenGrantBalance: state.tokenGrantBalance,
+        remainingLegacyFlatRateRemaining: state.legacyFlatRateRemaining,
+        ...(metadata ?? {}),
+    });
+    return state;
 }

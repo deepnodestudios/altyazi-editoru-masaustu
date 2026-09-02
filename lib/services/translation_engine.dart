@@ -98,6 +98,8 @@ class TranslationResumeState {
   }
 }
 
+enum _RepairCallKind { split, alignment, untranslated, wrongLanguage }
+
 class TranslationEngine {
   final GeminiService _geminiService;
   final SubtitleRepository _subtitleRepository = SubtitleRepository();
@@ -122,14 +124,64 @@ class TranslationEngine {
   String? _lastError;
   List<SubtitleBlock> _latestRealBlocks = [];
   StringBuffer fullTranslation = StringBuffer();
+  int _splitRepairCalls = 0;
+  int _alignmentRepairCalls = 0;
+  int _untranslatedRepairCalls = 0;
+  int _wrongLanguageRetries = 0;
+  int _repairBudgetInitial = 0;
+  int _repairBudgetRemaining = 0;
 
   String? get lastDetectedEncoding => _lastDetectedEncoding;
   String? get lastError => _lastError;
   List<SubtitleBlock> get latestRealBlocks => _latestRealBlocks;
 
   /// Mirrors mobile engine: usage tracked inside [GeminiService].
-  Map<String, dynamic> get usageSnapshot => _geminiService.usageSnapshot;
-  void resetUsage() => _geminiService.resetUsage();
+  Map<String, dynamic> get usageSnapshot => {
+        ..._geminiService.usageSnapshot,
+        'splitRepairCalls': _splitRepairCalls,
+        'alignmentRepairCalls': _alignmentRepairCalls,
+        'untranslatedRepairCalls': _untranslatedRepairCalls,
+        'wrongLanguageRetries': _wrongLanguageRetries,
+        'repairBudgetInitial': _repairBudgetInitial,
+        'repairBudgetRemaining': _repairBudgetRemaining,
+      };
+  void resetUsage() {
+    _geminiService.resetUsage();
+    _splitRepairCalls = 0;
+    _alignmentRepairCalls = 0;
+    _untranslatedRepairCalls = 0;
+    _wrongLanguageRetries = 0;
+    _repairBudgetInitial = 0;
+    _repairBudgetRemaining = 0;
+  }
+
+  bool _reserveRepairCall(_RepairCallKind kind, {int count = 1}) {
+    if (count <= 0) return true;
+    if (_repairBudgetRemaining < count) {
+      onLog?.call(
+        'log_repair_budget_exhausted',
+        jsonEncode({
+          'initial': _repairBudgetInitial,
+          'remaining': _repairBudgetRemaining,
+          'requested': count,
+          'kind': kind.name,
+        }),
+      );
+      return false;
+    }
+    _repairBudgetRemaining -= count;
+    switch (kind) {
+      case _RepairCallKind.split:
+        _splitRepairCalls += count;
+      case _RepairCallKind.alignment:
+        _alignmentRepairCalls += count;
+      case _RepairCallKind.untranslated:
+        _untranslatedRepairCalls += count;
+      case _RepairCallKind.wrongLanguage:
+        _wrongLanguageRetries += count;
+    }
+    return true;
+  }
 
   TranslationEngine(this._geminiService);
 
@@ -302,12 +354,22 @@ class TranslationEngine {
     List<SubtitleBlock> sourceBlocks,
     List<SubtitleBlock> translatedBlocks,
   ) {
+    final mismatched =
+        _lineAlignmentMismatchIndices(sourceBlocks, translatedBlocks);
     final n = sourceBlocks.length < translatedBlocks.length
         ? sourceBlocks.length
         : translatedBlocks.length;
-    if (n == 0) return false;
+    return n > 0 && mismatched.length >= 2 && mismatched.length / n > 0.15;
+  }
 
-    int mismatched = 0;
+  List<int> _lineAlignmentMismatchIndices(
+    List<SubtitleBlock> sourceBlocks,
+    List<SubtitleBlock> translatedBlocks,
+  ) {
+    final n = sourceBlocks.length < translatedBlocks.length
+        ? sourceBlocks.length
+        : translatedBlocks.length;
+    final mismatched = <int>[];
     for (int i = 0; i < n; i++) {
       final srcLines = sourceBlocks[i].text
           .split('\n')
@@ -317,25 +379,30 @@ class TranslationEngine {
           .split('\n')
           .where((l) => l.trim().isNotEmpty)
           .length;
-      if (srcLines != dstLines) mismatched++;
+      if (srcLines != dstLines) mismatched.add(i);
     }
-
-    // Require a meaningful share of mismatches (and at least 2 blocks) to avoid
-    // false positives from natural line-wrapping differences.
-    return mismatched >= 2 && mismatched / n > 0.15;
+    return mismatched;
   }
 
-  /// Repairs content drift by translating every block individually.
-  /// Per-block translation makes it nearly impossible for the model to merge
-  /// or shift block contents, at the cost of more API calls.
+  /// Repairs only blocks whose line alignment drifted.
   Future<List<SubtitleBlock>> _translateBlocksIndividually({
     required List<SubtitleBlock> sourceBlocks,
+    required List<SubtitleBlock> translatedBlocks,
+    required List<int> repairIndices,
     required String targetLanguage,
     String? contextHint,
     String? sourceLanguageHint,
   }) async {
-    final repaired = <SubtitleBlock>[];
-    for (int i = 0; i < sourceBlocks.length; i++) {
+    final repaired = translatedBlocks
+        .map((block) => SubtitleBlock(
+              index: block.index,
+              timecode: block.timecode,
+              text: block.text,
+            ))
+        .toList();
+    for (final i in repairIndices) {
+      if (i < 0 || i >= sourceBlocks.length || i >= repaired.length) continue;
+      if (!_reserveRepairCall(_RepairCallKind.alignment)) break;
       final src = sourceBlocks[i];
       try {
         final singleSrt = SubtitleBuilder.buildSrt([src]);
@@ -348,19 +415,15 @@ class TranslationEngine {
         );
         final parsed = SubtitleParser.parseSrt(singleTranslated);
         if (parsed.length == 1) {
-          repaired.add(
-            SubtitleBlock(
-              index: i + 1,
-              timecode: src.timecode,
-              text: parsed.first.text.trim(),
-            ),
+          repaired[i] = SubtitleBlock(
+            index: i + 1,
+            timecode: src.timecode,
+            text: parsed.first.text.trim(),
           );
-          continue;
         }
       } catch (_) {
-        // Best-effort repair only; keep source block below.
+        // Best-effort repair only; keep existing translated block.
       }
-      repaired.add(src);
     }
     return repaired;
   }
@@ -430,6 +493,7 @@ class TranslationEngine {
           !stillMostlyCyrillic) {
         continue;
       }
+      if (!_reserveRepairCall(_RepairCallKind.untranslated)) break;
 
       try {
         final singleSrt = SubtitleBuilder.buildSrt([src]);
@@ -476,6 +540,9 @@ class TranslationEngine {
         'blocks': expectedBlocks.length,
       }),
     );
+    if (!_reserveRepairCall(_RepairCallKind.wrongLanguage)) {
+      return translatedBlocks;
+    }
 
     try {
       final retryTranslated = await _geminiService.translateChunk(
@@ -580,6 +647,9 @@ class TranslationEngine {
         );
         final repaired = await _translateBlocksIndividually(
           sourceBlocks: expectedBlocks,
+          translatedBlocks: fixedBlocks,
+          repairIndices:
+              _lineAlignmentMismatchIndices(expectedBlocks, fixedBlocks),
           targetLanguage: targetLanguage,
           contextHint: contextHint,
           sourceLanguageHint: sourceLanguageHint,
@@ -592,7 +662,9 @@ class TranslationEngine {
     }
 
     // One retry with an explicit block-count constraint before splitting.
-    if (!forceSplit && expectedCount > 0) {
+    if (!forceSplit &&
+        expectedCount > 0 &&
+        _reserveRepairCall(_RepairCallKind.alignment)) {
       try {
         final retryTranslated = await _geminiService.translateChunk(
           chunk,
@@ -631,6 +703,9 @@ class TranslationEngine {
           );
           final repaired = await _translateBlocksIndividually(
             sourceBlocks: expectedBlocks,
+            translatedBlocks: fixedBlocks,
+            repairIndices:
+                _lineAlignmentMismatchIndices(expectedBlocks, fixedBlocks),
             targetLanguage: targetLanguage,
             contextHint: contextHint,
             sourceLanguageHint: sourceLanguageHint,
@@ -646,7 +721,9 @@ class TranslationEngine {
     }
 
     // If the model dropped blocks (often due to truncation), split and translate smaller pieces.
-    if ((forceSplit || expectedCount > 1) && depth < 5) {
+    if ((forceSplit || expectedCount > 1) &&
+        depth < 5 &&
+        _reserveRepairCall(_RepairCallKind.split, count: 2)) {
       onLog?.call(
         'log_block_count_mismatch',
         jsonEncode({'expected': expectedCount, 'got': parsed.length}),
@@ -847,7 +924,7 @@ class TranslationEngine {
     String? chargeKey,
   }) async {
     _isCancelled = false;
-    _geminiService.resetUsage();
+    resetUsage();
 
     // 1. Prepare Content
     String content;
@@ -1014,6 +1091,9 @@ class TranslationEngine {
       }
     }
 
+    _repairBudgetInitial =
+        (chunks.length / 2).ceil().clamp(4, 16);
+    _repairBudgetRemaining = _repairBudgetInitial;
     if (chunks.isNotEmpty) {
       onLog?.call(
         'log_translation_start_chunks',

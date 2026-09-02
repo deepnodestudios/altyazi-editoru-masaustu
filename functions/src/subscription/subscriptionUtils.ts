@@ -11,6 +11,14 @@ import {
   shouldUseTokenWallet,
   tokenWalletUserFields,
 } from '../billing/tokenWallet';
+import {
+  ensureGrantLotsConsistentInTx,
+  expireDueGrantLotsInTx,
+  loadActiveGrantLots,
+  reconcileSubscriptionGrantRemainingFromLots,
+  recordGrantLotInTx,
+  reduceGrantLotsInTx,
+} from '../billing/tokenGrantLots';
 
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
 
@@ -325,10 +333,48 @@ export async function applySubscriptionRenewal(args: {
       alreadyProcessed = true;
     }
 
+    // Lot reads before any writes.
+    let activeGrantLots = shouldUseTokenWallet({ appVersion, platform: 'android' })
+      ? await loadActiveGrantLots(tx, userRef)
+      : [];
+
     if (!alreadyProcessed) {
       if (shouldUseTokenWallet({ appVersion, platform: 'android' })) {
         const tokenGrant = resolveSubscriptionTokenGrant(canonicalProductId);
-        const hydratedWallet = hydrateTokenWallet({ userData });
+        const now = new Date();
+        let hydratedWallet = hydrateTokenWallet({ userData });
+        activeGrantLots = ensureGrantLotsConsistentInTx(
+          tx,
+          userRef,
+          hydratedWallet,
+          activeGrantLots,
+          now,
+        );
+        const expired = expireDueGrantLotsInTx(
+          tx,
+          userRef,
+          hydratedWallet,
+          activeGrantLots,
+          now,
+        );
+        hydratedWallet = expired.next;
+        activeGrantLots = expired.lots;
+        if (hydratedWallet.convertedBonusTokens > 0) {
+          const conversionLot = recordGrantLotInTx(tx, userRef, {
+            amount: hydratedWallet.convertedBonusTokens,
+            source: 'legacy_conversion',
+            originId: `legacy_conversion_${uid}`,
+            grantedAt: now,
+            existingLots: activeGrantLots,
+          });
+          if (conversionLot && !activeGrantLots.some((lot) => lot.id === conversionLot.id)) {
+            activeGrantLots = [...activeGrantLots, conversionLot];
+          }
+        }
+        hydratedWallet = reconcileSubscriptionGrantRemainingFromLots(
+          hydratedWallet,
+          activeGrantLots,
+        );
         const shouldReplaceSubscriptionTokens =
           subscriptionDoc.exists ||
           userData.subscriptionActive === true ||
@@ -346,6 +392,38 @@ export async function applySubscriptionRenewal(args: {
             forfeitedPaid: 0,
             forfeitedGrant: 0,
           };
+        if (applied.forfeitedGrant > 0) {
+          const reduced = reduceGrantLotsInTx(
+            tx,
+            userRef,
+            activeGrantLots,
+            applied.forfeitedGrant,
+            {
+              preferSources: ['subscription_bonus'],
+              allowedSources: [
+                'subscription_bonus',
+                'migration',
+                'legacy_conversion',
+              ],
+              finalStatus: 'revoked',
+            },
+          );
+          activeGrantLots = reduced.lots;
+        }
+        if (tokenGrant != null && tokenGrant.bonus > 0) {
+          const historyId = orderId || purchaseToken;
+          const bonusLot = recordGrantLotInTx(tx, userRef, {
+            amount: tokenGrant.bonus,
+            source: 'subscription_bonus',
+            originId: `${historyId}_subscription_bonus`,
+            grantedAt: now,
+            productId,
+            existingLots: activeGrantLots,
+          });
+          if (bonusLot && !activeGrantLots.some((lot) => lot.id === bonusLot.id)) {
+            activeGrantLots = [...activeGrantLots, bonusLot];
+          }
+        }
         const walletState = applied.next;
         const forfeitedTokens = applied.forfeitedPaid + applied.forfeitedGrant;
         tx.set(userRef, {

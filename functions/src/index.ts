@@ -12,6 +12,7 @@ export { transferDeviceCreditsToGoogleAccount } from './billing/transferDeviceCr
 export { checkDailyAdLimit, recordAdUsage } from './billing/dailyAdLimit';
 
 // ── AI ──
+export { quoteTranslationCost } from './ai/quoteTranslationCost';
 export { checkTranslationAccess } from './ai/checkTranslationAccess';
 export { translateText } from './ai/translateText';
 export { startBatchTranslation, checkBatchTranslation } from './ai/batchTranslate';
@@ -29,3 +30,4 @@ export { handleVoidedPurchase } from './subscription/handleVoidedPurchase';
 // Keep monthlyGoogleBonus exported (no-op) so deploy does not delete the live scheduled job.
 export { monthlyGoogleBonus } from './bonus/monthlyGoogleBonus';
 export { notifyExpiringCredits } from './bonus/notifyExpiringCredits';
+export { expireBonusTokens } from './bonus/expireBonusTokens';

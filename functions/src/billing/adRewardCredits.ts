@@ -10,6 +10,12 @@ import {
   shouldUseTokenWallet,
   tokenWalletUserFields,
 } from './tokenWallet';
+import {
+  ensureGrantLotsConsistentInTx,
+  expireDueGrantLotsInTx,
+  loadActiveGrantLots,
+  recordGrantLotInTx,
+} from './tokenGrantLots';
 
 const AD_REWARD_VIEWS_PER_CREDIT = 5;
 const DAILY_AD_REWARD_VIEW_LIMIT = 5;
@@ -289,7 +295,34 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
         weeklyCredits += 1;
         earnedCredit = true;
         tokensGranted = AD_REWARD_TOKENS;
+        let lots = await loadActiveGrantLots(tx, userRef);
+        lots = ensureGrantLotsConsistentInTx(tx, userRef, walletState, lots, now);
+        const expired = expireDueGrantLotsInTx(tx, userRef, walletState, lots, now);
+        walletState = expired.next;
+        lots = expired.lots;
+        if (walletState.convertedBonusTokens > 0) {
+          const conversionLot = recordGrantLotInTx(tx, userRef, {
+            amount: walletState.convertedBonusTokens,
+            source: 'legacy_conversion',
+            originId: `legacy_conversion_${auth.uid}`,
+            grantedAt: now,
+            deviceId: deviceId.length === 0 ? null : deviceId,
+            existingLots: lots,
+          });
+          if (conversionLot && !lots.some((lot) => lot.id === conversionLot.id)) {
+            lots = [...lots, conversionLot];
+          }
+        }
         walletState = addGrantTokens(walletState, AD_REWARD_TOKENS);
+        const lotOriginId = `ad_reward_${auth.uid}_${now.getTime()}_${dailyViews}`;
+        recordGrantLotInTx(tx, userRef, {
+          amount: AD_REWARD_TOKENS,
+          source: 'ad_reward',
+          originId: lotOriginId,
+          grantedAt: now,
+          deviceId: deviceId.length === 0 ? null : deviceId,
+          existingLots: lots,
+        });
         progressViews = 0;
       } else {
         progressViews = state.progressViews + 1;

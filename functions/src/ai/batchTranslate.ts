@@ -52,6 +52,9 @@ interface StartBatchRequestData {
     completedPlatform?: string;
     isMultiFileBatch?: boolean;
     appVersion?: string;
+    quoteProtocolVersion?: number;
+    quoteId?: string;
+    contentHash?: string;
 }
 
 export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 'public', enforceAppCheck: false, timeoutSeconds: 300 }, async (request: CallableRequest<StartBatchRequestData>) => {
@@ -64,7 +67,7 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
         fcmToken, sourceHash, sourceContent, targetLanguage,
         originalNameForGlobalCache, fileNameForHistory,
         totalLines, canWriteUserHistory, completedPlatform, isMultiFileBatch,
-        appVersion,
+        appVersion, quoteProtocolVersion, quoteId, contentHash,
     } = request.data;
     const resolvedAppVersion = (appVersion ?? '').trim() || '1.6.0';
 
@@ -103,6 +106,33 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
         deviceId: normalizedDeviceId,
         platform: resolvedPlatform,
         appVersion: resolvedAppVersion,
+    });
+    const chargeResult = await consumeCreditInternal({
+        db,
+        amount: 1,
+        deviceId: normalizedDeviceId,
+        uid: request.auth.uid,
+        email: getAuthEmail(request.auth),
+        reason: 'batch_request',
+        chargeKey: normalizedChargeKey,
+        fileName: fileNameForHistory,
+        targetLanguage,
+        platform: resolvedPlatform,
+        appVersion: resolvedAppVersion,
+        preferFreeCreditsFirst:
+            sessionData.preferFreeCreditsFirst === true,
+        allowAutoApproveSession: true,
+        charCount: Number(sessionData.charCount ?? 0) || null,
+        estimatedTokens:
+            Number(sessionData.estimatedTokens ?? 0) || null,
+        quoteProtocolVersion,
+        quoteId,
+        contentHash,
+        sourceContent,
+    });
+    const appChargedTokens = appChargedTokensFromResult({
+        chargeMode: chargeResult.chargeMode,
+        chargedAmount: chargeResult.chargedAmount,
     });
     
     const apiKey = geminiApiKey.value();
@@ -176,28 +206,6 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             throw new Error('Batch job creation failed, job name is missing');
         }
 
-        const chargeResult = await consumeCreditInternal({
-            db,
-            amount: 1,
-            deviceId: normalizedDeviceId,
-            uid: request.auth.uid,
-            email: getAuthEmail(request.auth),
-            reason: 'batch_request',
-            chargeKey: normalizedChargeKey,
-            fileName: fileNameForHistory,
-            targetLanguage,
-            platform: resolvedPlatform,
-            appVersion: resolvedAppVersion,
-            preferFreeCreditsFirst: sessionData.preferFreeCreditsFirst === true,
-            allowAutoApproveSession: true,
-            charCount: Number(sessionData.charCount ?? 0) || null,
-            estimatedTokens: Number(sessionData.estimatedTokens ?? 0) || null,
-        });
-        const appChargedTokens = appChargedTokensFromResult({
-            chargeMode: chargeResult.chargeMode,
-            chargedAmount: chargeResult.chargedAmount,
-        });
-
         // Save batch job info to Firestore so we can track it
         const jobDoc = db.collection('device_bonuses').doc(normalizedDeviceId).collection('batch_jobs').doc(batchJob.name.replace(/\//g, '_'));
         await jobDoc.set({
@@ -215,6 +223,20 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
             originalNameForGlobalCache: originalNameForGlobalCache ?? null,
             fileNameForHistory: fileNameForHistory ?? null,
             chargedTokens: appChargedTokens,
+            chargeMode: chargeResult.chargeMode,
+            translationCreditType:
+                chargeResult.translationCreditType ?? null,
+            fromPaidTokens: chargeResult.fromPaidTokens ?? 0,
+            fromGrantTokens: chargeResult.fromGrantTokens ?? 0,
+            quoteProtocolVersion:
+                chargeResult.quoteProtocolVersion ?? null,
+            quoteVersion: chargeResult.quoteVersion ?? null,
+            quoteId: chargeResult.quoteId ?? null,
+            contentHash: chargeResult.contentHash ?? null,
+            quotedCharacterCount:
+                chargeResult.quotedCharacterCount ?? null,
+            characterMultiplier:
+                chargeResult.characterMultiplier ?? null,
             appVersion: resolvedAppVersion,
             totalLines: totalLines ?? null,
             canWriteUserHistory: canWriteUserHistory ?? true,
@@ -225,7 +247,8 @@ export const startBatchTranslation = onCall({ secrets: [geminiApiKey], invoker: 
         return {
             success: true,
             jobName: batchJob.name,
-            message: 'Batch job started successfully'
+            message: 'Batch job started successfully',
+            chargeReceipt: chargeResult,
         };
 
     } catch (e: any) {

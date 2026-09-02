@@ -16,6 +16,15 @@ import {
   revokeTokenPack,
   tokenWalletUserFields,
 } from '../billing/tokenWallet';
+import {
+  ensureGrantLotsConsistentInTx,
+  expireDueGrantLotsInTx,
+  loadActiveGrantLots,
+  lotDocIdFromOrigin,
+  reconcileSubscriptionGrantRemainingFromLots,
+  recordGrantLotInTx,
+  reduceGrantLotsInTx,
+} from '../billing/tokenGrantLots';
 
 /**
  * Google Play Real-Time Developer Notifications (RTDN) webhook.
@@ -140,7 +149,6 @@ export const handleVoidedPurchase = onRequest(
       // Find the purchase/subscription by token
       const purchaseQuery = await db.collection('purchases')
         .where('purchaseToken', '==', purchaseToken)
-        .limit(1)
         .get();
 
       const subscriptionRef = db.collection('subscriptions').doc(subscriptionDocIdForToken(purchaseToken));
@@ -151,15 +159,38 @@ export const handleVoidedPurchase = onRequest(
       let tokensToRevoke = 0;
       let source = 'unknown';
       let productId: string | null = null;
+      let purchaseRecordId: string | null = null;
+      let purchaseTokenPack: { base: number; bonus: number } | null = null;
 
       if (!purchaseQuery.empty) {
-        const doc = purchaseQuery.docs[0];
+        const doc = purchaseQuery.docs.find(
+          (candidate) => candidate.data()?.processed === true,
+        ) ?? purchaseQuery.docs[0];
         const data = doc.data();
+        const legacyPurchaseRecordId =
+          typeof data.legacyPurchaseRecordId === 'string'
+            ? data.legacyPurchaseRecordId.trim()
+            : '';
+        purchaseRecordId = legacyPurchaseRecordId || doc.id;
         userId = data.userId ?? null;
         productId = typeof data.productId === 'string' ? data.productId : null;
         const tokenPack = resolveTokenPack(productId);
         tokensToRevoke = Number(data.tokensGranted ?? tokenPack?.tokens ?? 0) || 0;
         creditsToRevoke = tokensToRevoke > 0 ? 0 : Number(data.amount ?? data.credits ?? 0);
+        const storedBase = Number(data.tokenBase);
+        const storedBonus = Number(data.tokenBonus);
+        if (
+          Number.isFinite(storedBase)
+          && storedBase >= 0
+          && Number.isFinite(storedBonus)
+          && storedBonus >= 0
+          && storedBase + storedBonus > 0
+        ) {
+          purchaseTokenPack = {
+            base: Math.floor(storedBase),
+            bonus: Math.floor(storedBonus),
+          };
+        }
         source = 'purchase';
       } else if (subscriptionDoc.exists) {
         const data = subscriptionDoc.data() ?? {};
@@ -195,14 +226,62 @@ export const handleVoidedPurchase = onRequest(
           tokensToRevoke > 0
           || String(userData.creditPolicy ?? '') === CREDIT_POLICY_TOKEN_V1
         ) {
-          const tokenPack = resolveTokenPack(productId) ?? resolveSubscriptionTokenGrant(productId);
+          const tokenPack = purchaseTokenPack
+            ?? resolveTokenPack(productId)
+            ?? resolveSubscriptionTokenGrant(productId);
           if (tokenPack != null || tokensToRevoke > 0) {
             const packToRevoke = tokenPack ?? { base: tokensToRevoke, bonus: 0 };
+            const now = new Date();
+            let hydrated = hydrateTokenWallet({ userData });
+            let lots = await loadActiveGrantLots(tx, userRef);
+            lots = ensureGrantLotsConsistentInTx(tx, userRef, hydrated, lots, now);
+            const expired = expireDueGrantLotsInTx(tx, userRef, hydrated, lots, now);
+            hydrated = expired.next;
+            lots = expired.lots;
+            if (hydrated.convertedBonusTokens > 0) {
+              const conversionLot = recordGrantLotInTx(tx, userRef, {
+                amount: hydrated.convertedBonusTokens,
+                source: 'legacy_conversion',
+                originId: `legacy_conversion_${userId}`,
+                grantedAt: now,
+                existingLots: lots,
+              });
+              if (conversionLot && !lots.some((lot) => lot.id === conversionLot.id)) {
+                lots = [...lots, conversionLot];
+              }
+            }
+            hydrated = reconcileSubscriptionGrantRemainingFromLots(
+              hydrated,
+              lots,
+            );
             const revoked = revokeTokenPack(
-              hydrateTokenWallet({ userData }),
+              hydrated,
               packToRevoke,
               { subscription: source === 'subscription' },
             );
+            if (revoked.revokedGrant > 0) {
+              const bonusOriginId = source === 'purchase' && purchaseRecordId
+                ? `${purchaseRecordId}_purchase_bonus`
+                : `${productId}_purchase_bonus`;
+              const reduced = reduceGrantLotsInTx(tx, userRef, lots, revoked.revokedGrant, {
+                preferSources: source === 'subscription'
+                  ? ['subscription_bonus']
+                  : ['purchase_bonus'],
+                preferOriginIds: [
+                  bonusOriginId,
+                  lotDocIdFromOrigin(bonusOriginId),
+                ],
+                allowedSources: source === 'subscription'
+                  ? [
+                      'subscription_bonus',
+                      'migration',
+                      'legacy_conversion',
+                    ]
+                  : undefined,
+                finalStatus: 'revoked',
+              });
+              lots = reduced.lots;
+            }
             const walletState = revoked.next;
             const revokedTokens = revoked.revokedPaid + revoked.revokedGrant;
             tx.set(userRef, {
@@ -216,27 +295,27 @@ export const handleVoidedPurchase = onRequest(
                   }
                 : {}),
             }, { merge: true });
-            if (revokedTokens > 0) {
-              const txRef = userRef.collection('credit_transactions').doc();
-              tx.set(txRef, {
-                type: 'spend',
-                amount: revokedTokens,
-                unit: 'token',
-                reason: 'voided_purchase',
-                source,
-                creditType: 'token_purchased',
-                purchaseToken: purchaseToken.substring(0, 30),
-                refundType: refundType ?? null,
-                productType: productType ?? null,
-                productId,
-                revokedPaidTokens: revoked.revokedPaid,
-                revokedGrantTokens: revoked.revokedGrant,
-                remainingTokenBalance: walletState.tokenBalance,
-                remainingTokenGrantBalance: walletState.tokenGrantBalance,
-                remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              });
-            }
+            const txRef = userRef.collection('credit_transactions').doc();
+            tx.set(txRef, {
+              type: 'spend',
+              amount: revokedTokens,
+              unit: 'token',
+              reason: 'voided_purchase',
+              source,
+              creditType: 'token_purchased',
+              purchaseToken: purchaseToken.substring(0, 30),
+              refundType: refundType ?? null,
+              productType: productType ?? null,
+              productId,
+              purchaseRecordId,
+              requestedRefundTokens: packToRevoke.base + packToRevoke.bonus,
+              revokedPaidTokens: revoked.revokedPaid,
+              revokedGrantTokens: revoked.revokedGrant,
+              remainingTokenBalance: walletState.tokenBalance,
+              remainingTokenGrantBalance: walletState.tokenGrantBalance,
+              remainingLegacyFlatRateRemaining: walletState.legacyFlatRateRemaining,
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
           }
           return;
         }

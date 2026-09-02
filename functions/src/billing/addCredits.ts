@@ -11,6 +11,12 @@ import {
     shouldUseTokenWallet,
     tokenWalletUserFields,
 } from './tokenWallet';
+import {
+    ensureGrantLotsConsistentInTx,
+    expireDueGrantLotsInTx,
+    loadActiveGrantLots,
+    recordGrantLotInTx,
+} from './tokenGrantLots';
 
 // UYGULAMA PAKET ADI (Android Manifest'teki applicationId)
 const PACKAGE_NAME = 'com.deepnode.altyaziceviri';
@@ -60,11 +66,10 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed.length == 0 ? null : trimmed;
 }
 
-function buildPurchaseRecordId(purchaseId: string | null, purchaseToken: string): string {
-  if (purchaseId != null) {
-    return purchaseId;
-  }
-
+function buildPurchaseRecordId(purchaseToken: string): string {
+  // purchaseId is client-provided and may be changed between retries. The Play
+  // token is the stable identity, so every presentation of the same purchase
+  // must contend on this one canonical document.
   const tokenHash = createHash('sha256').update(purchaseToken).digest('hex');
   return `token_${tokenHash}`;
 }
@@ -178,12 +183,112 @@ async function mergePurchaseRecord(
   purchaseRef: FirebaseFirestore.DocumentReference,
   base: PurchaseAuditBase,
   data: Record<string, unknown>,
-): Promise<void> {
-  await purchaseRef.set({
-    ...base,
-    ...data,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+): Promise<boolean> {
+  return admin.firestore().runTransaction(async (tx) => {
+    const existing = await tx.get(purchaseRef);
+    if (existing.data()?.processed === true) {
+      // A retry or concurrent request must never reopen a completed purchase.
+      // Keep only retry diagnostics; do not overwrite owner/product/status.
+      const safePatch: Record<string, unknown> = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (data.attemptCount != null) {
+        safePatch.attemptCount = data.attemptCount;
+      }
+      if (data.lastAttemptAt != null) {
+        safePatch.lastAttemptAt = data.lastAttemptAt;
+      }
+      if (data.duplicateDetectedAt != null) {
+        safePatch.duplicateDetectedAt = data.duplicateDetectedAt;
+      }
+      tx.set(purchaseRef, safePatch, { merge: true });
+      return true;
+    }
+
+    tx.set(purchaseRef, {
+      ...base,
+      ...data,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return false;
+  });
+}
+
+function purchaseAlreadyProcessedError(): HttpsError {
+  return new HttpsError(
+    'already-exists',
+    'Bu satın alma daha önce işlendi',
+  );
+}
+
+async function beginPurchaseAttempt(args: {
+  purchaseRef: FirebaseFirestore.DocumentReference;
+  matchingTokenPurchases: FirebaseFirestore.Query;
+  base: PurchaseAuditBase;
+}): Promise<boolean> {
+  const { purchaseRef, matchingTokenPurchases, base } = args;
+  return admin.firestore().runTransaction(async (tx) => {
+    const canonicalDoc = await tx.get(purchaseRef);
+    const tokenMatches = await tx.get(matchingTokenPurchases);
+    const processedMatch = tokenMatches.docs.find(
+      (doc) => doc.data()?.processed === true,
+    );
+
+    if (canonicalDoc.data()?.processed === true) {
+      tx.set(purchaseRef, {
+        attemptCount: admin.firestore.FieldValue.increment(1),
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        duplicateDetectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return true;
+    }
+
+    if (processedMatch != null) {
+      // Backward compatibility: older releases keyed this document by the
+      // client purchaseId. Preserve its owner/product while creating the
+      // token-hash alias so future retries no longer need the legacy lookup.
+      const legacy = processedMatch.data() ?? {};
+      tx.set(purchaseRef, {
+        ...base,
+        userId: legacy.userId ?? base.userId,
+        email: legacy.email ?? base.email,
+        amount: legacy.amount ?? base.amount,
+        productId: legacy.productId ?? base.productId,
+        purchaseId: legacy.purchaseId ?? base.purchaseId,
+        credits: legacy.credits ?? null,
+        tokensGranted: legacy.tokensGranted ?? null,
+        tokenBase: legacy.tokenBase ?? null,
+        tokenBonus: legacy.tokenBonus ?? null,
+        bonusGrantApplied: legacy.bonusGrantApplied ?? null,
+        playOrderId: legacy.playOrderId ?? null,
+        processed: true,
+        verified: legacy.verified !== false,
+        status: 'already_processed',
+        legacyPurchaseRecordId: processedMatch.id,
+        canonicalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+        attemptCount: admin.firestore.FieldValue.increment(1),
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        duplicateDetectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return true;
+    }
+
+    tx.set(purchaseRef, {
+      ...base,
+      status: 'received',
+      processed: false,
+      verified: false,
+      attemptCount: admin.firestore.FieldValue.increment(1),
+      ...(canonicalDoc.exists
+        ? {}
+        : { firstSeenAt: admin.firestore.FieldValue.serverTimestamp() }),
+      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return false;
+  });
 }
 
 function buildFailureStatus(error: HttpsError): Record<string, unknown> {
@@ -191,8 +296,6 @@ function buildFailureStatus(error: HttpsError): Record<string, unknown> {
   case 'already-exists':
     return {
       status: 'already_processed',
-      processed: true,
-      verified: true,
       failureCode: admin.firestore.FieldValue.delete(),
       failureMessage: admin.firestore.FieldValue.delete(),
       duplicateDetectedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -223,6 +326,10 @@ function buildFailureStatus(error: HttpsError): Record<string, unknown> {
 export const addCredits = onCall<AddCreditsData>({
   region: 'us-central1',
   serviceAccount: PLAY_BILLING_SERVICE_ACCOUNT,
+  // Keep one warm instance so Play purchases are not lost on cold-start 503
+  // (same callable credits used for years; token packs share this path).
+  minInstances: 1,
+  timeoutSeconds: 120,
 }, async (request) => {
   const { data, auth } = request;
 
@@ -284,7 +391,7 @@ export const addCredits = onCall<AddCreditsData>({
     );
   }
 
-  const purchaseRecordId = buildPurchaseRecordId(purchaseId, purchaseToken);
+  const purchaseRecordId = buildPurchaseRecordId(purchaseToken);
   const purchaseRef = admin.firestore()
     .collection('purchases')
     .doc(purchaseRecordId);
@@ -298,16 +405,19 @@ export const addCredits = onCall<AddCreditsData>({
     purchaseToken,
     platform: 'android',
   };
+  const matchingTokenPurchases = admin.firestore()
+    .collection('purchases')
+    .where('purchaseToken', '==', purchaseToken);
 
   try {
-    await mergePurchaseRecord(purchaseRef, purchaseAuditBase, {
-      status: 'received',
-      processed: false,
-      verified: false,
-      attemptCount: admin.firestore.FieldValue.increment(1),
-      firstSeenAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+    const alreadyProcessed = await beginPurchaseAttempt({
+      purchaseRef,
+      matchingTokenPurchases,
+      base: purchaseAuditBase,
     });
+    if (alreadyProcessed) {
+      throw purchaseAlreadyProcessedError();
+    }
 
     if (purchaseId == null) {
       console.warn(
@@ -318,27 +428,41 @@ export const addCredits = onCall<AddCreditsData>({
     // 4. Satın alma doğrulaması (Google Play Developer API)
     const verification = await verifyPurchaseWithStore(productId, purchaseToken);
 
-    await mergePurchaseRecord(purchaseRef, purchaseAuditBase, {
-      playPurchaseState: verification.purchaseState,
-      playConsumptionState: verification.consumptionState,
-      playAcknowledgementState: verification.acknowledgementState,
-      playPurchaseStateLabel: verification.purchaseStateLabel,
-      playConsumptionStateLabel: verification.consumptionStateLabel,
-      playAcknowledgementStateLabel: verification.acknowledgementStateLabel,
-      playMatchedProductId: verification.matchedProductId,
-      playVerificationApi: verification.verificationApi,
-      playOrderId: verification.orderId,
-      playPurchaseType: verification.purchaseType,
-    });
+    const processedDuringVerification = await mergePurchaseRecord(
+      purchaseRef,
+      purchaseAuditBase,
+      {
+        playPurchaseState: verification.purchaseState,
+        playConsumptionState: verification.consumptionState,
+        playAcknowledgementState: verification.acknowledgementState,
+        playPurchaseStateLabel: verification.purchaseStateLabel,
+        playConsumptionStateLabel: verification.consumptionStateLabel,
+        playAcknowledgementStateLabel: verification.acknowledgementStateLabel,
+        playMatchedProductId: verification.matchedProductId,
+        playVerificationApi: verification.verificationApi,
+        playOrderId: verification.orderId,
+        playPurchaseType: verification.purchaseType,
+      },
+    );
+    if (processedDuringVerification) {
+      throw purchaseAlreadyProcessedError();
+    }
 
     if (!verification.isValid) {
-      await mergePurchaseRecord(purchaseRef, purchaseAuditBase, {
-        status: 'invalid_purchase',
-        processed: false,
-        verified: false,
-        failureCode: 'invalid-argument',
-        failureMessage: `Satın alma doğrulanamadı veya iptal edilmiş (state=${verification.purchaseState ?? 'unknown'})`,
-      });
+      const processedBeforeInvalidStatus = await mergePurchaseRecord(
+        purchaseRef,
+        purchaseAuditBase,
+        {
+          status: 'invalid_purchase',
+          processed: false,
+          verified: false,
+          failureCode: 'invalid-argument',
+          failureMessage: `Satın alma doğrulanamadı veya iptal edilmiş (state=${verification.purchaseState ?? 'unknown'})`,
+        },
+      );
+      if (processedBeforeInvalidStatus) {
+        throw purchaseAlreadyProcessedError();
+      }
       console.error(`❌ Invalid purchase: ${purchaseRecordId}`);
       throw new HttpsError(
         'invalid-argument',
@@ -346,23 +470,34 @@ export const addCredits = onCall<AddCreditsData>({
       );
     }
 
-    await mergePurchaseRecord(purchaseRef, purchaseAuditBase, {
-      status: 'verified',
-      verified: true,
-      verificationPassedAt: admin.firestore.FieldValue.serverTimestamp(),
-      failureCode: admin.firestore.FieldValue.delete(),
-      failureMessage: admin.firestore.FieldValue.delete(),
-    });
+    const processedBeforeGrant = await mergePurchaseRecord(
+      purchaseRef,
+      purchaseAuditBase,
+      {
+        status: 'verified',
+        verified: true,
+        verificationPassedAt: admin.firestore.FieldValue.serverTimestamp(),
+        failureCode: admin.firestore.FieldValue.delete(),
+        failureMessage: admin.firestore.FieldValue.delete(),
+      },
+    );
+    if (processedBeforeGrant) {
+      throw purchaseAlreadyProcessedError();
+    }
 
     // 5. Transaction ile güvenli kredi ekleme
     const result = await admin.firestore().runTransaction(async (transaction) => {
       const purchaseDoc = await transaction.get(purchaseRef);
-      if (purchaseDoc.exists && purchaseDoc.data()?.processed === true) {
+      const tokenPurchaseDocs = await transaction.get(matchingTokenPurchases);
+      const processedTokenMatch = tokenPurchaseDocs.docs.find(
+        (doc) => doc.data()?.processed === true,
+      );
+      if (
+        purchaseDoc.data()?.processed === true
+        || processedTokenMatch != null
+      ) {
         console.warn(`⚠️ Duplicate purchase attempt: ${purchaseRecordId}`);
-        throw new HttpsError(
-          'already-exists',
-          'Bu satın alma daha önce işlendi'
-        );
+        throw purchaseAlreadyProcessedError();
       }
 
       const userRef = admin.firestore().collection('users').doc(userId);
@@ -371,10 +506,39 @@ export const addCredits = onCall<AddCreditsData>({
       const userData = userDoc.exists ? (userDoc.data() ?? {}) : {};
 
       if (tokenPack != null) {
-        const walletState = addTokenPackTokens(
-          hydrateTokenWallet({ userData }),
+        const now = new Date();
+        let walletState = hydrateTokenWallet({ userData });
+        let lots = await loadActiveGrantLots(transaction, userRef);
+        lots = ensureGrantLotsConsistentInTx(transaction, userRef, walletState, lots, now);
+        const expired = expireDueGrantLotsInTx(transaction, userRef, walletState, lots, now);
+        walletState = expired.next;
+        lots = expired.lots;
+        if (walletState.convertedBonusTokens > 0) {
+          const conversionLot = recordGrantLotInTx(transaction, userRef, {
+            amount: walletState.convertedBonusTokens,
+            source: 'legacy_conversion',
+            originId: `legacy_conversion_${userId}`,
+            grantedAt: now,
+            existingLots: lots,
+          });
+          if (conversionLot && !lots.some((lot) => lot.id === conversionLot.id)) {
+            lots = [...lots, conversionLot];
+          }
+        }
+        walletState = addTokenPackTokens(
+          walletState,
           { base: tokenPack.base, bonus: tokenPack.bonus },
         );
+        if (tokenPack.bonus > 0) {
+          recordGrantLotInTx(transaction, userRef, {
+            amount: tokenPack.bonus,
+            source: 'purchase_bonus',
+            originId: `${purchaseRecordId}_purchase_bonus`,
+            grantedAt: now,
+            productId,
+            existingLots: lots,
+          });
+        }
         transaction.set(purchaseRef, {
           ...purchaseAuditBase,
           amount: tokenPack.tokens,

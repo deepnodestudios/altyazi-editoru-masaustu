@@ -1,5 +1,5 @@
-/// Client-side token estimate. Must match `estimateTokens` in functions/src/billing/tokenWallet.ts.
-const double kTokenCharMultiplier = 1.30;
+/// Exact quote preview for quote-protocol clients. The backend remains authoritative.
+const double kTokenCharMultiplier = 1.50;
 
 /// P&L ledger (Gemini 3.1 Flash-Lite list). Model is still 2.5.
 const double kLedgerInputUsdPerMillion = 0.25;
@@ -12,6 +12,18 @@ const double kProviderOutputUsdPerMillion = 0.40;
 int estimateTokensFromCharCount(int charCount) {
   if (charCount <= 0) return 0;
   return (charCount * kTokenCharMultiplier).ceil();
+}
+
+class TokenChargeAllocation {
+  const TokenChargeAllocation({
+    required this.fromPaidTokens,
+    required this.fromGrantTokens,
+  });
+
+  final int fromPaidTokens;
+  final int fromGrantTokens;
+
+  bool get isMixed => fromPaidTokens > 0 && fromGrantTokens > 0;
 }
 
 /// Typical feature-film SRT text (~100 min).

@@ -50,6 +50,10 @@ type TranslateRequestData = {
     numberedLines?: boolean;
     charCount?: number;
     estimatedTokens?: number;
+    quoteProtocolVersion?: number;
+    quoteId?: string;
+    contentHash?: string;
+    quoteSourceContent?: string;
 };
 
 type TranslationSessionLookup = {
@@ -214,6 +218,10 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         appVersion,
         structuredOutput,
         numberedLines,
+        quoteProtocolVersion,
+        quoteId,
+        contentHash,
+        quoteSourceContent,
     } = request.data;
     const resolvedAppVersion = (appVersion ?? '').trim() || '1.6.0';
     const requestCharCount = Number(request.data.charCount);
@@ -245,6 +253,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
     
     let finalFileName = fileName;
     let finalTargetLanguage = targetLanguage;
+    let chargeReceipt: Record<string, unknown> | null = null;
 
     if (approveCharge) {
         if (!trimmedChargeKey) {
@@ -282,6 +291,34 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             deviceId: normalizedDeviceId,
             platform: normalizedFinalPlatform,
             appVersion: resolvedAppVersion,
+        });
+        chargeReceipt = await consumeCreditInternal({
+            db,
+            amount: 1,
+            deviceId: normalizedDeviceId,
+            uid: request.auth.uid,
+            email: getAuthEmail(request.auth),
+            reason: 'first_chunk',
+            chargeKey: trimmedChargeKey,
+            fileName: finalFileName,
+            targetLanguage: finalTargetLanguage,
+            platform: normalizedFinalPlatform,
+            appVersion: resolvedAppVersion,
+            preferFreeCreditsFirst:
+                sessionData.preferFreeCreditsFirst === true,
+            allowAutoApproveSession: true,
+            charCount: Number.isFinite(requestCharCount)
+                && requestCharCount > 0
+                ? requestCharCount
+                : Number(sessionData.charCount ?? 0) || null,
+            estimatedTokens: Number.isFinite(requestEstimatedTokens)
+                && requestEstimatedTokens > 0
+                ? requestEstimatedTokens
+                : Number(sessionData.estimatedTokens ?? 0) || null,
+            quoteProtocolVersion,
+            quoteId,
+            contentHash,
+            sourceContent: quoteSourceContent,
         });
     } else {
         let hasChargedSession = false;
@@ -434,34 +471,6 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             preview: outputText.slice(0, 300),
         });
 
-        if (approveCharge == true && trimmedChargeKey.length > 0) {
-            // if we are here and platform is missing, use the one from session
-            const sessionData = await db.collection('device_bonuses').doc(normalizedDeviceId).collection('translation_sessions').doc(trimmedChargeKey).get();
-            const platformFromSession = sessionData.data()?.platform;
-
-            await consumeCreditInternal({
-                db,
-                amount: 1,
-                deviceId: normalizedDeviceId,
-                uid: request.auth.uid,
-                email: getAuthEmail(request.auth),
-                reason: 'first_chunk',
-                chargeKey: trimmedChargeKey,
-                fileName: finalFileName,
-                targetLanguage: finalTargetLanguage,
-                platform: platform || platformFromSession || normalizedPlatform,
-                appVersion: resolvedAppVersion,
-                preferFreeCreditsFirst: sessionData.data()?.preferFreeCreditsFirst === true,
-                allowAutoApproveSession: true,
-                charCount: Number.isFinite(requestCharCount) && requestCharCount > 0
-                    ? requestCharCount
-                    : Number(sessionData.data()?.charCount ?? 0) || null,
-                estimatedTokens: Number.isFinite(requestEstimatedTokens) && requestEstimatedTokens > 0
-                    ? requestEstimatedTokens
-                    : Number(sessionData.data()?.estimatedTokens ?? 0) || null,
-            });
-        }
-        
         return {
             text: outputText,
             inputTokens: result.usageMetadata?.promptTokenCount || 0,
@@ -470,6 +479,7 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
             costUsdProvider: computeCostUsdProvider(modelUsed, result.usageMetadata?.promptTokenCount || 0, result.usageMetadata?.candidatesTokenCount || 0),
             modelUsed,
             providerUsed,
+            ...(chargeReceipt ? { chargeReceipt } : {}),
         };
 
     } catch (error: any) {
