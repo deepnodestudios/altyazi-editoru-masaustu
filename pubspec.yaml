@@ -3,7 +3,7 @@ description: AI Altyazı Çeviri ve Editör
 
 publish_to: 'none'
 
-version: 1.7.9
+version: 1.8.0
 environment:
   sdk: '>=3.2.0 <4.0.0'
 
