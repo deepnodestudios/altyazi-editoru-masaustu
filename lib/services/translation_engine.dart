@@ -889,6 +889,25 @@ class TranslationEngine {
     return Platform.isWindows ? normalized.toLowerCase() : normalized;
   }
 
+  /// Writes the accumulated translation as a full replace.
+  /// Resume/retry must not append onto a leftover file — that stacks duplicate
+  /// cues with the same timestamps (Antboy-style overlay).
+  Future<void> _rewriteOutputFile(
+    File? outputFile,
+    StringBuffer fullTranslation,
+    List<SubtitleBlock> translatedBlocks,
+  ) async {
+    if (outputFile == null) return;
+    var content = fullTranslation.toString();
+    if (content.trim().isEmpty && translatedBlocks.isNotEmpty) {
+      content = SubtitleBuilder.buildSrt(translatedBlocks, resequence: false);
+      fullTranslation
+        ..clear()
+        ..write(content);
+    }
+    await outputFile.writeAsString(content);
+  }
+
   void _logResumeDebug(String message) {
     onLog?.call('log_resume_debug', jsonEncode({'message': message}));
   }
@@ -1065,13 +1084,23 @@ class TranslationEngine {
         chunkIndex = resumeState.nextChunkIndex;
       }
 
-      fullTranslation.write(resumeState.translatedText);
-      translatedBlocks = List<SubtitleBlock>.from(resumeState.translatedBlocks);
-      _latestRealBlocks = List<SubtitleBlock>.from(translatedBlocks);
-      // Ensure output file has current content
-      if (outputFile != null && !await outputFile.exists()) {
-        await outputFile.writeAsString(fullTranslation.toString());
+      if (alreadyCount > 0 ||
+          (resumeState.nextChunkIndex > 0 &&
+              resumeState.translatedText.trim().isNotEmpty)) {
+        fullTranslation.write(resumeState.translatedText);
+        translatedBlocks =
+            List<SubtitleBlock>.from(resumeState.translatedBlocks);
+      } else {
+        _logResumeDebug(
+          'resume from start: discarding stale output so a full rerun does not concatenate',
+        );
       }
+      _latestRealBlocks = List<SubtitleBlock>.from(translatedBlocks);
+      await _rewriteOutputFile(
+        outputFile,
+        fullTranslation,
+        translatedBlocks,
+      );
     } else {
       onLog?.call('log_translation_chunks_preparing');
       // İşlemi arka planda (isolate) yaparak arayüzün donmasını engelliyoruz
@@ -1229,13 +1258,11 @@ class TranslationEngine {
           );
 
           fullTranslation.write(translatedChunkForOutput);
-
-          if (outputFile != null) {
-            await outputFile.writeAsString(
-              translatedChunkForOutput,
-              mode: FileMode.append,
-            );
-          }
+          await _rewriteOutputFile(
+            outputFile,
+            fullTranslation,
+            translatedBlocks,
+          );
 
           processedLines += newBlocks.length;
 
