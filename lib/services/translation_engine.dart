@@ -157,7 +157,18 @@ class TranslationEngine {
 
   bool _reserveRepairCall(_RepairCallKind kind, {int count = 1}) {
     if (count <= 0) return true;
+    // Do not allow optional/cosmetic untranslated fixes to consume the remaining
+    // budget needed for structural split/alignment repairs.
+    if (kind == _RepairCallKind.untranslated && _repairBudgetRemaining <= 4) {
+      return false;
+    }
     if (_repairBudgetRemaining < count) {
+      // Structural split is essential for subtitle timing; allow a reasonable baseline
+      // even if nominal budget is depleted, since runaway recursion is already capped by depth < 5.
+      if (kind == _RepairCallKind.split && _splitRepairCalls < 8) {
+        _splitRepairCalls += count;
+        return true;
+      }
       onLog?.call(
         'log_repair_budget_exhausted',
         jsonEncode({
@@ -440,8 +451,8 @@ class TranslationEngine {
       return translatedBlocks;
     }
 
-    // Only do a small number of targeted retries to avoid runaway cost.
-    const maxFixesPerChunk = 20;
+    // Only do a small number of targeted retries to avoid runaway cost and budget exhaustion.
+    const maxFixesPerChunk = 3;
     int fixes = 0;
 
     for (
@@ -559,7 +570,7 @@ class TranslationEngine {
       if (retryParsed.length != expectedBlocks.length) {
         return translatedBlocks;
       }
-      _alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
+      alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
       return retryParsed;
     } catch (_) {
       return translatedBlocks;
@@ -587,6 +598,7 @@ class TranslationEngine {
         targetLanguage: targetLanguage,
         contextHint: contextHint,
         sourceLanguageHint: sourceLanguageHint,
+        expectedBlockCount: expectedCount,
       );
       parsed = SubtitleParser.parseSrt(translated);
     } catch (e) {
@@ -618,7 +630,7 @@ class TranslationEngine {
       }
 
       if (parsed.length == expectedCount) {
-        _alignTranslatedBlocksToSource(expectedBlocks, parsed);
+        alignTranslatedBlocksToSource(expectedBlocks, parsed);
         final languageFixed = await _retryIfOffTargetLanguage(
           chunk: chunk,
           expectedBlocks: expectedBlocks,
@@ -675,7 +687,7 @@ class TranslationEngine {
         );
         final retryParsed = SubtitleParser.parseSrt(retryTranslated);
         if (retryParsed.length == expectedCount) {
-          _alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
+          alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
           final languageFixed = await _retryIfOffTargetLanguage(
             chunk: chunk,
             expectedBlocks: expectedBlocks,
@@ -757,23 +769,20 @@ class TranslationEngine {
       );
     }
 
-    // Last resort: don't lose content. If parsing returned something, use it; otherwise keep original.
+    // Last resort: don't lose content. If parsing returned something, reconcile to exact expected count.
     onLog?.call(
       'log_translation_unverified',
       jsonEncode({'expected': expectedCount, 'got': parsed.length}),
     );
     if (parsed.isNotEmpty) {
-      // Best-effort alignment even when counts mismatch.
-      final minLen = parsed.length < expectedBlocks.length
-          ? parsed.length
-          : expectedBlocks.length;
-      if (minLen > 0) {
-        _alignTranslatedBlocksToSource(
-          expectedBlocks.sublist(0, minLen),
-          parsed.sublist(0, minLen),
-        );
-      }
-      return (srt: SubtitleBuilder.buildSrt(parsed), blocks: parsed);
+      final reconciled = reconcileBlocksToExpectedCount(
+        sourceBlocks: expectedBlocks,
+        translatedBlocks: parsed,
+      );
+      return (
+        srt: SubtitleBuilder.buildSrt(reconciled, resequence: false),
+        blocks: reconciled,
+      );
     }
     return (
       srt: SubtitleBuilder.buildSrt(expectedBlocks),
@@ -781,7 +790,90 @@ class TranslationEngine {
     );
   }
 
-  void _alignTranslatedBlocksToSource(
+  /// Reconciles translated blocks so that the returned block count EXACTLY
+  /// equals sourceBlocks.length. This ensures a chunk never propagates extra
+  /// or missing blocks that shift subsequent chunks out of timecode sync.
+  static List<SubtitleBlock> reconcileBlocksToExpectedCount({
+    required List<SubtitleBlock> sourceBlocks,
+    required List<SubtitleBlock> translatedBlocks,
+  }) {
+    if (sourceBlocks.isEmpty) return translatedBlocks;
+    if (translatedBlocks.isEmpty) {
+      return sourceBlocks
+          .map((b) => SubtitleBlock(
+                index: b.index,
+                timecode: b.timecode,
+                text: b.text,
+              ))
+          .toList();
+    }
+
+    if (translatedBlocks.length == sourceBlocks.length) {
+      alignTranslatedBlocksToSource(sourceBlocks, translatedBlocks);
+      return translatedBlocks;
+    }
+
+    final merged = <SubtitleBlock>[];
+
+    if (translatedBlocks.length > sourceBlocks.length) {
+      // Model generated extra blocks (e.g. split a sentence across multiple cues).
+      // Merge adjacent fragments until the count matches sourceBlocks.length.
+      int remainingExcess = translatedBlocks.length - sourceBlocks.length;
+
+      for (int i = 0; i < translatedBlocks.length; i++) {
+        if (remainingExcess > 0 && merged.isNotEmpty) {
+          final prev = merged.last;
+          final curr = translatedBlocks[i];
+          final isSameTime = curr.timecode == prev.timecode;
+          final currText = curr.text.trim();
+          final prevText = prev.text.trim();
+          final isFragment = !currText.startsWith('-') &&
+              (prevText.endsWith(',') || !prevText.endsWith('.'));
+
+          if (isSameTime || isFragment) {
+            prev.text = '$prevText\n$currText'.trim();
+            remainingExcess--;
+            continue;
+          }
+        }
+        merged.add(SubtitleBlock(
+          index: merged.length + 1,
+          timecode: translatedBlocks[i].timecode,
+          text: translatedBlocks[i].text,
+        ));
+      }
+
+      // If still excess (no obvious fragments found), merge trailing blocks into the last one.
+      while (merged.length > sourceBlocks.length) {
+        final last = merged.removeLast();
+        merged.last.text = '${merged.last.text}\n${last.text}'.trim();
+      }
+
+      alignTranslatedBlocksToSource(sourceBlocks, merged);
+      return merged;
+    } else {
+      // Model dropped/omitted blocks. Pad missing items using source blocks.
+      for (int i = 0; i < sourceBlocks.length; i++) {
+        if (i < translatedBlocks.length) {
+          merged.add(SubtitleBlock(
+            index: sourceBlocks[i].index,
+            timecode: sourceBlocks[i].timecode,
+            text: translatedBlocks[i].text,
+          ));
+        } else {
+          merged.add(SubtitleBlock(
+            index: sourceBlocks[i].index,
+            timecode: sourceBlocks[i].timecode,
+            text: sourceBlocks[i].text,
+          ));
+        }
+      }
+      alignTranslatedBlocksToSource(sourceBlocks, merged);
+      return merged;
+    }
+  }
+
+  static void alignTranslatedBlocksToSource(
     List<SubtitleBlock> sourceBlocks,
     List<SubtitleBlock> translatedBlocks,
   ) {
@@ -1094,6 +1186,9 @@ class TranslationEngine {
         _logResumeDebug(
           'resume from start: discarding stale output so a full rerun does not concatenate',
         );
+      }
+      if (translatedBlocks.isEmpty && fullTranslation.isNotEmpty) {
+        translatedBlocks = SubtitleParser.parseSrt(fullTranslation.toString());
       }
       _latestRealBlocks = List<SubtitleBlock>.from(translatedBlocks);
       await _rewriteOutputFile(

@@ -750,7 +750,7 @@ Rules:
 4. Reflect the characters' emotion and the scene's tone. Prefer informal, natural, and fluent language over formality.
 5. NEVER break the SRT format (timecodes and block numbers); preserve them unchanged.
 6. If a line is so sexually explicit that a direct translation would cause problems, NEVER skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning.
-${expectedBlockCount != null ? '7. The output must contain exactly $expectedBlockCount blocks.\n' : ''}${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
+${expectedBlockCount != null ? '7. CRITICAL BLOCK COUNT CONSTRAINT: The input contains exactly $expectedBlockCount subtitle blocks. The output MUST contain EXACTLY $expectedBlockCount blocks with identical block numbers and timecodes. NEVER merge multiple blocks into one, and NEVER split any single block into multiple blocks.\n' : ''}${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
 
     int attempts = 0;
     while (attempts < 3) {
