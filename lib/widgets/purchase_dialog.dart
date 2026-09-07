@@ -296,18 +296,7 @@ class _PurchaseDialogState extends State<PurchaseDialog> {
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      if (!offerTokenPacks) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          trans["credit_usage_info"] ??
-                              "1 Kredi = 1 Tam Dosya Çevirisi",
-                          style: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+
                       const SizedBox(height: 20),
                       if (!isGoogleSignedIn) ...[
                         Container(
