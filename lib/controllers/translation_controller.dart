@@ -851,16 +851,13 @@ class TranslationController extends ChangeNotifier {
       final hash = resolved.hash;
       final resume = resolved.resume;
         final resumedChargeKey = resume?.chargeKey?.trim();
-        final cachedChargeKey = (_activeTranslationChargeKey ?? '').trim();
         final creditChargeKey =
           (resumedChargeKey != null && resumedChargeKey.isNotEmpty)
             ? resumedChargeKey
-            : (cachedChargeKey.isNotEmpty
-              ? cachedChargeKey
-              : _buildCreditChargeKey(
+            : _buildCreditChargeKey(
                 filePath: workingFile.path,
                 targetLanguage: job.targetLanguage,
-              ));
+              );
       _activeTranslationChargeKey = creditChargeKey;
       _geminiService.setDeviceId(billingService.deviceId);
       final isResuming = resume != null;

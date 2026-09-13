@@ -279,6 +279,7 @@ export const quoteTranslationCost = onCall(
             if (
                 existingSnap.exists
                 && existing.quoteId != null
+                && existing.charged === true
                 && (
                     existing.quoteId !== quoteId
                     || existing.contentHash !== contentHash
