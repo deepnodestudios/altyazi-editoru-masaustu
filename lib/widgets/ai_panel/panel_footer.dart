@@ -59,11 +59,6 @@ class _AiPanelFooterState extends State<AiPanelFooter> {
       rightText = '$estimatedPrefix: $localizedEstimatedTimeText';
     }
 
-    // Cloud Batch modunda kalan süreyi gizle
-    if (controller.isCloudBatchMode && controller.isLoading) {
-      rightText = '';
-    }
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -120,9 +115,7 @@ class _AiPanelFooterState extends State<AiPanelFooter> {
                               child: Text(
                                 controller.isTranslationComplete
                                     ? (trans['log_translation_complete'] ?? 'Çeviri Tamamlandı')
-                                    : (controller.isCloudBatchMode && controller.isLoading)
-                                        ? (trans['batch_cloud_processing_text'] ?? 'Çeviri sunucuda devam ediyor...')
-                                        : '${(value * 100).toStringAsFixed(1)}%',
+                                    : '${(value * 100).toStringAsFixed(1)}%',
                                 style: TextStyle(
                                   color: color,
                                   fontWeight: FontWeight.bold,

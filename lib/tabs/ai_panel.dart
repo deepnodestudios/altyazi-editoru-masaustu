@@ -841,13 +841,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     }
 
     if (wasRunning && isNowComplete && !_isBulkProcessing) {
-      // Cloud batch bitişi mi kontrol et
-      if (controller.isCloudBatchMode) {
-        // Cloud batch bitişinde _showSingleCompletionDialogAndReset ÇAĞIRMIYORUZ.
-        // Çünkü zaten _batchCompleteSubscription -> _showBatchSaveDialog(results) çağrılacak.
-        _lastKnownStatus = currentStatus;
-          return;
-      }
       if (_selectedFiles.length <= 1) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || _isBulkProcessing) return;
@@ -2057,14 +2050,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     );
   }
 
-  Widget _maybeBuildBatchProcessingBanner({
-    required AppSettings settings,
-    required TranslationController controller,
-    required ColorScheme colorScheme,
-  }) {
-    return const SizedBox.shrink();
-  }
-
   Widget _buildPrimaryActionsSection(
     BuildContext context, {
     required AppSettings settings,
@@ -2086,144 +2071,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
         unawaited(_clearAllFiles());
       },
       onStartTranslation: () => _startBulkProcess(controller),
-      onStartBatchTranslation: () async {
-        if (!controller.hasSpendableBalance) {
-          _showAddCreditDialog(context);
-          return;
-        }
-
-        final pendingSelected = _selectedFiles
-            .where((f) => !controller.activeBatchFilePaths.contains(f.path))
-            .toList();
-        
-          if (pendingSelected.isNotEmpty) {
-            final filesToProcess = pendingSelected.map((f) => File(f.path)).toList();
-            final shouldContinue = await _checkSameLanguage(controller, filesToProcess, settings);
-            if (!shouldContinue) return;
-            if (!context.mounted) return;
-
-          if (!settings.hideBatchTranslationInfo) {
-            bool dontShowAgain = false;
-            await showDialog(
-                context: context,
-                builder: (ctx) {
-                  return StatefulBuilder(builder: (context, setState) {
-                    return AlertDialog(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      title: Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              settings.trans['batch_info_dialog_title'] ??
-                                  'Bilgilendirme',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            settings.trans['batch_info_dialog_message'] ??
-                                'Çeviriniz sunucuda arka planda gerçekleştirilmektedir. Tamamlandığında bildirim ile haber verilecektir.\n\nDilerseniz diğer işlerinize devam edebilirsiniz.',
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: dontShowAgain,
-                                onChanged: (val) {
-                                  setState(() {
-                                    dontShowAgain = val ?? false;
-                                  });
-                                },
-                              ),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      dontShowAgain = !dontShowAgain;
-                                    });
-                                  },
-                                  child: Text(
-                                      settings.trans['dont_show_again'] ??
-                                          'Bir daha gösterme'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: Text(settings.trans['hide'] ?? 'Gizle'),
-                        ),
-                      ],
-                    );
-                  });
-                });
-            if (dontShowAgain) {
-              await settings.setHideBatchTranslationInfo(true);
-            }
-          }
-
-          if (!context.mounted) return;
-
-          final files = pendingSelected.map((f) => BatchFile(name: f.name, path: f.path)).toList();
-          final snackMsg = (settings.trans['batch_starting_snackbar'] ??
-                  '{count} dosya için Toplu Çeviri başlatılıyor...')
-              .replaceAll('{count}', files.length.toString());
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color:
-                          Theme.of(context).colorScheme.onSecondaryContainer),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      snackMsg,
-                      style: TextStyle(
-                        color:
-                            Theme.of(context).colorScheme.onSecondaryContainer,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 4,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-          controller.startBatchTranslationTest(
-            inputSrtFiles: files,
-            targetLanguage: settings.targetLanguage,
-            clearSdh: settings.sdhClear,
-            onFileCompleted: (file) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _removeFileByPath(file.path);
-                if (mounted) setState(() {});
-              });
-            },
-          );
-          _saveFilesList();
-        }
-      },
       onPauseOrResume: () async {
         if (controller.status == TranslationStatus.paused) {
           controller.resumeTranslation();
@@ -2442,11 +2289,8 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
       showStartingSoonOverlay: isRunningOrPaused &&
           controller.sourceBlocks.isNotEmpty &&
           controller.translatedBlocks.isEmpty,
-        startingSoonText: controller.isCloudBatchMode
-          ? (settings.trans['batch_cloud_processing_info'] ??
-              'Çeviri sunucuda devam ediyor...')
-          : (settings.trans['translation_starting_soon'] ??
-              'Çeviri birkaç saniye içinde başlayacak'),
+      startingSoonText: settings.trans['translation_starting_soon'] ??
+          'Çeviri birkaç saniye içinde başlayacak',
       colorScheme: colorScheme,
     );
   }
@@ -2782,11 +2626,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
                                 colorScheme: colorScheme,
                               ),
                               const SizedBox(height: kAiPanelSectionGap),
-                              _maybeBuildBatchProcessingBanner(
-                                settings: settings,
-                                controller: controller,
-                                colorScheme: colorScheme,
-                              ),
                               _buildPrimaryActionsSection(
                                 context,
                                 settings: settings,
@@ -2876,11 +2715,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.stretch,
                                         children: [
-                                          _maybeBuildBatchProcessingBanner(
-                                            settings: settings,
-                                            controller: controller,
-                                            colorScheme: colorScheme,
-                                          ),
                                           _buildPrimaryActionsSection(
                                             context,
                                             settings: settings,

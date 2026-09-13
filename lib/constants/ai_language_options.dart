@@ -200,6 +200,17 @@ String aiPanelLanguagePromptNameForCode(String value) {
       aiPanelLanguageLabelForCode(normalized);
 }
 
+/// Extra dialect constraints for the translation system prompt.
+String aiPanelLanguageDialectNotes(String value) {
+  final normalized = normalizeAiPanelLanguageCode(value);
+  if (normalized == 'MS') {
+    return 'Write only standard Malaysian Bahasa Melayu. Do not mix in Bahasa Indonesia '
+        '(use kereta not mobil, telefon not telepon, universiti not universitas, '
+        'aktiviti not aktivitas, perbualan not percakapan).';
+  }
+  return '';
+}
+
 bool aiPanelLanguageCodesEqual(String left, String right) {
   final normalizedLeft = normalizeAiPanelLanguageCode(left);
   final normalizedRight = normalizeAiPanelLanguageCode(right);

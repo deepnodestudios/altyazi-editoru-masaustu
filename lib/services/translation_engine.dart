@@ -424,7 +424,7 @@ class TranslationEngine {
           sourceLanguageHint: sourceLanguageHint,
           expectedBlockCount: 1,
         );
-        final parsed = SubtitleParser.parseSrt(singleTranslated);
+        final parsed = SubtitleParser.parseSrt(singleTranslated.text);
         if (parsed.length == 1) {
           repaired[i] = SubtitleBlock(
             index: i + 1,
@@ -514,7 +514,7 @@ class TranslationEngine {
           contextHint: contextHint,
           sourceLanguageHint: sourceLanguageHint,
         );
-        final parsed = SubtitleParser.parseSrt(singleTranslated);
+        final parsed = SubtitleParser.parseSrt(singleTranslated.text);
         if (parsed.length == 1) {
           translatedBlocks[i].text = parsed.first.text;
           fixes++;
@@ -566,7 +566,7 @@ class TranslationEngine {
         sourceLanguageHint: sourceLanguageHint,
         expectedBlockCount: expectedBlocks.length,
       );
-      final retryParsed = SubtitleParser.parseSrt(retryTranslated);
+      final retryParsed = SubtitleParser.parseSrt(retryTranslated.text);
       if (retryParsed.length != expectedBlocks.length) {
         return translatedBlocks;
       }
@@ -593,13 +593,14 @@ class TranslationEngine {
     bool forceSplit = false;
 
     try {
-      translated = await _geminiService.translateChunk(
+      translated = (await _geminiService.translateChunk(
         chunk,
         targetLanguage: targetLanguage,
         contextHint: contextHint,
         sourceLanguageHint: sourceLanguageHint,
         expectedBlockCount: expectedCount,
-      );
+      ))
+          .text;
       parsed = SubtitleParser.parseSrt(translated);
     } catch (e) {
       final err = e.toString();
@@ -685,7 +686,7 @@ class TranslationEngine {
           sourceLanguageHint: sourceLanguageHint,
           expectedBlockCount: expectedCount,
         );
-        final retryParsed = SubtitleParser.parseSrt(retryTranslated);
+        final retryParsed = SubtitleParser.parseSrt(retryTranslated.text);
         if (retryParsed.length == expectedCount) {
           alignTranslatedBlocksToSource(expectedBlocks, retryParsed);
           final languageFixed = await _retryIfOffTargetLanguage(
@@ -1102,12 +1103,13 @@ class TranslationEngine {
             ? blocks.sublist(0, 24)
             : blocks;
         final sampleSrt = SubtitleBuilder.buildSrt(sampleBlocks);
-        translationMemory = await _geminiService.buildTranslationMemory(
+        final memoryResult = await _geminiService.buildTranslationMemory(
           fileTitleYearHint: contextHint,
           sampleSrt: sampleSrt,
           targetLanguage: targetLanguage,
           sourceLanguageHint: sourceLanguageHint,
         );
+        translationMemory = memoryResult.text;
         if (translationMemory.trim().isNotEmpty) {
           onLog?.call('log_context_memory_built');
         }

@@ -315,7 +315,7 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             prepared: true,
             approved: false,
             // Never reset 'charged' to false if the session was already charged.
-            // This preserves idempotency integrity in translateText / batchTranslate.
+            // This preserves idempotency integrity in translateText.
             ...(!alreadyCharged && { charged: false }),
             requiresRewardedAd,
             rewardedAdConfirmed: !requiresRewardedAd || useRewardedAd,

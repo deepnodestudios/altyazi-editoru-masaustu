@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/ai_language_options.dart';
 
 class SettingsManager extends ChangeNotifier {
-  static const String _prefKeyBatchSize = 'batchSize';
   static const String _prefKeyIsFreeSlow = 'isFreeSlow';
   static const String _prefKeyKeepScreenOn = 'keepScreenOn';
   static const String _prefKeySleepPreventionPrompted =
@@ -14,7 +13,6 @@ class SettingsManager extends ChangeNotifier {
   static const String _prefKeySdhClearNoTrans = 'sdhClearNoTrans';
   static const String _prefKeyTargetLanguage = 'targetLanguage';
 
-  int _batchSize = 150; // Token optimizasyonu için varsayılan değer artırıldı
   bool _isFreeSlow = false;
   bool _keepScreenOn = false;
   bool _sleepPreventionPrompted = false;
@@ -29,7 +27,6 @@ class SettingsManager extends ChangeNotifier {
   bool _sdhClearNoTransTouched = false;
 
   // Getters
-  int get batchSize => _batchSize;
   bool get isFreeSlow => _isFreeSlow;
   bool get keepScreenOn => _keepScreenOn;
   bool get sleepPreventionPrompted => _sleepPreventionPrompted;
@@ -39,14 +36,6 @@ class SettingsManager extends ChangeNotifier {
   String get targetLanguage => _targetLanguage;
 
   // Setters with persistence
-  void setBatchSize(int size) {
-    if (_batchSize != size) {
-      _batchSize = size;
-      _saveBatchSize(size);
-      notifyListeners();
-    }
-  }
-
   void setIsFreeSlow(bool value) {
     if (_isFreeSlow != value) {
       _isFreeSlow = value;
@@ -110,7 +99,6 @@ class SettingsManager extends ChangeNotifier {
   Future<void> loadSettingsFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
 
-    _batchSize = prefs.getInt(_prefKeyBatchSize) ?? 150;
     _isFreeSlow = prefs.getBool(_prefKeyIsFreeSlow) ?? false;
     _keepScreenOn = prefs.getBool(_prefKeyKeepScreenOn) ?? false;
     _sleepPreventionPrompted =
@@ -140,11 +128,6 @@ class SettingsManager extends ChangeNotifier {
   }
 
   // Private persistence methods
-  Future<void> _saveBatchSize(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_prefKeyBatchSize, value);
-  }
-
   Future<void> _saveIsFreeSlow(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefKeyIsFreeSlow, value);

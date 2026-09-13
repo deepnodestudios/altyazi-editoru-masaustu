@@ -99,6 +99,56 @@ class GeminiService {
   String? _chargeKey;
   void setChargeKey(String? key) => _chargeKey = key;
 
+  /// Masaüstü controller uyumluluğu: mevcut charge bağlamını ayarlar.
+  void setTranslationChargeContext({String? chargeKey, bool approveCharge = false}) {
+    final trimmed = chargeKey?.trim();
+    _chargeKey = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    _approveChargeOnNextCall = approveCharge;
+  }
+
+  /// Masaüstü controller uyumluluğu: charge bağlamını temizler.
+  void clearTranslationChargeContext() {
+    _chargeKey = null;
+    _approveChargeOnNextCall = false;
+  }
+
+  // Usage tracking (cost takibi; mobil engine ile uyumlu).
+  int _usageInputTokens = 0;
+  int _usageOutputTokens = 0;
+  int _usageApiCalls = 0;
+  int _usageApiRetries = 0;
+  int _usageResendRounds = 0;
+  double _usageCostUsd = 0;
+  String _usageModel = '';
+
+  Map<String, dynamic> get usageSnapshot => {
+        'inputTokens': _usageInputTokens,
+        'outputTokens': _usageOutputTokens,
+        'apiCalls': _usageApiCalls,
+        'apiRetries': _usageApiRetries,
+        'resendRounds': _usageResendRounds,
+        'costUsd': _usageCostUsd,
+        'model': _usageModel,
+      };
+
+  void resetUsage() {
+    _usageInputTokens = 0;
+    _usageOutputTokens = 0;
+    _usageApiCalls = 0;
+    _usageApiRetries = 0;
+    _usageResendRounds = 0;
+    _usageCostUsd = 0;
+    _usageModel = '';
+  }
+
+  void _accumulateUsage(
+      ({String text, int inputTokens, int outputTokens, double costUsd}) result) {
+    _usageApiCalls += 1;
+    _usageInputTokens += result.inputTokens;
+    _usageOutputTokens += result.outputTokens;
+    _usageCostUsd += result.costUsd;
+  }
+
   bool _approveChargeOnNextCall = false;
   int? _pendingCharCount;
   int? _pendingEstimatedTokens;
@@ -406,12 +456,14 @@ class GeminiService {
       }
     }
     final costUsd = double.tryParse((data['costUsd'] as String?) ?? '') ?? 0.0;
-    return (
+    final translated = (
       text: (data['text'] as String?) ?? '',
       inputTokens: (data['inputTokens'] as int?) ?? 0,
       outputTokens: (data['outputTokens'] as int?) ?? 0,
       costUsd: costUsd,
     );
+    _accumulateUsage(translated);
+    return translated;
   }
 
   Stream<String> streamSrtTranslation(String content,
@@ -665,140 +717,4 @@ Rules:
     );
   }
 
-  /// BATCH API METODLARI ///
-
-  Future<String> startBatchTranslation({
-    required List<Map<String, String>>
-        chunks, // Her biri { id: '...', text: '...' } içerecek
-    String targetLanguage = 'Turkish',
-    String? sourceLanguageHint,
-    String? contextHint,
-    String? fcmToken,
-    String? sourceHash,
-    String? sourceContent,
-    String? originalNameForGlobalCache,
-    String? fileNameForHistory,
-    int? totalLines,
-    bool? canWriteUserHistory,
-    String? completedPlatform,
-    bool? isMultiFileBatch,
-  }) async {
-    await _ensureAuthReady();
-
-    final fullTargetLanguage = _getFullLanguageName(targetLanguage);
-    final ctx = (contextHint ?? '').trim();
-    final srcHint = (sourceLanguageHint ?? '').trim();
-
-    final systemPrompt =
-        '''You are a professional subtitle translator working to Netflix standards.
-Your task: Translate the given SRT-format subtitle blocks from [${srcHint.isNotEmpty ? srcHint : 'Source Language'}] into $fullTargetLanguage.
-
-  ATTENTION / IMPORTANT:
-  - YOU MUST PROVIDE THE TRANSLATION RESULT STRICTLY AND ONLY IN $fullTargetLanguage.
-  - DO NOT USE ANY LANGUAGE OTHER THAN $fullTargetLanguage IN THE OUTPUT. IF THE TARGET LANGUAGE IS NOT TURKISH, NEVER WRITE TURKISH SENTENCES!
-${_dialectNotes(targetLanguage)}
-Rules:
-1. Avoid "translationese" when translating. Write the way people speak in everyday $fullTargetLanguage.
-2. Adapt idioms, slang, and cultural references to their most natural equivalents in $fullTargetLanguage culture, not word-for-word.
-3. Stay fully faithful to the original meaning and context. Avoid over-summarizing that would lose content; however, keep sentences at a fluent length that can be read on screen.
-4. Reflect the characters' emotion and the scene's tone.
-5. NEVER break the SRT format (timecodes and block numbers); preserve them unchanged.
-6. If a line is so sexually explicit that a direct translation would cause problems, NEVER skip the line, leave it blank, or refuse to translate; translate it in softer, more veiled language while preserving meaning.
-${ctx.isNotEmpty ? 'Context (Movie/Series Info): $ctx\n' : ''}''';
-
-    Future<String> attemptCall() async {
-      final appVersion = await _getTranslationAppVersion();
-      final callable = _functions.httpsCallable('startBatchTranslation');
-      final result = await callable.call({
-        'chunks': chunks,
-        'systemPrompt': systemPrompt,
-        'deviceId': _deviceId,
-        if (_chargeKey != null && _chargeKey!.trim().isNotEmpty)
-          'chargeKey': _chargeKey,
-        if (_pendingQuote != null) ...{
-          'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
-          'quoteId': _pendingQuote!.quoteId,
-          'contentHash': _pendingQuote!.contentHash,
-        },
-        if (fcmToken != null) 'fcmToken': fcmToken,
-        if (sourceHash != null) 'sourceHash': sourceHash,
-        if (sourceContent != null) 'sourceContent': sourceContent,
-        'targetLanguage': targetLanguage,
-        if (originalNameForGlobalCache != null)
-          'originalNameForGlobalCache': originalNameForGlobalCache,
-        if (fileNameForHistory != null) 'fileNameForHistory': fileNameForHistory,
-        if (totalLines != null) 'totalLines': totalLines,
-        if (canWriteUserHistory != null)
-          'canWriteUserHistory': canWriteUserHistory,
-        if (completedPlatform != null) 'completedPlatform': completedPlatform,
-        if (isMultiFileBatch != null) 'isMultiFileBatch': isMultiFileBatch,
-        if (appVersion != null) 'appVersion': appVersion,
-      });
-
-      final data = result.data as Map;
-      if (data['success'] == true) {
-        final receipt = data['chargeReceipt'];
-        if (receipt is Map) {
-          _lastChargeReceipt = Map<String, dynamic>.from(receipt);
-          _lastChargeMode = receipt['chargeMode']?.toString().trim();
-          final chargedAmount =
-              TranslationQuote._intValue(receipt['chargedAmount']);
-          if (_lastChargeMode == 'tokens' && chargedAmount > 0) {
-            _lastPlannedEstimatedTokens = chargedAmount;
-          }
-        }
-        return data['jobName'] as String;
-      }
-      throw Exception('Failed to start batch job');
-    }
-
-    try {
-      return await attemptCall();
-    } catch (e) {
-      if (e is FirebaseFunctionsException && e.code == 'unauthenticated') {
-        // Try a one-time auth refresh + retry.
-        await _ensureAuthReady();
-        try {
-          return await attemptCall();
-        } catch (retryError) {
-          throw Exception('SERVER_ERROR:unauthenticated:Auth refresh declined.');
-        }
-      }
-      if (e is FirebaseFunctionsException) {
-        throw Exception('SERVER_ERROR:${e.code}:${e.message}');
-      }
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> checkBatchTranslationStatus({
-    required String jobName,
-    String? sourceHash,
-    String? sourceContent,
-    String? targetLanguage,
-    String? originalNameForGlobalCache,
-    String? fileNameForHistory,
-    int? totalLines,
-    bool? canWriteUserHistory,
-    String? completedPlatform,
-  }) async {
-    await _ensureAuthReady();
-    final callable = _functions.httpsCallable('checkBatchTranslation');
-    final result = await callable.call({
-      'jobName': jobName,
-      'deviceId': _deviceId,
-      if (sourceHash != null) 'sourceHash': sourceHash,
-      if (sourceContent != null) 'sourceContent': sourceContent,
-      if (targetLanguage != null) 'targetLanguage': targetLanguage,
-      if (originalNameForGlobalCache != null)
-        'originalNameForGlobalCache': originalNameForGlobalCache,
-      if (fileNameForHistory != null) 'fileNameForHistory': fileNameForHistory,
-      if (totalLines != null) 'totalLines': totalLines,
-      if (canWriteUserHistory != null)
-        'canWriteUserHistory': canWriteUserHistory,
-      if (completedPlatform != null) 'completedPlatform': completedPlatform,
-    });
-
-    return result.data as Map<String, dynamic>;
-  }
 }

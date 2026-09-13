@@ -40,7 +40,6 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onNewTranslation;
   final VoidCallback onStartTranslation;
-  final VoidCallback onStartBatchTranslation;
   final Future<void> Function() onPauseOrResume;
   final Future<void> Function() onStop;
 
@@ -54,7 +53,6 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
     required this.onSave,
     required this.onNewTranslation,
     required this.onStartTranslation,
-    required this.onStartBatchTranslation,
     required this.onPauseOrResume,
     required this.onStop,
   });
@@ -70,74 +68,70 @@ class AiPanelPrimaryActionsSection extends StatelessWidget {
     }
 
     if (controller.isLoading || isBulkProcessing) {
-      final isClientSideRunning = !controller.isCloudBatchMode;
-      
-      if (isClientSideRunning) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: kAiPanelPrimaryButtonHeight,
-                    child: ElevatedButton.icon(
-                      onPressed: () => onPauseOrResume(),
-                      icon: Icon(
-                        controller.status == TranslationStatus.paused
-                            ? Icons.play_arrow
-                            : Icons.pause,
-                        size: 18,
-                      ),
-                      label: Text(
-                        controller.status == TranslationStatus.paused
-                            ? (settings.trans['resume'] ?? 'Devam Et')
-                            : (settings.trans['pause'] ?? 'Duraklat'),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: controller.status == TranslationStatus.paused
-                            ? Colors.green.shade700
-                            : Colors.orange.shade800,
-                        foregroundColor: Colors.white,
-                        elevation: 3,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
-                        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: kAiPanelPrimaryButtonHeight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => onPauseOrResume(),
+                    icon: Icon(
+                      controller.status == TranslationStatus.paused
+                          ? Icons.play_arrow
+                          : Icons.pause,
+                      size: 18,
+                    ),
+                    label: Text(
+                      controller.status == TranslationStatus.paused
+                          ? (settings.trans['resume'] ?? 'Devam Et')
+                          : (settings.trans['pause'] ?? 'Duraklat'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: controller.status == TranslationStatus.paused
+                          ? Colors.green.shade700
+                          : Colors.orange.shade800,
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: kAiPanelInlineGap),
-                Expanded(
-                  child: SizedBox(
-                    height: kAiPanelPrimaryButtonHeight,
-                    child: ElevatedButton.icon(
-                      onPressed: () => onStop(),
-                      icon: const Icon(Icons.stop, size: 18),
-                      label: Text(settings.trans['stop'] ?? 'Durdur'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
-                        elevation: 3,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
-                        ),
+              ),
+              const SizedBox(width: kAiPanelInlineGap),
+              Expanded(
+                child: SizedBox(
+                  height: kAiPanelPrimaryButtonHeight,
+                  child: ElevatedButton.icon(
+                    onPressed: () => onStop(),
+                    icon: const Icon(Icons.stop, size: 18),
+                    label: Text(settings.trans['stop'] ?? 'Durdur'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      elevation: 3,
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: kAiPanelSectionGap),
-          ],
-        );
-      }
+              ),
+            ],
+          ),
+          const SizedBox(height: kAiPanelSectionGap),
+        ],
+      );
     }
 
     final canStartNormal = !(controller.isLoading || isBulkProcessing) && selectedFilesCount > 0;

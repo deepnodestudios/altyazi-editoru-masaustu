@@ -230,9 +230,7 @@ class TranslationController extends ChangeNotifier {
   }
 
   bool _isBatchMode = false;
-  bool _isCloudBatchMode = false;
-  bool get isCloudBatchMode => _isCloudBatchMode;
-  bool get isBatchProcessing => _isBatchMode || _isCloudBatchMode;
+  bool get isBatchProcessing => _isBatchMode;
 
   int _batchSuccessCount = 0;
   int get batchSuccessCount => _batchSuccessCount;
@@ -589,7 +587,6 @@ class TranslationController extends ChangeNotifier {
 
     _stopRequested = false;
     _isBatchMode = true;
-    _isCloudBatchMode = false;
 
     // If a previous run left the controller in paused state, starting a new queue
     // would hang in the pause loop before the first job.
@@ -693,7 +690,6 @@ class TranslationController extends ChangeNotifier {
 
     _stopRequested = false;
     _isBatchMode = false; // Tekli mod
-    _isCloudBatchMode = false;
 
     await _processQueue(playCompletionSound: playCompletionSound);
   }
@@ -1761,9 +1757,7 @@ class TranslationController extends ChangeNotifier {
       }
     }
 
-    if (allowGlobalCache &&
-        !_isCloudBatchMode &&
-        sourceContent.trim().isNotEmpty) {
+    if (allowGlobalCache && sourceContent.trim().isNotEmpty) {
       // Gerçek AI maliyeti: yalnızca bu çevrilen dosyaya, global_translations
       // dokümanının içine düz alan olarak yazılır (cache-hit'te AI çağrısı yoktur).
       final usage = _engine.usageSnapshot;
@@ -1805,7 +1799,6 @@ class TranslationController extends ChangeNotifier {
           targetLanguage: job.targetLanguage,
           encodingDetected: _engine.lastDetectedEncoding,
           deviceId: billingService.deviceId,
-          isBatch: _isCloudBatchMode,
           cost: cost,
           chargedTokens: _appChargedTokensForGlobal,
           translationCreditType:
@@ -1824,7 +1817,6 @@ class TranslationController extends ChangeNotifier {
             targetLanguage: job.targetLanguage,
             encodingDetected: _engine.lastDetectedEncoding,
             deviceId: billingService.deviceId,
-            isBatch: _isCloudBatchMode,
             cost: cost,
             chargedTokens: _appChargedTokensForGlobal,
             chargeReceipt: _activeChargeReceiptForGlobal,
@@ -2028,516 +2020,6 @@ class TranslationController extends ChangeNotifier {
     }
   }
 
-  Future<void> startBatchTranslationTest({
-    required List<BatchFile> inputSrtFiles,
-    required String targetLanguage,
-    bool clearSdh = false,
-    void Function(File)? onFileCompleted,
-  }) async {
-    if (inputSrtFiles.isEmpty) return;
-
-    if (!hasSpendableBalance) {
-      _onLog?.call(
-          _settings?.trans['error_prefix'] ?? 'Hata',
-          billingService.showTokenWalletUi
-              ? (_settings?.trans['batch_no_token_log'] ??
-                  _settings?.trans['batch_no_credit_log'] ??
-                  'Yetersiz token. İşlemi başlatabilmek için bakiyeniz bulunmuyor.')
-              : (_settings?.trans['batch_no_credit_log'] ??
-                  'Kredi yetersiz. İşlemi başlatabilmek için bakiyeniz bulunmuyor.'));
-      onError?.call(
-          billingService.showTokenWalletUi
-              ? (_settings?.trans['billing_no_token'] ??
-                  _settings?.trans['token_insufficient_title'] ??
-                  'Yetersiz token')
-              : (_settings?.trans['billing_no_credit'] ?? 'Kredi Yetersiz'),
-          billingService.showTokenWalletUi
-              ? (_settings?.trans['billing_no_token_desc'] ??
-                  _settings?.trans['billing_no_credit_desc'] ??
-                  'Bu işlemi başlatmak için bakiyeniz bulunmuyor.')
-              : (_settings?.trans['billing_no_credit_desc'] ??
-                  'Bu işlemi başlatmak için bakiyeniz bulunmuyor.'));
-      return;
-    }
-
-    List<BatchFile> filesToProcess = inputSrtFiles;
-    if (!billingService.usesTokenWallet &&
-        userCredits < inputSrtFiles.length) {
-      filesToProcess = inputSrtFiles.sublist(0, userCredits);
-      final partialDesc = (_settings?.trans['batch_credit_partial'] ??
-              'Krediniz ({credits}), seçilen dosya sayısından ({total}) az...')
-          .replaceAll('{credits}', userCredits.toString())
-          .replaceAll('{total}', inputSrtFiles.length.toString());
-      _onLog?.call(_settings?.trans['info'] ?? 'Bilgi', partialDesc);
-    }
-
-    _selectedFile = File(filesToProcess.first.path);
-
-    // activeBatchFilePaths.clear(); // We shouldn't clear it so we can run concurrently!
-    for (var f in filesToProcess) {
-      if (!activeBatchFilePaths.contains(f.path)) {
-        activeBatchFilePaths.add(f.path);
-      }
-    }
-
-    _geminiService.setDeviceId(billingService.deviceId);
-
-    // Eski ortak hash hesaplaması iptal edildi, artık her dosya için kendi içeriğinden hash üretilecek.
-
-    if (!_isCloudBatchMode) {
-      batchResults.clear();
-    }
-    _isCloudBatchMode = true;
-    _startBatchTimer();
-    status = TranslationStatus.running;
-    progress = 1.0;
-    isTranslationComplete = false;
-    // _batchErrors.clear(); // Eğer error listesi class düzeyindeyse
-
-    final triggeredDesc = (_settings?.trans['batch_api_triggered'] ??
-            '{count} dosya için Batch API tetiklendi.')
-        .replaceAll('{count}', filesToProcess.length.toString());
-    _onLog?.call(
-        _settings?.trans['batch_starting'] ?? 'Toplu Çeviri Başlatılıyor...',
-        triggeredDesc);
-    notifyListeners();
-
-    String? fcmToken;
-    // Desktop FCM disabled
-
-    List<Map<String, dynamic>> activeJobs = [];
-    try {
-      for (final batchF in filesToProcess) {
-        final file = File(batchF.path);
-        final readResult =
-            await _subtitleRepository.readFileWithEncoding(file.path);
-        var content = readResult.content;
-
-        if (clearSdh) {
-          content = SubtitleParser.clearSdh(content);
-        }
-
-        // Her dosya için kendi hash'i üzerinden chargeKey oluşturuyoruz
-        final sourceHash = _stableSubtitleHash(content);
-        final fileChargeKey =
-            _buildSessionChargeKey(sourceHash, targetLanguage);
-        _activeTranslationChargeKey = fileChargeKey;
-        _geminiService.setChargeKey(fileChargeKey);
-
-        final blocks = SubtitleParser.parseSrt(content);
-
-        if (file.path == _selectedFile?.path) {
-          sourceBlocks = blocks;
-        }
-
-        List<Map<String, String>> requests = [];
-        int chunkSize = 200;
-        for (int i = 0; i < blocks.length; i += chunkSize) {
-          final end =
-              (i + chunkSize < blocks.length) ? i + chunkSize : blocks.length;
-          final chunkBlocks = blocks.sublist(i, end);
-          final chunkStr =
-              SubtitleBuilder.buildSrt(chunkBlocks, resequence: false);
-          requests.add({
-            'id': 'chunk_$i',
-            'text': chunkStr,
-          });
-        }
-
-        final displayName = batchF.name;
-        final originalNameForGlobalCache =
-            StringUtils.ensureHashSuffixInFileName(
-          fileName: displayName,
-          hash: sourceHash,
-        );
-
-        final isMultiFile = filesToProcess.length > 1;
-
-        final quote = await _geminiService.quoteTranslationCost(
-          chargeKey: fileChargeKey,
-          sourceContent: content,
-          sourceHash: sourceHash,
-          targetLanguage: targetLanguage,
-          platform: Platform.operatingSystem,
-          fileName: displayName,
-        );
-        _activeTranslationQuote = quote;
-        _activeCharCount = quote.quotedCharacterCount;
-        _activeEstimatedTokens = quote.quotedAppTokens;
-        _activeChargeMode = quote.chargeMode;
-        final estimateDecision =
-            await TokenEstimateGateService.instance.confirmIfNeeded(
-          billing: billingService,
-          trans: _settings?.trans ?? const {},
-          quote: quote,
-        );
-        if (estimateDecision != TokenEstimateDecision.proceed) {
-          _stopRequested = true;
-          status = TranslationStatus.idle;
-          notifyListeners();
-          return;
-        }
-
-        await _geminiService.prepareTranslationAccess(
-          chargeKey: fileChargeKey,
-          useRewardedAd: false,
-          fileName: displayName,
-          targetLanguage: targetLanguage,
-          platform: Platform.operatingSystem,
-          charCount: quote.quotedCharacterCount,
-          estimatedTokens: quote.quotedAppTokens,
-          quote: quote,
-        );
-
-        if (isMultiFile && filesToProcess.indexOf(batchF) > 0) {
-            await Future.delayed(const Duration(milliseconds: 3000));
-          }
-          final jobName = await _geminiService.startBatchTranslation(
-          chunks: requests,
-          targetLanguage: targetLanguage,
-          fcmToken: fcmToken,
-          sourceHash: sourceHash,
-          sourceContent: content,
-          originalNameForGlobalCache: originalNameForGlobalCache,
-          fileNameForHistory: displayName,
-          totalLines: blocks.length,
-          canWriteUserHistory: true,
-          completedPlatform: Platform.operatingSystem,
-          isMultiFileBatch: isMultiFile,
-        );
-
-        activeJobs.add({
-          'file': file,
-          'jobName': jobName,
-          'sourceHash': sourceHash,
-          'sourceContent': content,
-          'originalNameForGlobalCache': originalNameForGlobalCache,
-          'displayName': displayName,
-          'totalLines': blocks.length,
-        });
-
-        final sentDesc = (_settings?.trans['batch_file_sent'] ??
-                '{filename} sunucuya gönderildi. Job: {job}')
-            .replaceAll('{filename}', displayName)
-            .replaceAll('{job}', jobName);
-        _onLog?.call(_settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-            sentDesc);
-        notifyListeners();
-      }
-
-      while (activeJobs.isNotEmpty) {
-        await Future.delayed(const Duration(seconds: 15));
-        if (status != TranslationStatus.running) {
-          _onLog?.call(
-              _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-              _settings?.trans['batch_process_canceled'] ??
-                  'İşlem iptal edildi.');
-          notifyListeners();
-          return;
-        }
-
-        final ongoingDesc = (_settings?.trans['batch_process_ongoing'] ??
-                'Devam ediyor (15sn aralıklarla kontrol ediliyor, kalan iş: {count})...')
-            .replaceAll('{count}', activeJobs.length.toString());
-        _onLog?.call(_settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-            ongoingDesc);
-        notifyListeners();
-
-        List<Map<String, dynamic>> completedJobs = [];
-
-        for (final job in activeJobs) {
-          try {
-            final result = await _geminiService.checkBatchTranslationStatus(
-              jobName: job['jobName'],
-              sourceHash: job['sourceHash'],
-              sourceContent: job['sourceContent'],
-              targetLanguage: targetLanguage,
-              originalNameForGlobalCache: job['originalNameForGlobalCache'],
-              fileNameForHistory: job['displayName'],
-              totalLines: job['totalLines'],
-              canWriteUserHistory: true,
-              completedPlatform: Platform.operatingSystem,
-            );
-
-            final state = result['status'];
-            if (state == 'SUCCEEDED') {
-              final String sourceContent = job['sourceContent'] as String;
-              final jobSourceBlocks = SubtitleParser.parseSrt(sourceContent);
-
-              final List<dynamic> translationResults = result['results'];
-              List<SubtitleBlock> alignedBlocks = [];
-              int chunkSize = 200;
-
-              for (int i = 0; i < translationResults.length; i++) {
-                final startIdx = i * chunkSize;
-                final endIdx = (startIdx + chunkSize < jobSourceBlocks.length)
-                    ? startIdx + chunkSize
-                    : jobSourceBlocks.length;
-                if (startIdx >= jobSourceBlocks.length) break;
-
-                final srcChunk = jobSourceBlocks.sublist(startIdx, endIdx);
-                final transStr = "${translationResults[i]}\n\n";
-                final transChunk = SubtitleParser.parseSrt(transStr);
-
-                String normTc(String tc) {
-                  final parts = tc.split('-->');
-                  if (parts.isEmpty) return '';
-                  return parts[0].replaceAll(RegExp(r'[^0-9]'), '');
-                }
-
-                int searchStartIdx = 0;
-
-                for (int srcIdx = 0; srcIdx < srcChunk.length; srcIdx++) {
-                  final src = srcChunk[srcIdx];
-                  final srcStart = normTc(src.timecode);
-
-                  SubtitleBlock? matchedDst;
-
-                  int bestMatch = -1;
-                  for (int look = searchStartIdx; look < searchStartIdx + 8 && look < transChunk.length; look++) {
-                    if (normTc(transChunk[look].timecode) == srcStart) {
-                      bestMatch = look;
-                      break;
-                    }
-                  }
-
-                  if (bestMatch != -1) {
-                    matchedDst = transChunk[bestMatch];
-                    searchStartIdx = bestMatch + 1;
-                  } else if (srcChunk.length == transChunk.length && searchStartIdx < transChunk.length) {
-                    // Fallback to strict index mapping ONLY if lengths match perfectly 
-                    // and we couldn't find a timecode match (AI might have mangled timecode formatting).
-                    matchedDst = transChunk[srcIdx];
-                    searchStartIdx = srcIdx + 1;
-                  }
-
-                  if (matchedDst != null) {
-                    final dst = SubtitleBlock(
-                      index: src.index,
-                      timecode: src.timecode,
-                      text: matchedDst.text,
-                    );
-
-                    // Quotes logic
-                    final srcTrim = src.text.trim();
-                    final dstTrim = dst.text.trim();
-                    final srcHasOuterQuotes =
-                        (srcTrim.startsWith('"') && srcTrim.endsWith('"')) ||
-                            (srcTrim.startsWith('“') && srcTrim.endsWith('”')) ||
-                            (srcTrim.startsWith('«') && srcTrim.endsWith('»'));
-                    final dstHasOuterQuotes =
-                        (dstTrim.startsWith('"') && dstTrim.endsWith('"')) ||
-                            (dstTrim.startsWith('“') && dstTrim.endsWith('”')) ||
-                            (dstTrim.startsWith('«') && dstTrim.endsWith('»'));
-
-                    if (!srcHasOuterQuotes && dstHasOuterQuotes) {
-                      var cleaned = dstTrim;
-                      cleaned = cleaned.replaceFirst(RegExp(r'^("|“|«)\s*'), '');
-                      cleaned =
-                          cleaned.replaceFirst(RegExp(r'\s*("|”|»)\s*$'), '');
-                      dst.text = cleaned.trim();
-                    }
-
-                    // Line count logic
-                    final srcLineCount = src.text
-                        .split('\n')
-                        .where((l) => l.trim().isNotEmpty)
-                        .length;
-                    if (srcLineCount <= 1) {
-                      dst.text =
-                          dst.text.replaceAll(RegExp(r'\n{2,}'), '\n').trim();
-                    } else {
-                      final dstLines = dst.text
-                          .split('\n')
-                          .where((l) => l.trim().isNotEmpty)
-                          .toList();
-                      if (dstLines.length != srcLineCount) {
-                        final flat = dst.text
-                            .replaceAll('\n', ' ')
-                            .replaceAll(RegExp(r'\s+'), ' ')
-                            .trim();
-                        if (flat.isNotEmpty) {
-                          final words = flat.split(' ');
-                          final targetLines = <String>[];
-                          final totalChars = flat.length;
-                          final approxPerLine =
-                              (totalChars / srcLineCount).ceil();
-
-                          var current = StringBuffer();
-                          for (final w in words) {
-                            if (targetLines.length < srcLineCount - 1 &&
-                                current.isNotEmpty &&
-                                (current.length + 1 + w.length) > approxPerLine) {
-                              targetLines.add(current.toString().trim());
-                              current = StringBuffer();
-                            }
-                            if (current.isNotEmpty) current.write(' ');
-                            current.write(w);
-                          }
-                          if (current.isNotEmpty) {
-                            targetLines.add(current.toString().trim());
-                          }
-                          dst.text = targetLines.join('\n');
-                        }
-                      }
-                    }
-                    alignedBlocks.add(dst);
-                  } else {
-                    // AI dropped this block's translation, fallback to source text to prevent desync
-                    alignedBlocks.add(SubtitleBlock(
-                        index: src.index,
-                        timecode: src.timecode,
-                        text: src.text));
-                  }
-                }
-              }
-              final resBlocks = alignedBlocks;
-              final String fullTransSrt =
-                  SubtitleBuilder.buildSrt(alignedBlocks);
-
-              final jobNorm =
-                  job['file'].path.replaceAll('\\', '/').toLowerCase();
-              final selNorm =
-                  _selectedFile?.path.replaceAll('\\', '/').toLowerCase();
-              if (jobNorm == selNorm) {
-                translatedBlocks = resBlocks;
-                generatedFilePath = SubtitleParser.generateOutputFilePath(
-                    job['file'].path, targetLanguage);
-                await File(generatedFilePath!).writeAsString(fullTransSrt);
-              }
-
-              _syncProjectToSettings(
-                file: job['file'],
-                targetLanguage: targetLanguage,
-                isPartial: false,
-                isCompleted: true,
-                sourceHash: job['sourceHash'],
-                customSourceBlocks: jobSourceBlocks,
-                customTranslatedBlocks: resBlocks,
-                customFileName: job['displayName'],
-              );
-
-              final finalName = job['displayName'] ??
-                  StringUtils.hideHashAndMarkersInFileName(
-                      job['file'].path.split(Platform.pathSeparator).last);
-              batchResults[finalName] = fullTransSrt;
-
-              completedJobs.add(job);
-              _batchSuccessCount++;
-              final succDesc = (_settings?.trans['batch_file_success'] ??
-                      '{filename} çevirisi başarıyla tamamlandı.')
-                  .replaceAll('{filename}', job['displayName'] ?? '');
-              _onLog?.call(
-                  _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-                  succDesc);
-
-              // Her dosya tamamlandığında ayrı ayrı bildirim
-              // Cloud Batch'te push bildirimi (FCM) geldiği için,
-              // çift bildirim olmaması adına bu yerel bildirimi kapatıyoruz.
-              // onProgress?.call(1, 1,
-              //     isComplete: true, fileName: job['displayName']);
-
-              onFileCompleted?.call(job['file']);
-              // _checkAndShowRateUs();
-            } else if (state == 'FAILED') {
-              final errDesc = (_settings?.trans['batch_file_error'] ??
-                      '{filename} sunucuda hata ile karşılaştı.')
-                  .replaceAll('{filename}', job['displayName'] ?? '');
-              _onLog?.call(
-                  _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-                  errDesc);
-              _batchErrors.add(BatchError(
-                  fileName: job['displayName'] ?? 'Unknown',
-                  message: 'Failed on server'));
-              completedJobs.add(job);
-            }
-          } catch (e) {
-            if (e.toString().contains('resource-exhausted') ||
-                e.toString().contains('RESOURCE_EXHAUSTED')) {
-              final limitDesc =
-                  (_settings?.trans['batch_file_rate_limit'] ?? '')
-                      .replaceAll('{filename}', job['displayName']);
-              _onLog?.call(
-                  _settings?.trans['error_prefix'] ?? 'Hata', limitDesc);
-              continue; // bu job bir sonraki döngüde kontrol edilecek
-            }
-            // Beklenmeyen hata olursa şimdilik atla, belki db sorunu anlıktır. Çok sık olursa job'ı da the silmek gerekebilir.
-          }
-        }
-
-        for (final done in completedJobs) {
-          activeJobs.remove(done);
-          activeBatchFilePaths.remove(done['file'].path);
-        }
-        progress = 1.0; // Toplu çeviride çubuğun grileşmemesi için 1.0'da tutuyoruz
-        notifyListeners();
-      }
-
-      if (activeBatchFilePaths.isEmpty) {
-        _finishSuccess(
-          true,
-        );
-        _batchCompleteController.add(Map.from(batchResults));
-        _onLog?.call(
-            _settings?.trans['batch_process_prefix'] ?? 'Batch İşlemi',
-            _settings?.trans['batch_all_completed'] ??
-                'Tüm dosyaların çevirisi tamamlandı.');
-      }
-      notifyListeners();
-    } catch (e) {
-      status = TranslationStatus.error;
-      _onLog?.call(
-          _settings?.trans['batch_error_prefix'] ?? 'Batch Çeviri Hatası',
-          e.toString());
-      onError?.call(
-          _settings?.trans['batch_error_prefix'] ?? 'Batch Çeviri Hatası',
-          e.toString());
-      notifyListeners();
-    } finally {
-      // Fonksiyona giren tüm dosyaları temizle. Tamamlananlar zaten silinmişti, hata alanlar veya yarım kalanlar burada silinir.
-      for (final f in filesToProcess) {
-        activeBatchFilePaths.remove(f.path);
-      }
-
-      // Eğer başka hiçbir batch işlemi aktif değilse temizliği yap.
-      if (activeBatchFilePaths.isEmpty) {
-        _stopTranslationTimer();
-        Future.microtask(() {
-          _isCloudBatchMode = false;
-          notifyListeners();
-        });
-      }
-      notifyListeners();
-    }
-  }
-
-  void _startBatchTimer() {
-    _stopwatch.reset();
-    _stopwatch.start();
-    onWakelock?.call(true);
-
-    _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_stopwatch.isRunning) return;
-      final elapsed = _stopwatch.elapsed;
-      elapsedTime =
-          '${elapsed.inMinutes.toString().padLeft(2, '0')}:${(elapsed.inSeconds % 60).toString().padLeft(2, '0')}';
-      notifyListeners();
-    });
-  }
-
-  String _buildSessionChargeKey(String sourceHash, String targetLanguage) {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final canonicalTarget = normalizeAiPanelLanguageCode(targetLanguage);
-    final normalizedTarget = canonicalTarget
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
-    final safeTarget = normalizedTarget.isEmpty ? 'unknown' : normalizedTarget;
-    return 'run_${now}_${sourceHash}_$safeTarget';
-  }
-
   Future<void> stopTranslation({
     required bool clearSdh,
     required String targetLanguage,
@@ -2548,7 +2030,6 @@ class TranslationController extends ChangeNotifier {
     _stopRequested = true;
     if (!isBulkProcessing) {
       _isBatchMode = false;
-      _isCloudBatchMode = false;
     }
 
     // Prefer resume state's permanent path if available so we always persist to
@@ -2750,7 +2231,6 @@ class TranslationController extends ChangeNotifier {
   void abandonTranslation({bool keepSelectedFile = true}) {
     _stopRequested = true;
     _isBatchMode = false;
-    _isCloudBatchMode = false;
     // Stop any ongoing work defensively.
     _progressTimer?.cancel();
     _engine.cancel();

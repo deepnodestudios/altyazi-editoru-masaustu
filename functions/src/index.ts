@@ -15,8 +15,6 @@ export { checkDailyAdLimit, recordAdUsage } from './billing/dailyAdLimit';
 export { quoteTranslationCost } from './ai/quoteTranslationCost';
 export { checkTranslationAccess } from './ai/checkTranslationAccess';
 export { translateText } from './ai/translateText';
-export { startBatchTranslation, checkBatchTranslation } from './ai/batchTranslate';
-export { pollBatchJobs } from './ai/pollBatchJobs';
 
 // ── Referral (v1.6.0+) ──
 export { generateReferralCode } from './referral/generateReferralCode';

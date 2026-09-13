@@ -82,7 +82,6 @@ class AppSettings extends ChangeNotifier {
   bool get oledMode => themeManager.oledMode;
   double get liveViewFontSize => themeManager.liveViewFontSize;
   double get editorFontSize => themeManager.editorFontSize;
-  int get batchSize => _settingsManager.batchSize;
   bool get isFreeSlow => _settingsManager.isFreeSlow;
   bool get keepScreenOn => _settingsManager.keepScreenOn;
   bool get sleepPreventionPrompted => _settingsManager.sleepPreventionPrompted;
@@ -182,7 +181,6 @@ class AppSettings extends ChangeNotifier {
   bool _tutorialTranslationShown = false;
   bool _tutorialEditorShown = false;
   bool _hideInfoButtons = false;
-  bool _hideBatchTranslationInfo = false;
   bool _confirmDeletes = true;
   bool _showCrashWarnings = true;
   bool _alwaysOnTop = false;
@@ -522,7 +520,6 @@ class AppSettings extends ChangeNotifier {
   bool get tutorialTranslationShown => _tutorialTranslationShown;
   bool get tutorialEditorShown => _tutorialEditorShown;
   bool get hideInfoButtons => _hideInfoButtons;
-  bool get hideBatchTranslationInfo => _hideBatchTranslationInfo;
   bool get confirmDeletes => _confirmDeletes;
   bool get showCrashWarnings => _showCrashWarnings;
   bool get canUndo => _editorStateManager.canUndo;
@@ -1040,17 +1037,6 @@ class AppSettings extends ChangeNotifier {
     _hideInfoButtons = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hide_info_buttons', value);
-    if (!value) {
-      _hideBatchTranslationInfo = false;
-      await prefs.setBool('hide_batch_info', false);
-    }
-    notifyListeners();
-  }
-
-  Future<void> setHideBatchTranslationInfo(bool value) async {
-    _hideBatchTranslationInfo = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('hide_batch_info', value);
     notifyListeners();
   }
 
@@ -1273,12 +1259,9 @@ class AppSettings extends ChangeNotifier {
 
   /// Bulut servislerinden çoklu dosya içe aktarma
 
-  void setTranslationConfig({String? lang, int? batch}) {
+  void setTranslationConfig({String? lang}) {
     if (lang != null) {
       _settingsManager.setTargetLanguage(lang);
-    }
-    if (batch != null) {
-      _settingsManager.setBatchSize(batch);
     }
     notifyListeners();
   }
@@ -1904,7 +1887,6 @@ class AppSettings extends ChangeNotifier {
 
     // Load UI toggles
     _hideInfoButtons = prefs.getBool('hide_info_buttons') ?? false;
-    _hideBatchTranslationInfo = prefs.getBool('hide_batch_info') ?? false;
     _confirmDeletes = prefs.getBool('confirm_deletes') ?? true;
     _showCrashWarnings = prefs.getBool('show_crash_warnings') ?? true;
     _alwaysOnTop = prefs.getBool(_prefKeyAlwaysOnTop) ?? false;

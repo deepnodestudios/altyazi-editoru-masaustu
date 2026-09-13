@@ -73,7 +73,6 @@ class CloudRetryQueue {
     required String targetLanguage,
     String? encodingDetected,
     String? deviceId,
-    bool isBatch = false,
     Map<String, dynamic>? cost,
     int chargedTokens = 0,
     String? appVersion,
@@ -90,7 +89,6 @@ class CloudRetryQueue {
         'targetLanguage': targetLanguage,
         if (encodingDetected != null) 'encodingDetected': encodingDetected,
         if (deviceId != null) 'deviceId': deviceId,
-        'isBatch': isBatch,
         if (cost != null && cost.isNotEmpty) 'cost': cost,
         'chargedTokens': chargedTokens < 0 ? 0 : chargedTokens,
         if (appVersion != null && appVersion.trim().isNotEmpty)
@@ -204,7 +202,6 @@ class CloudRetryQueue {
               targetLanguage: payload['targetLanguage'] as String,
               encodingDetected: payload['encodingDetected'] as String?,
               deviceId: payload['deviceId'] as String?,
-              isBatch: payload['isBatch'] as bool? ?? false,
               cost: (payload['cost'] as Map?)?.cast<String, dynamic>(),
               chargedTokens: chargedTokens < 0 ? 0 : chargedTokens,
               appVersion: payload['appVersion'] as String?,
