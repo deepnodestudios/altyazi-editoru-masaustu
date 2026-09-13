@@ -13,6 +13,8 @@ const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 const LEDGER_PRICING_USD_PER_MILLION = { input: 0.25, output: 1.50 };
 const PROVIDER_PRICING_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
     'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+    'gemini-3.1-flash-lite': { input: 0.25, output: 1.50 },
+    'gemini-flash-lite-latest': { input: 0.10, output: 0.40 },
 };
 
 function computeCostUsd(inputTokens: number, outputTokens: number): string {
@@ -90,7 +92,16 @@ function parseChargeKeyMetadata(chargeKey: string): { sourceHash: string; target
 }
 
 function getVertexModelCandidates(modelName: string): string[] {
-    return [modelName.trim()];
+    const requested = modelName.trim();
+    const candidates = [requested];
+
+    if (requested === 'gemini-2.5-flash-lite') {
+        candidates.push('gemini-3.1-flash-lite');
+    } else if (requested !== 'gemini-2.5-flash-lite') {
+        candidates.push('gemini-2.5-flash-lite');
+    }
+
+    return [...new Set(candidates)];
 }
 
 function getApiModelCandidates(modelName: string): string[] {
@@ -187,7 +198,12 @@ async function loadTranslationSessionByChargeKey({
     };
 }
 
-export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public', enforceAppCheck: false }, async (request: CallableRequest<TranslateRequestData>) => {
+export const translateText = onCall({
+    secrets: [geminiApiKey],
+    invoker: 'public',
+    enforceAppCheck: false,
+    timeoutSeconds: 300,
+}, async (request: CallableRequest<TranslateRequestData>) => {
     // NOTE: This function is invoked from client apps via Firebase callable.
     // It must be publicly invokable at the infrastructure (Cloud Run) layer.
     // Access is still enforced here via request.auth.
@@ -271,55 +287,77 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
         if (!session.exists) {
             throw new HttpsError('permission-denied', 'Translation session mismatch.');
         }
-        if (sessionData.charged === true) {
-            throw new HttpsError('failed-precondition', 'Translation session already charged.');
-        }
 
         finalFileName = finalFileName || sessionData.fileName;
         finalTargetLanguage = finalTargetLanguage || sessionData.targetLanguage;
         // Platform bilgisi eksik gelirse oturumdaki bilgiyi kullan
         const finalPlatform = platform || sessionData.platform;
-
         const normalizedFinalPlatform = normalizePlatform(finalPlatform);
-        if (sessionData.requiresRewardedAd === true && sessionData.rewardedAdConfirmed !== true) {
-            throw new HttpsError('failed-precondition', 'REWARDED_AD_REQUIRED');
-        }
 
-        await assertCreditsAvailable({
-            db,
-            uid: request.auth.uid,
-            deviceId: normalizedDeviceId,
-            platform: normalizedFinalPlatform,
-            appVersion: resolvedAppVersion,
-        });
-        chargeReceipt = await consumeCreditInternal({
-            db,
-            amount: 1,
-            deviceId: normalizedDeviceId,
-            uid: request.auth.uid,
-            email: getAuthEmail(request.auth),
-            reason: 'first_chunk',
-            chargeKey: trimmedChargeKey,
-            fileName: finalFileName,
-            targetLanguage: finalTargetLanguage,
-            platform: normalizedFinalPlatform,
-            appVersion: resolvedAppVersion,
-            preferFreeCreditsFirst:
-                sessionData.preferFreeCreditsFirst === true,
-            allowAutoApproveSession: true,
-            charCount: Number.isFinite(requestCharCount)
-                && requestCharCount > 0
-                ? requestCharCount
-                : Number(sessionData.charCount ?? 0) || null,
-            estimatedTokens: Number.isFinite(requestEstimatedTokens)
-                && requestEstimatedTokens > 0
-                ? requestEstimatedTokens
-                : Number(sessionData.estimatedTokens ?? 0) || null,
-            quoteProtocolVersion,
-            quoteId,
-            contentHash,
-            sourceContent: quoteSourceContent,
-        });
+        if (sessionData.charged === true) {
+            console.log('translateText session already charged, proceeding idempotently', {
+                chargeKey: trimmedChargeKey,
+                uid: request.auth.uid,
+                deviceId: normalizedDeviceId,
+            });
+            chargeReceipt = {
+                success: true,
+                idempotentReplay: true,
+                charged: true,
+                alreadyCharged: true,
+                chargeMode: sessionData.chargeMode ?? 'tokens',
+                chargedAmount: sessionData.chargedAmount ?? 0,
+                fromPaidTokens: sessionData.fromPaidTokens ?? 0,
+                fromGrantTokens: sessionData.fromGrantTokens ?? 0,
+                translationCreditType: sessionData.translationCreditType ?? null,
+                quoteProtocolVersion: sessionData.quoteProtocolVersion ?? null,
+                quoteVersion: sessionData.quoteVersion ?? null,
+                quoteId: sessionData.quoteId ?? null,
+                contentHash: sessionData.contentHash ?? null,
+                quotedCharacterCount: sessionData.charCount ?? null,
+                characterMultiplier: sessionData.characterMultiplier ?? null,
+            };
+        } else {
+            if (sessionData.requiresRewardedAd === true && sessionData.rewardedAdConfirmed !== true) {
+                throw new HttpsError('failed-precondition', 'REWARDED_AD_REQUIRED');
+            }
+
+            await assertCreditsAvailable({
+                db,
+                uid: request.auth.uid,
+                deviceId: normalizedDeviceId,
+                platform: normalizedFinalPlatform,
+                appVersion: resolvedAppVersion,
+            });
+            chargeReceipt = await consumeCreditInternal({
+                db,
+                amount: 1,
+                deviceId: normalizedDeviceId,
+                uid: request.auth.uid,
+                email: getAuthEmail(request.auth),
+                reason: 'first_chunk',
+                chargeKey: trimmedChargeKey,
+                fileName: finalFileName,
+                targetLanguage: finalTargetLanguage,
+                platform: normalizedFinalPlatform,
+                appVersion: resolvedAppVersion,
+                preferFreeCreditsFirst:
+                    sessionData.preferFreeCreditsFirst === true,
+                allowAutoApproveSession: true,
+                charCount: Number.isFinite(requestCharCount)
+                    && requestCharCount > 0
+                    ? requestCharCount
+                    : Number(sessionData.charCount ?? 0) || null,
+                estimatedTokens: Number.isFinite(requestEstimatedTokens)
+                    && requestEstimatedTokens > 0
+                    ? requestEstimatedTokens
+                    : Number(sessionData.estimatedTokens ?? 0) || null,
+                quoteProtocolVersion,
+                quoteId,
+                contentHash,
+                sourceContent: quoteSourceContent,
+            });
+        }
     } else {
         let hasChargedSession = false;
 
@@ -453,11 +491,25 @@ export const translateText = onCall({ secrets: [geminiApiKey], invoker: 'public'
                 lastError = candidateError;
                 const message = String(candidateError?.message ?? '');
                 const status = Number(candidateError?.status ?? 0);
-                const notFound = status === 404 || message.includes('NOT_FOUND') || message.includes('was not found');
-                if (!notFound) {
+                const isRetryable = status === 429
+                    || status === 503
+                    || status === 500
+                    || status === 504
+                    || status === 404
+                    || message.includes('RESOURCE_EXHAUSTED')
+                    || message.includes('Resource exhausted')
+                    || message.includes('NOT_FOUND')
+                    || message.includes('was not found')
+                    || message.includes('overloaded')
+                    || message.includes('DEADLINE_EXCEEDED');
+                if (!isRetryable) {
                     throw candidateError;
                 }
-                console.warn('translateText model candidate unavailable', { candidate, status });
+                console.warn('translateText model candidate failed, trying fallback', {
+                    candidate,
+                    status,
+                    message: message.slice(0, 200),
+                });
             }
         }
 
