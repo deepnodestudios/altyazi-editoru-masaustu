@@ -610,34 +610,13 @@ const Map<String, String> translationsEn = {
   'feature_batch_title': 'Batch Translation',
   'feature_batch_desc':
       'Add multiple subtitle files to a queue and translate them all at once. Save the results individually or as a single ZIP archive.',
-  'batch_no_credit_log':
-      'Insufficient credits. You don\'t have balance to start the process.',
-  'batch_credit_partial':
-      'Your credits ({credits}) are less than the selected file count ({total})...',
-  'batch_api_triggered': 'Batch API triggered for {count} files.',
-  'batch_starting': 'Starting Batch Translation...',
-  'batch_file_sent': '{filename} sent to server. Job: {job}',
-  'batch_process_prefix': 'Batch Process',
-  'batch_process_canceled': 'Process canceled.',
-  'batch_process_ongoing':
-      'In progress (checking every 15s, remaining: {count})...',
-  'batch_file_success': '{filename} translated successfully.',
-  'batch_file_error': '{filename} encountered an error on server.',
-  'batch_file_rate_limit': 'Rate limit exceeded for {filename}.',
-  'batch_all_completed': 'All files translation completed.',
-  'batch_error_prefix': 'Batch Translation Error',
-  'batch_unsupported_files_skipped': 'Unsupported files skipped',
   'batch_success_count': '{count} files translated successfully.',
   'batch_error_count': '{count} files failed:',
-  'batch_starting_snackbar': 'Batch Translation started for {count} files...',
   'batch_background_notification_tip':
       'You can leave the app, you will be notified when translation is finished.',
   'batch_save_all_zip': 'Save All as ZIP',
   'batch_complete_title': 'Batch Translation Complete',
   'batch_save_individual_prompt': 'Or save individually from the list:',
-  'batch_translation_beta': 'Batch Translation (Beta)',
-  'batch_timeout_log': 'Timeout exceeded, skipping to next file.',
-  'batch_process_completed': 'Batch processing completed.',
   'tour_add_file_title': 'Add Subtitle File',
   'tour_add_file_desc':
       'You can add SRT or VTT files you want to translate here.\nYou can select multiple files at once from your device, Google Drive, Dropbox, or Yandex Disk.',
@@ -648,13 +627,6 @@ const Map<String, String> translationsEn = {
   'tour_translate_title': 'Start Translation',
   'tour_translate_desc':
       'You can use this button to translate your single file or selected list sequentially on your device. You can track the process live while translating.',
-  'tour_batch_translate_title': 'Batch Translation (Batch API)',
-  'tour_batch_translate_desc':
-      'This is the recommended method if you are going to translate multiple files. Your files are sent to the server, and the translation is safely completed in the background even if you close the app. You will be notified when it\'s done.',
-  'tour_batch_translate_title_new':
-      'NEW METHOD: Batch Translation (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'You no longer have to keep the app open when translating multiple files!\n\nSend your files to the server at once, and let them translate safely in the background. You\'ll get a notification when it\'s finished.',
   'tour_welcome_title': 'Welcome Gift 🎁',
   'tour_welcome_desc':
       'A welcome gift of 2 Credits has been added to your account! You can track your credit balance here or add more anytime. Sign in with your Google account to get +2 extra credits!',
@@ -678,8 +650,6 @@ const Map<String, String> translationsEn = {
   'tour_skip': 'Skip',
   'tour_sdh_title': 'What is the SDH Switch?',
   'tour_sdh_desc': 'It detects effects or unnecessary tags indicating scene sounds, such as [Smiles], (Music), found in Subtitles for the Deaf and Hard of Hearing (SDH) and ABSOLUTELY DOES NOT send them to the AI model for translation. Naturally, their presence IS NOT DEDUCTED FROM YOUR CREDITS. When the process is finished and the translation file is given to you, these effects that were initially in the file are placed exactly in their original places. This way, you both save your credits and achieve an error-free translation.',
-  'batch_cloud_processing_text': 'Translation Continues on Server...',
-  'batch_translation_complete_text': 'Translation Complete!',
   'website_purchase': 'Website Purchase',
     'purchase_recovered_previous':
             'Your credits were added from a previously completed purchase. No new charge was taken now.',
@@ -693,6 +663,4 @@ const Map<String, String> translationsEn = {
   'credit_source_website': 'Website',
   'credits_pack_generic': 'Credit Pack',
   'error_multi_pack_detected': 'This file appears to contain multiple subtitle contents. Please split the file into parts for security and credit balance.',
-  'batch_report_success': '{count} file(s) translated successfully.',
-  'batch_report_failed_count': '{count} file(s) failed:',
 };

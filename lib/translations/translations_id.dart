@@ -603,34 +603,13 @@ const Map<String, String> translationsId = {
   'feature_batch_title': 'Terjemahan Massal',
   'feature_batch_desc':
       'Tambahkan beberapa file subtitle ke antrean dan terjemahkan semuanya sekaligus. Simpan hasilnya satu per satu atau sebagai arsip ZIP.',
-  'batch_no_credit_log':
-      'Kredit tidak cukup. Anda tidak memiliki saldo untuk memulai.',
-  'batch_credit_partial':
-      'Kredit Anda ({credits}) lebih sedikit dari jumlah file yang dipilih ({total})...',
-  'batch_api_triggered': 'API massal dipicu untuk {count} file.',
-  'batch_starting': 'Memulai Terjemahan Massal...',
-  'batch_file_sent': '{filename} dikirim ke server. Task: {job}',
-  'batch_process_prefix': 'Proses Massal',
-  'batch_process_canceled': 'Proses dibatalkan.',
-  'batch_process_ongoing':
-      'Sedang berlangsung (memeriksa tiap 15dtk, sisa: {count})...',
-  'batch_file_success': '{filename} berhasil diterjemahkan.',
-  'batch_file_error': '{filename} mengalami kesalahan di server.',
-  'batch_file_rate_limit': 'Batas kecepatan terlampaui untuk {filename}.',
-  'batch_all_completed': 'Terjemahan semua file telah selesai.',
-  'batch_error_prefix': 'Kesalahan Terjemahan Massal',
-  'batch_unsupported_files_skipped': 'File tidak didukung dilewati',
   'batch_success_count': '{count} file berhasil diterjemahkan.',
   'batch_error_count': '{count} file gagal:',
-  'batch_starting_snackbar': 'Terjemahan Massal dimulai untuk {count} file...',
   'batch_background_notification_tip':
       'Anda dapat keluar dari aplikasi, Anda akan diberitahu ketika terjemahan selesai.',
   'batch_save_all_zip': 'Simpan Semua sebagai ZIP',
   'batch_complete_title': 'Terjemahan Massal Selesai',
   'batch_save_individual_prompt': 'Atau simpan satu per satu dari daftar:',
-  'batch_translation_beta': 'Terjemahan Massal (Beta)',
-  'batch_timeout_log': 'Batas waktu habis, pindah ke file berikutnya.',
-  'batch_process_completed': 'Pemrosesan massal selesai.',
   'tour_add_file_title': 'Tambah File Subtitel',
   'tour_add_file_desc':
       'Anda dapat menambahkan file SRT atau VTT yang ingin diterjemahkan di sini.\nAnda dapat memilih beberapa file sekaligus dari perangkat Anda, Google Drive, Dropbox, atau Yandex Disk.',
@@ -641,13 +620,6 @@ const Map<String, String> translationsId = {
   'tour_translate_title': 'Mulai Terjemahan',
   'tour_translate_desc':
       'Anda dapat menggunakan tombol ini untuk menerjemahkan satu file atau daftar yang dipilih secara berurutan di perangkat Anda. Proses terjemahan dapat dilacak secara langsung.',
-  'tour_batch_translate_title': 'Terjemahan Batch (Batch API)',
-  'tour_batch_translate_desc':
-      'Ini adalah metode yang disarankan saat Anda menerjemahkan beberapa file. File Anda akan dikirim ke server, dan terjemahan akan diselesaikan dengan aman di latar belakang, bahkan jika Anda menutup aplikasi. Anda akan diberi tahu setelah selesai.',
-  'tour_batch_translate_title_new':
-      'METODE BARU: Terjemahan Batch (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Anda tidak perlu lagi membiarkan aplikasi tetap terbuka saat menerjemahkan beberapa file!\n\nKirim file Anda ke server sekaligus, lalu biarkan semuanya diterjemahkan dengan aman di latar belakang. Anda akan menerima notifikasi jika sudah selesai.',
   'tour_welcome_title': 'Hadiah Sambutan 🎁',
   'tour_welcome_desc':
       'Hadiah sambutan berupa 5 Kredit telah ditambahkan ke akun Anda! Anda dapat melacak saldo kredit Anda di sini atau menambahkan lebih banyak kapan saja. Masuk dengan akun Google Anda untuk mendapatkan +2 kredit tambahan!',
@@ -671,8 +643,6 @@ const Map<String, String> translationsId = {
   'tour_skip': 'Lewati',
   'tour_sdh_title': 'Apa itu Tombol SDH?',
   'tour_sdh_desc': 'Fitur ini mendeteksi efek atau tag yang tidak perlu yang menunjukkan suara adegan, seperti [Tersenyum], (Musik), yang ditemukan dalam Subtitel untuk Tuna Rungu dan Kesulitan Pendengaran (SDH) dan SAMA SEKALI TIDAK mengirimkannya ke model AI untuk diterjemahkan. Tentu saja, keberadaan mereka TIDAK DIPOTONG DARI KREDIT ANDA. Setelah proses selesai dan file terjemahan diberikan kepada Anda, efek ini ditempatkan tepat di lokasi aslinya. Dengan cara ini, Anda dapat menghemat kredit dan mendapatkan terjemahan yang bebas dari kesalahan.',
-  'batch_cloud_processing_text': 'Terjemahan Berlanjut di Server...',
-  'batch_translation_complete_text': 'Terjemahan Selesai!',
   'website_purchase': 'Pembelian Situs Web',
     'purchase_recovered_previous':
             'Kredit Anda ditambahkan dari pembelian yang sebelumnya telah selesai. Tidak ada biaya baru yang ditagihkan sekarang.',
@@ -686,6 +656,4 @@ const Map<String, String> translationsId = {
   'credit_source_website': 'Situs Web',
   'credits_pack_generic': 'Paket Kredit',
   'error_multi_pack_detected': 'File ini sepertinya berisi beberapa konten subtitel. Harap bagi file menjadi beberapa bagian untuk keamanan dan saldo kredit.',
-  'batch_report_success': '{count} file berhasil diterjemahkan.',
-  'batch_report_failed_count': '{count} file gagal:',
 };

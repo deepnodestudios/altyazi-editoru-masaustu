@@ -611,34 +611,13 @@ const Map<String, String> translationsNl = {
   'feature_batch_title': 'Bulk Vertaling',
   'feature_batch_desc':
       'Voeg meerdere ondertitelingsbestanden toe aan de wachtrij en vertaal ze allemaal tegelijk. Sla resultaten afzonderlijk op of als één ZIP-archief.',
-  'batch_no_credit_log':
-      'Onvoldoende credits. Je hebt geen saldo om het proces te starten.',
-  'batch_credit_partial':
-      'Uw credits ({credits}) zijn minder dan het geselecteerde aantal bestanden ({total})...',
-  'batch_api_triggered': 'Bulk API geactiveerd voor {count} bestanden.',
-  'batch_starting': 'Bulk vertaling starten...',
-  'batch_file_sent': '{filename} naar de server verzonden. Taak: {job}',
-  'batch_process_prefix': 'Bulk Proces',
-  'batch_process_canceled': 'Proces geannuleerd.',
-  'batch_process_ongoing':
-      'In uitvoering (controle elke 15s, resterend: {count})...',
-  'batch_file_success': '{filename} succesvol vertaald.',
-  'batch_file_error': '{filename} ondervond een fout op de server.',
-  'batch_file_rate_limit': 'Snelheidslimiet overschreden voor {filename}.',
-  'batch_all_completed': 'Vertaling van alle bestanden voltooid.',
-  'batch_error_prefix': 'Fout bij bulk vertaling',
-  'batch_unsupported_files_skipped': 'Niet-ondersteunde bestanden overgeslagen',
   'batch_success_count': '{count} bestanden succesvol vertaald.',
   'batch_error_count': '{count} bestanden mislukt:',
-  'batch_starting_snackbar': 'Batchvertaling gestart voor {count} bestanden...',
   'batch_background_notification_tip':
       'Je kunt de app verlaten, je krijgt een melding als het klaar is.',
   'batch_save_all_zip': 'Alles opslaan als ZIP',
   'batch_complete_title': 'Bulk Vertaling Voltooid',
   'batch_save_individual_prompt': 'Of sla apart op uit de lijst:',
-  'batch_translation_beta': 'Bulk Vertaling (Bèta)',
-  'batch_timeout_log': 'Time-out is verstreken, doorgaan naar volgend bestand.',
-  'batch_process_completed': 'Bulkverwerking voltooid.',
   'tour_add_file_title': 'Ondertitelingsbestand toevoegen',
   'tour_add_file_desc':
       'Je kunt hier de SRT- of VTT-bestanden bekijken en toevoegen die je wilt vertalen.\nJe kunt meerdere bestanden tegelijk selecteren vanaf je apparaat, Google Drive, Dropbox of Yandex Disk.',
@@ -649,13 +628,6 @@ const Map<String, String> translationsNl = {
   'tour_translate_title': 'Vertaling starten',
   'tour_translate_desc':
       'Gebruik deze knop om een enkel bestand of een geselecteerde lijst achter elkaar op je apparaat te vertalen. Je kunt het vertaalproces live meevolgen.',
-  'tour_batch_translate_title': 'Batch Vertaling (Batch API)',
-  'tour_batch_translate_desc':
-      'Dit wordt aangeraden als je meerdere bestanden vertaalt. Je bestanden gaan naar de server en de vertaling gebeurt veilig op de achtergrond. Je krijgt een melding als het af is.',
-  'tour_batch_translate_title_new':
-      'NIEUWE METHODE: Batch Vertaling (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Je hoeft de app niet meer open te houden tijdens het vertalen van meerdere bestanden!\n\nStuur je bestanden in één keer naar de server en laat ze veilig op de achtergrond afwerken. Je ontvangt een notificatie als alles klaar is.',
   'tour_welcome_title': 'Welkomstcadeau 🎁',
   'tour_welcome_desc':
       'Je hebt een welkomstcadeau van 5 Credits ontvangen! Hier kun je je kredietsaldo bijhouden en wanneer je maar wilt nieuwe toevoegen. Log in met uw Google-account om +2 extra credits te krijgen!',
@@ -679,8 +651,6 @@ const Map<String, String> translationsNl = {
   'tour_skip': 'Overslaan',
   'tour_sdh_title': 'Wat is de SDH-schakelaar?',
   'tour_sdh_desc': 'Het detecteert effecten of onnodige tags die scènegeluiden aangeven, zoals [Glimlacht], (Muziek), die voorkomen in ondertitels voor doven en slechthorenden (SDH) en stuurt deze ABSOLUUT NIET naar het AI-model voor vertaling. Uiteraard wordt hun aanwezigheid NIET AFGETROKKEN VAN UW CREDITS. Wanneer het proces is voltooid en het vertaalbestand aan u wordt afgeleverd, worden deze effecten die oorspronkelijk in het bestand aanwezig waren, precies op hun oorspronkelijke plaatsen teruggezet. Op deze manier bespaart u uw credits en bereikt u een foutloze vertaling.',
-  'batch_cloud_processing_text': 'Vertaling gaat door op server...',
-  'batch_translation_complete_text': 'Vertaling voltooid!',
   'website_purchase': 'Website aankoop',
     'purchase_recovered_previous':
             'Je credits zijn toegevoegd vanuit een eerder voltooide aankoop. Er is nu geen nieuwe betaling in rekening gebracht.',
@@ -694,6 +664,4 @@ const Map<String, String> translationsNl = {
   'credit_source_website': 'Website',
   'credits_pack_generic': 'Kredietpakket',
   'error_multi_pack_detected': 'Dit bestand lijkt meerdere ondertitelinhouden te bevatten. Splits het bestand in delen voor veiligheid en kredietbalans.',
-  'batch_report_success': '{count} bestand(en) succesvol vertaald.',
-  'batch_report_failed_count': '{count} bestand(en) mislukt:',
 };

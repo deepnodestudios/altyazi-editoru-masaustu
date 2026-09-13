@@ -606,32 +606,13 @@ const Map<String, String> translationsMr = {
   'feature_batch_title': 'बॅच भाषांतर',
   'feature_batch_desc':
       'एकाधिक सबटायटल फाइल्स रांगेत जोडा आणि एकाच वेळी सर्वांचे भाषांतर करा. परिणाम झिप किंवा वैयक्तिकरित्या जतन करा.',
-  'batch_no_credit_log': 'अपुरे क्रेडिट्स.',
-  'batch_credit_partial':
-      'तुमचे क्रेडिट्स ({credits}) निवडलेल्या फायलींच्या संख्येपेक्षा ({total}) कमी आहेत...',
-  'batch_api_triggered': '{count} फाईल्ससाठी API ट्रिगर झाले.',
-  'batch_starting': 'बॅच भाषांतर सुरू करत आहे...',
-  'batch_file_sent': '{filename} सर्व्हरवर पाठवली. कार्य: {job}',
-  'batch_process_prefix': 'बॅच प्रक्रिया',
-  'batch_process_canceled': 'प्रक्रिया रद्द केली.',
-  'batch_process_ongoing': 'प्रगतीवर आहे (उर्वरित: {count})...',
-  'batch_file_success': '{filename} यशस्वीरित्या भाषांतरित.',
-  'batch_file_error': '{filename} साठी सर्व्हरवर त्रुटी आली.',
-  'batch_file_rate_limit': '{filename} साठी मर्यादा ओलांडली.',
-  'batch_all_completed': 'सर्व फाइल्सचे भाषांतर पूर्ण झाले.',
-  'batch_error_prefix': 'बॅच भाषांतर त्रुटी',
-  'batch_unsupported_files_skipped': 'समर्थित नसलेल्या फाइल्स वगळल्या',
   'batch_success_count': '{count} फाईल्स यशस्वीरित्या भाषांतरित.',
   'batch_error_count': '{count} फाईल्स अयशस्वी:',
-  'batch_starting_snackbar': '{count} फाइल्ससाठी बॅच भाषांतर सुरू झाले...',
   'batch_background_notification_tip':
       'तुम्ही अॅप सोडू शकता, पूर्ण झाल्यावर तुम्हाला सूचित केले जाईल.',
   'batch_save_all_zip': 'सर्व ZIP म्हणून जतन करा',
   'batch_complete_title': 'बॅच भाषांतर पूर्ण झाले',
   'batch_save_individual_prompt': 'किंवा सूचीमधून स्वतंत्रपणे जतन करा:',
-  'batch_translation_beta': 'बॅच भाषांतर (बीटा)',
-  'batch_timeout_log': 'वेळ संपली, पुढील फाइलवर जात आहे.',
-  'batch_process_completed': 'बॅच प्रक्रिया पूर्ण झाली.',
   'tour_add_file_title': 'सबटायटल फाईल जोडा',
   'tour_add_file_desc':
       'तुम्हाला ज्या SRT किंवा VTT फाइल्सचे भाषांतर करायचे आहे, त्या तुम्ही येथे जोडू शकता.\nतुम्ही तुमच्या डिव्हाइस, Google Drive, Dropbox किंवा Yandex Disk वरून एकाच वेळी अनेक फाइल्स निवडू शकता.',
@@ -642,13 +623,6 @@ const Map<String, String> translationsMr = {
   'tour_translate_title': 'भाषांतर सुरू करा',
   'tour_translate_desc':
       'तुम्ही तुमच्या डिव्हाइसवरील एखादी फाईल किंवा निवडलेल्या लिस्टचे अनुक्रमे भाषांतर करण्यासाठी या बटणाचा वापर करू शकता. हा भाषांतर प्रक्रियेचा लाईव्ह ट्रॅक करता येतो.',
-  'tour_batch_translate_title': 'बॅच ट्रान्सलेशन (Batch API)',
-  'tour_batch_translate_desc':
-      'एकापेक्षा जास्त फाइल्सचे भाषांतर करताना ही शिफारस केलेली पद्धत आहे. तुमच्या फाइल्स सर्व्हरवर पाठवल्या जातात आणि तुम्ही ॲप बंद केले तरी बॅकग्राउंडमध्ये सुरक्षितपणे भाषांतर पूर्ण होते. पूर्ण झाल्यावर तुम्हाला माहिती दिली जाईल.',
-  'tour_batch_translate_title_new':
-      'नवीन पद्धत: बॅच ट्रान्सलेशन (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'अनेक फाईल्स भाषांतरित करताना तुम्हाला तुमचे ॲप उघडे ठेवण्याची गरज नाही!\n\nतुमच्या सर्व फाइल्स एकाच वेळी सर्व्हरवर पाठवा आणि बॅकग्राउंडमध्ये सुरक्षितपणे भाषांतरित होऊ द्या. प्रक्रिया पूर्ण झाल्यावर तुम्हाला एक नोटिफिकेशन मिळेल.',
   'tour_welcome_title': 'वेलकम गिफ्ट 🎁',
   'tour_welcome_desc':
       'तुमच्या अकाउंटमध्ये 5 क्रेडिट्सची भेट जोडण्यात आली आहे! तुम्ही तुमचे क्रेडिट बॅलन्स येथे ट्रॅक करू शकता किंवा आणखी कधीही जोडू शकता. Sign in with your Google account to get +2 extra credits!',
@@ -672,8 +646,6 @@ const Map<String, String> translationsMr = {
   'tour_skip': 'वगळा',
   'tour_sdh_title': 'SDH स्विच काय आहे?',
   'tour_sdh_desc': 'हे बधिर आणि कमी ऐकू येणाऱ्यांसाठी असलेल्या सबटायटल्समध्ये (SDH) आढळणारे [हसतो], (संगीत) यांसारखे ऑडिओ टॅग ओळखते आणि भाषांतरासाठी ते AI मॉडेलला अजिबात पाठवत नाही. साहजिकच, यामुळे तुमचे क्रेडिट्स कापले जात नाहीत. जेव्हा प्रक्रिया पूर्ण होते आणि भाषांतरित फाइल तुम्हाला दिली जाते, तेव्हा या फाईलमधील हे टॅग्स अगदी आधीच्याच जागी परत ठेवले जातात. अशाप्रकारे, तुम्ही तुमचे क्रेडिट्स वाचवता आणि त्रुटी-मुक्त भाषांतर मिळवता.',
-  'batch_cloud_processing_text': 'सर्व्हरवर भाषांतर चालू आहे...',
-  'batch_translation_complete_text': 'भाषांतर पूर्ण झाले!',
   'website_purchase': 'वेबसाइट खरेदी',
     'purchase_recovered_previous':
             'तुमचे क्रेडिट्स आधी पूर्ण झालेल्या खरेदीतून जोडले गेले. आत्ता नवीन शुल्क आकारले गेले नाही.',
@@ -687,6 +659,4 @@ const Map<String, String> translationsMr = {
   'credit_source_website': 'वेबसाइट',
   'credits_pack_generic': 'क्रेडिट पॅक',
   'error_multi_pack_detected': 'या फाइलमध्ये एकापेक्षा जास्त सबटायटल सामग्री असल्याचे दिसून येत आहे. सुरक्षितता आणि क्रेडिट शिल्लक ठेवण्यासाठी कृपया फाइलचे भाग करा.',
-  'batch_report_success': '{count} फाइल यशस्वीरित्या अनुवादित झाल्या.',
-  'batch_report_failed_count': '{count} फाइल अपयशी ठरल्या:',
 };

@@ -611,34 +611,13 @@ const Map<String, String> translationsSv = {
   'feature_batch_title': 'Batch-översättning',
   'feature_batch_desc':
       'Lägg till flera undertextfiler i en kö och översätt dem alla på en gång. Spara resultaten individuellt eller som ett enda ZIP-arkiv.',
-  'batch_no_credit_log':
-      'Otillräckliga krediter. Du har inte tillräckligt saldo för att starta.',
-  'batch_credit_partial':
-      'Dina krediter ({credits}) är färre än antalet valda filer ({total})...',
-  'batch_api_triggered': 'Batch API utlöst för {count} filer.',
-  'batch_starting': 'Startar batch-översättning...',
-  'batch_file_sent': '{filename} har skickats till servern. Jobb: {job}',
-  'batch_process_prefix': 'Batch Process',
-  'batch_process_canceled': 'Processen avbröts.',
-  'batch_process_ongoing':
-      'Pågår (kontrollerar var 15:e sekund, kvar: {count})...',
-  'batch_file_success': '{filename} har översatts framgångsrikt.',
-  'batch_file_error': '{filename} stötte på ett serverfel.',
-  'batch_file_rate_limit': 'Hastighetsgränsen överskreds för {filename}.',
-  'batch_all_completed': 'Översättning av alla filer har slutförts.',
-  'batch_error_prefix': 'Batch-översättningsfel',
-  'batch_unsupported_files_skipped': 'Filer som inte stöds ignorerades',
   'batch_success_count': '{count} filer översattes framgångsrikt.',
   'batch_error_count': '{count} filer misslyckades:',
-  'batch_starting_snackbar': 'Satsöversättning startad för {count} filer...',
   'batch_background_notification_tip':
       'Du kan lämna appen. Du kommer att meddelas när översättningen är klar.',
   'batch_save_all_zip': 'Spara alla som ZIP',
   'batch_complete_title': 'Batch-översättning Slutförd',
   'batch_save_individual_prompt': 'Eller spara individuellt från listan:',
-  'batch_translation_beta': 'Batch-översättning (Beta)',
-  'batch_timeout_log': 'Tidsgränsen överskreds, hoppar till nästa fil.',
-  'batch_process_completed': 'Batch-behandlingen är slutförd.',
   'tour_add_file_title': 'Lägg till Undertextfil',
   'tour_add_file_desc':
       'Här kan du lägga till de SRT- eller VTT-filer du vill översätta.\nDu kan välja flera filer samtidigt från din enhet, Google Drive, Dropbox eller Yandex Disk.',
@@ -649,13 +628,6 @@ const Map<String, String> translationsSv = {
   'tour_translate_title': 'Börja Översätta',
   'tour_translate_desc':
       'Använd denna knapp för att översätta en enda fil eller vald lista i tur och ordning på din enhet. Du kan följa översättningsprocessen live.',
-  'tour_batch_translate_title': 'Batchöversättning (Batch API)',
-  'tour_batch_translate_desc':
-      'Detta är den rekommenderade metoden om du översätter flera filer. Dina filer skickas till servern och översättningen slutförs säkert i bakgrunden även om du stänger appen. Du meddelas när den är klar.',
-  'tour_batch_translate_title_new':
-      'NY METOD: Batchöversättning (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Du behöver inte längre ha appen öppen när du översätter flera filer!\n\nSkicka alla dina filer till servern på en gång och låt dem tryggt översättas i bakgrunden. Du får ett meddelande när det är klart.',
   'tour_welcome_title': 'Välkomstpresent 🎁',
   'tour_welcome_desc':
       'En välkomstpresent på 5 Krediter har lagts till på ditt konto! Du kan se ditt kreditsaldo här eller köpa fler när som helst. Logga in med ditt Google-konto för att få +2 extra krediter!',
@@ -679,8 +651,6 @@ const Map<String, String> translationsSv = {
   'tour_skip': 'Hoppa över',
   'tour_sdh_title': 'Vad är SDH-växeln?',
   'tour_sdh_desc': 'Den upptäcker effekter eller onödiga taggar som indikerar scenljud, såsom [Ler], (Musik), som finns i undertexter för döva och hörselskadade (SDH) och SKICKAR DEM ABSOLUT INTE till AI-modellen för översättning. Naturligtvis dras deras närvaro INTE FRÅN DINA KREDITER. När processen är klar och du får översättningsfilen placeras dessa effekter som ursprungligen fanns i filen exakt på sina ursprungliga platser. På så sätt sparar du dina krediter och uppnår en felfri översättning.',
-  'batch_cloud_processing_text': 'Översättningen fortsätter på servern...',
-  'batch_translation_complete_text': 'Översättning klar!',
   'website_purchase': 'Webbplatsköp',
     'purchase_recovered_previous':
             'Dina krediter lades till från ett tidigare slutfört köp. Ingen ny debitering gjordes nu.',
@@ -694,6 +664,4 @@ const Map<String, String> translationsSv = {
   'credit_source_website': 'Webbplats',
   'credits_pack_generic': 'Kreditpaket',
   'error_multi_pack_detected': 'Den här filen verkar innehålla flera undertextinnehåll. Dela upp filen i delar för säkerhet och kreditbalans.',
-  'batch_report_success': '{count} fil(er) översattes framgångsrikt.',
-  'batch_report_failed_count': '{count} fil(er) misslyckades:',
 };

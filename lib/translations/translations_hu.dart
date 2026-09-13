@@ -622,35 +622,13 @@ const Map<String, String> translationsHu = {
   'feature_batch_title': 'Csoportos Fordítás',
   'feature_batch_desc':
       'Adjon hozzá több feliratfájlt a sorhoz, és fordítsa le őket egyszerre. Mentse az eredményeket egyenként vagy egyetlen ZIP archívumként.',
-  'batch_no_credit_log':
-      'Nincs elég kredit. Nincs fedezete a folyamat elindításához.',
-  'batch_credit_partial':
-      'A kreditjei ({credits}) kevesebbek, mint a kiválasztott fájlok száma ({total})...',
-  'batch_api_triggered': 'Csoportos API elindítva {count} fájlhoz.',
-  'batch_starting': 'A Csoportos Fordítás elindítása...',
-  'batch_file_sent': '{filename} elküldve a szerverre. Feladat: {job}',
-  'batch_process_prefix': 'Csoportos Folyamat',
-  'batch_process_canceled': 'A folyamat megszakítva.',
-  'batch_process_ongoing':
-      'Folyamatban (ellenőrzés 15 másodpercenként, hátralévő: {count})...',
-  'batch_file_success': '{filename} sikeresen lefordítva.',
-  'batch_file_error': 'Hiba történt a szerveren a {filename} fájl esetében.',
-  'batch_file_rate_limit':
-      'Sebességkorlátozás túllépve a következőnél: {filename}.',
-  'batch_all_completed': 'Az összes fájl fordítása befejeződött.',
-  'batch_error_prefix': 'Csoportos Fordítási Hiba',
-  'batch_unsupported_files_skipped': 'Nem támogatott fájlok kihagyva',
   'batch_success_count': '{count} fájl sikeresen lefordítva.',
   'batch_error_count': '{count} fájl sikertelen:',
-  'batch_starting_snackbar': 'Kötegelt fordítás elindult {count} fájlhoz...',
   'batch_background_notification_tip':
       'Kiléphet az alkalmazásból, értesítjük, amikor a fordítás befejeződik.',
   'batch_save_all_zip': 'Összes Mentése ZIP-ként',
   'batch_complete_title': 'A Csoportos Fordítás Befejeződött',
   'batch_save_individual_prompt': 'Vagy mentse külön-külön a listából:',
-  'batch_translation_beta': 'Csoportos Fordítás (Béta)',
-  'batch_timeout_log': 'Időtúllépés, ugrás a következő fájlra.',
-  'batch_process_completed': 'A csoportos feldolgozás befejeződött.',
   'tour_add_file_title': 'Feliratfájl hozzáadása',
   'tour_add_file_desc':
       'Itt adhatja hozzá azokat az SRT vagy VTT fájlokat, amiket le szeretne fordítani.\nEgyszerre több fájlt is kiválaszthat a készülékéről, a Google Drive-ról, Dropboxról vagy a Yandex Diskről.',
@@ -661,13 +639,6 @@ const Map<String, String> translationsHu = {
   'tour_translate_title': 'Fordítás indítása',
   'tour_translate_desc':
       'Ezzel a gombbal elkezdheti egyetlen fájl vagy egy kijelölt lista sorrendi lefordítását az eszközén. A folyamat élőben követhető.',
-  'tour_batch_translate_title': 'Csoportos fordítás (Batch API)',
-  'tour_batch_translate_desc':
-      'Ez a javasolt módszer, ha több fájlt is lefordít. A fájlokat elküldi a szerverre, és a fordítás biztonságosan, a háttérben történik meg, még ha be is zárja az alkalmazást. A befejezéskor értesítést kap.',
-  'tour_batch_translate_title_new':
-      'ÚJ MÓDSZER: Csoportos fordítás (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Többé nem kell nyitva hagynia az alkalmazást, ha egyszerre több fájlt fordít!\n\nKüldje el az összes fájlját a szerverre egyszerre, és hagyja, hogy azok biztonságosan leforduljanak a háttérben. Az alkalmazás értesítést küld, ha elkészültek.',
   'tour_welcome_title': 'Üdvözlő ajándék 🎁',
   'tour_welcome_desc':
       'Üdvözlő ajándékként 5 kredit lett hozzáadva a fiókjához! A kreditegyenlegét nyomon követheti, vagy bármikor vásárolhat többet itt. Jelentkezzen be Google-fiókjával, hogy +2 extra kreditet kapjon!',
@@ -691,8 +662,6 @@ const Map<String, String> translationsHu = {
   'tour_skip': 'Kihagyás',
   'tour_sdh_title': 'Mi az az SDH kapcsoló?',
   'tour_sdh_desc': 'Észleli a jelenet hangjait jelző effekteket vagy felesleges címkéket, mint például a [Mosolyog], (Zene), amelyek a siketek és nagyothallók számára készült feliratokban (SDH) találhatók, és EGYÁLTALÁN NEM küldi el őket az AI modellnek fordításra. Természetesen jelenlétüket NEM VONJÁK LE A KREDITJEIBŐL. A folyamat befejezésekor, amikor a fordítási fájlt átadják, ezek az effektek pontosan az eredeti helyükre kerülnek vissza. Így krediteket takaríthat meg, és hibátlan fordítást érhet el.',
-  'batch_cloud_processing_text': 'A fordítás a szerveren folytatódik...',
-  'batch_translation_complete_text': 'Fordítás befejezve!',
   'website_purchase': 'Weboldali vásárlás',
     'purchase_recovered_previous':
             'A kreditjeid egy korábban befejezett vásárlásból lettek jóváírva. Most nem történt új terhelés.',
@@ -706,6 +675,4 @@ const Map<String, String> translationsHu = {
   'credit_source_website': 'Weboldal',
   'credits_pack_generic': 'Kredit csomag',
   'error_multi_pack_detected': 'Úgy tűnik, ez a fájl több felirattartalmat is tartalmaz. Biztonsági és hitelkeret-okokból ossza fel a fájlt részekre.',
-  'batch_report_success': '{count} fájl sikeresen lefordítva.',
-  'batch_report_failed_count': '{count} fájl sikertelen:',
 };

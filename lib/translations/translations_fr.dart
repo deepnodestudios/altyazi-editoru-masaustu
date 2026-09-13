@@ -623,36 +623,14 @@ const Map<String, String> translationsFr = {
   'feature_batch_title': 'Traduction par lots',
   'feature_batch_desc':
       'Ajoutez plusieurs fichiers de sous-titres à la file d\'attente et traduisez-les d\'un seul coup. Enregistrez les résultats individuellement ou sous forme d\'archive ZIP.',
-  'batch_no_credit_log':
-      'Crédits insuffisants. Vous n\'avez pas de solde pour lancer le processus.',
-  'batch_credit_partial':
-      'Vos crédits ({credits}) sont inférieurs au nombre de fichiers sélectionnés ({total})...',
-  'batch_api_triggered':
-      'Traduction par lots déclenchée pour {count} fichiers.',
-  'batch_starting': 'Démarrage de la traduction par lots...',
-  'batch_file_sent': '{filename} envoyé au serveur. Tâche : {job}',
-  'batch_process_prefix': 'Processus par lots',
-  'batch_process_canceled': 'Processus annulé.',
-  'batch_process_ongoing':
-      'En cours (vérification toutes les 15s, restants : {count})...',
-  'batch_file_success': '{filename} traduit avec succès.',
-  'batch_file_error': '{filename} a rencontré une erreur sur le serveur.',
-  'batch_file_rate_limit': 'Limite de débit dépassée pour {filename}.',
-  'batch_all_completed': 'Traduction de tous les fichiers terminée.',
-  'batch_error_prefix': 'Erreur de traduction par lots',
-  'batch_unsupported_files_skipped': 'Fichiers non pris en charge ignorés',
   'batch_success_count': '{count} fichiers traduits avec succès.',
   'batch_error_count': '{count} fichiers ont échoué :',
-  'batch_starting_snackbar': 'Traduction par lots lancée pour {count} fichiers...',
   'batch_background_notification_tip':
       'Vous pouvez quitter l\'application, vous serez informé lorsque la traduction sera terminée.',
   'batch_save_all_zip': 'Tout enregistrer en ZIP',
   'batch_complete_title': 'Traduction par lots terminée',
   'batch_save_individual_prompt':
       'Ou enregistrez-les un par un depuis la liste :',
-  'batch_translation_beta': 'Traduction par lots (Bêta)',
-  'batch_timeout_log': 'Délai expiré, passage au fichier suivant.',
-  'batch_process_completed': 'Traitement par lots terminé.',
   'tour_add_file_title': 'Ajouter un fichier de sous-titres',
   'tour_add_file_desc':
       'Vous pouvez ajouter ici les fichiers SRT ou VTT que vous souhaitez traduire.\nVous pouvez sélectionner plusieurs fichiers simultanément depuis votre appareil, Google Drive, Dropbox ou Yandex Disk.',
@@ -663,13 +641,6 @@ const Map<String, String> translationsFr = {
   'tour_translate_title': 'Démarrer la traduction',
   'tour_translate_desc':
       'Utilisez ce bouton pour traduire votre fichier unique ou la liste sélectionnée de manière séquentielle sur votre appareil. Vous pouvez suivre le processus en direct.',
-  'tour_batch_translate_title': 'Traduction par lots (Batch API)',
-  'tour_batch_translate_desc':
-      'Il s\'agit de la méthode recommandée si vous souhaitez traduire plusieurs fichiers. Vos fichiers sont envoyés au serveur et la traduction s\'effectue en arrière-plan en toute sécurité, même si vous fermez l\'application. Vous serez averti lorsqu\'elle sera terminée.',
-  'tour_batch_translate_title_new':
-      'NOUVELLE MÉTHODE : Traduction par lots (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Vous n\'avez plus besoin de garder l\'application ouverte lors de la traduction de plusieurs fichiers !\n\nEnvoyez vos fichiers au serveur en une seule fois et laissez-les se traduire en toute sécurité en arrière-plan. Une notification vous alertera de la fin du processus.',
   'tour_welcome_title': 'Cadeau de bienvenue 🎁',
   'tour_welcome_desc':
       'Un cadeau de bienvenue de 5 crédits a été ajouté à votre compte ! Vous pouvez suivre le solde de vos crédits ici ou en ajouter de nouveaux à tout moment. Connectez-vous avec votre compte Google pour obtenir +2 crédits supplémentaires !',
@@ -693,8 +664,6 @@ const Map<String, String> translationsFr = {
   'tour_skip': 'Passer',
   'tour_sdh_title': 'Qu\'est-ce que le commutateur SDH ?',
   'tour_sdh_desc': 'Il détecte les effets ou les balises inutiles indiquant les sons de la scène, tels que [Sourires], (Musique), présents dans les sous-titres pour sourds et malentendants (SDH) et NE LES ENVOIE ABSOLUTAMENTE PAS au modèle d\'IA pour traduction. Naturellement, leur présence N\'EST PAS DÉDUITE DE VOS CRÉDITS. Lorsque le processus est terminé et que le fichier de traduction vous est remis, ces effets qui se trouvaient initialement dans le fichier sont placés exactement à leur place d\'origine. De cette façon, vous économisez vos crédits et obtenez une traduction sans erreur.',
-  'batch_cloud_processing_text': 'La traduction continue sur le serveur...',
-  'batch_translation_complete_text': 'Traduction terminée !',
   'website_purchase': 'Achat sur le site web',
     'purchase_recovered_previous':
             'Vos crédits ont été ajoutés à partir dun achat finalisé précédemment. Aucun nouveau paiement na été prélevé maintenant.',
@@ -708,6 +677,4 @@ const Map<String, String> translationsFr = {
   'credit_source_website': 'Site Web',
   'credits_pack_generic': 'Pack de crédits',
   'error_multi_pack_detected': 'Ce fichier semble contenir plusieurs contenus de sous-titres. Veuillez diviser le fichier en parties pour la sécurité et l\'équilibre des crédits.',
-  'batch_report_success': '{count} fichier(s) traduit(s) avec succès.',
-  'batch_report_failed_count': '{count} fichier(s) échoué(s) :',
 };

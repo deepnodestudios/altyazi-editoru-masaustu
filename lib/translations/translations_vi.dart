@@ -607,34 +607,13 @@ const Map<String, String> translationsVi = {
   'feature_batch_title': 'Dịch Hàng Loạt',
   'feature_batch_desc':
       'Thêm nhiều tệp phụ đề vào hàng đợi và dịch tất cả cùng một lúc. Lưu kết quả riêng lẻ hoặc dưới dạng tệp ZIP.',
-  'batch_no_credit_log':
-      'Không đủ tín dụng. Bạn không có số dư để bắt đầu quá trình.',
-  'batch_credit_partial':
-      'Tín dụng của bạn ({credits}) ít hơn số lượng tệp đã chọn ({total})...',
-  'batch_api_triggered': 'API hàng loạt được kích hoạt cho {count} tệp.',
-  'batch_starting': 'Đang bắt đầu Dịch Hàng Loạt...',
-  'batch_file_sent': '{filename} đã được gửi đến máy chủ. Tác vụ: {job}',
-  'batch_process_prefix': 'Tiến trình Hàng loạt',
-  'batch_process_canceled': 'Quá trình đã bị hủy.',
-  'batch_process_ongoing':
-      'Đang tiến hành (kiểm tra mỗi 15 giây, còn lại: {count})...',
-  'batch_file_success': '{filename} đã được dịch thành công.',
-  'batch_file_error': '{filename} gặp lỗi trên máy chủ.',
-  'batch_file_rate_limit': 'Đã vượt quá giới hạn tốc độ cho {filename}.',
-  'batch_all_completed': 'Đã hoàn thành dịch tất cả các tệp.',
-  'batch_error_prefix': 'Lỗi Dịch Hàng Loạt',
-  'batch_unsupported_files_skipped': 'Đã bỏ qua các tệp không được hỗ trợ',
   'batch_success_count': '{count} tệp đã được dịch thành công.',
   'batch_error_count': '{count} tệp không thành công:',
-  'batch_starting_snackbar': 'Dịch hàng loạt đã bắt đầu cho {count} tệp...',
   'batch_background_notification_tip':
       'Bạn có thể thoát ứng dụng, bạn sẽ nhận được thông báo khi hoàn thành.',
   'batch_save_all_zip': 'Lưu Tất cả dưới dạng ZIP',
   'batch_complete_title': 'Dịch Hàng Loạt Hoàn Tất',
   'batch_save_individual_prompt': 'Hoặc lưu từng tệp từ danh sách:',
-  'batch_translation_beta': 'Dịch Hàng Loạt (Beta)',
-  'batch_timeout_log': 'Hết thời gian chờ, chuyển sang tệp tiếp theo.',
-  'batch_process_completed': 'Xử lý hàng loạt hoàn tất.',
   'tour_add_file_title': 'Thêm tệp phụ đề',
   'tour_add_file_desc':
       'Bạn có thể thêm các tệp SRT hoặc VTT mà bạn muốn dịch vào đây.\nBạn có thể chọn nhiều tệp cùng lúc từ thiết bị, Google Drive, Dropbox hoặc Yandex Disk.',
@@ -645,13 +624,6 @@ const Map<String, String> translationsVi = {
   'tour_translate_title': 'Bắt đầu dịch',
   'tour_translate_desc':
       'Bạn có thể sử dụng nút này để dịch tuần tự một tệp duy nhất hoặc danh sách đã chọn trên thiết bị của mình. Tiến trình có thể được theo dõi trực tiếp trong quá trình dịch.',
-  'tour_batch_translate_title': 'Dịch hàng loạt (Batch API)',
-  'tour_batch_translate_desc':
-      'Đây là phương pháp được khuyến nghị nếu bạn định dịch nhiều tệp. Các tệp của bạn sẽ được gửi đến máy chủ và việc dịch thuật sẽ được hoàn thành an toàn trong nền, ngay cả khi bạn đóng ứng dụng. Bạn sẽ nhận được thông báo khi hoàn thành.',
-  'tour_batch_translate_title_new':
-      'PHƯƠNG PHÁP MỚI: Dịch hàng loạt (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Bạn không còn phải mở ứng dụng trong khi dịch nhiều tệp nữa!\n\nHãy gửi đồng loạt tệp của bạn lên máy chủ và để chúng được dịch an toàn trong nền. Hệ thống sẽ thông báo cho bạn khi xong.',
   'tour_welcome_title': 'Quà tặng chào mừng 🎁',
   'tour_welcome_desc':
       'Món quà chào mừng gồm 5 Tín dụng đã được cộng vào tài khoản của bạn! Bạn có thể theo dõi số dư tín dụng của mình tại đây hoặc nạp thêm bất cứ lúc nào. Đăng nhập bằng tài khoản Google của bạn để nhận thêm 2 tín dụng nữa!',
@@ -675,8 +647,6 @@ const Map<String, String> translationsVi = {
   'tour_skip': 'Bỏ qua',
   'tour_sdh_title': 'Công tắc SDH là gì?',
   'tour_sdh_desc': 'Nó phát hiện các hiệu ứng hoặc thẻ không cần thiết chỉ ra âm thanh cảnh, chẳng hạn như [Mỉm cười], (Âm nhạc), được tìm thấy trong Phụ đề dành cho người Điếc và Khiếm thính (SDH) và TUYỆT ĐỐI KHÔNG gửi chúng đến mô hình AI để dịch. Đương nhiên, sự hiện diện của chúng KHÔNG BỊ TRỪ VÀO TÍN DỤNG CỦA BẠN. Khi quá trình hoàn tất và tệp dịch được giao cho bạn, những hiệu ứng ban đầu trong tệp này sẽ được đặt chính xác vào vị trí cũ. Theo cách này, bạn vừa tiết kiệm được tín dụng vừa có bản dịch không có lỗi.',
-  'batch_cloud_processing_text': 'Bản dịch tiếp tục trên Máy chủ...',
-  'batch_translation_complete_text': 'Bản dịch đã hoàn tất!',
   'website_purchase': 'Mua hàng trên trang web',
     'purchase_recovered_previous':
             'Tin dung cua ban da duoc cong tu mot giao dich da hoan tat truoc do. Hien tai khong co khoan thu moi.',
@@ -690,6 +660,4 @@ const Map<String, String> translationsVi = {
   'credit_source_website': 'Trang web',
   'credits_pack_generic': 'Gói tín dụng',
   'error_multi_pack_detected': 'Tệp này có vẻ chứa nhiều nội dung phụ đề. Vui lòng chia nhỏ tệp để đảm bảo an toàn và số dư tín dụng.',
-  'batch_report_success': 'Đã dịch thành công {count} tệp.',
-  'batch_report_failed_count': '{count} tệp thất bại:',
 };

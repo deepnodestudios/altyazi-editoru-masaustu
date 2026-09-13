@@ -618,35 +618,13 @@ const Map<String, String> translationsRo = {
   'feature_batch_title': 'Traducere în Serie (Batch)',
   'feature_batch_desc':
       'Adăugați mai multe fișiere de subtitrări într-o coadă și traduceți-le toate deodată. Salvați rezultatele individual sau într-o arhivă ZIP.',
-  'batch_no_credit_log':
-      'Credite insuficiente. Nu aveți sold pentru a începe procesul.',
-  'batch_credit_partial':
-      'Creditele dumneavoastră ({credits}) sunt mai mici decât numărul de fișiere selectate ({total})...',
-  'batch_api_triggered':
-      'API-ul batch a fost declanșat pentru {count} fișiere.',
-  'batch_starting': 'Pornire traducere în serie...',
-  'batch_file_sent': '{filename} trimis către server. Sarcină: {job}',
-  'batch_process_prefix': 'Proces în Serie',
-  'batch_process_canceled': 'Proces anulat.',
-  'batch_process_ongoing':
-      'În curs de desfășurare (verificare la fiecare 15s, rămase: {count})...',
-  'batch_file_success': '{filename} tradus cu succes.',
-  'batch_file_error': '{filename} a întâmpinat o eroare pe server.',
-  'batch_file_rate_limit': 'Limită de solicitări depășită pentru {filename}.',
-  'batch_all_completed': 'Traducerea tuturor fișierelor a fost finalizată.',
-  'batch_error_prefix': 'Eroare la traducerea în serie',
-  'batch_unsupported_files_skipped': 'Fișierele neacceptate au fost omise',
   'batch_success_count': '{count} fișiere traduse cu succes.',
   'batch_error_count': 'Eșec pentru {count} fișiere:',
-  'batch_starting_snackbar': 'Traducerea în lot a început pentru {count} fișiere...',
   'batch_background_notification_tip':
       'Puteți părăsi aplicația, veți fi notificat când traducerea este finalizată.',
   'batch_save_all_zip': 'Salvați-le pe toate ca ZIP',
   'batch_complete_title': 'Traducere în Serie Finalizată',
   'batch_save_individual_prompt': 'Sau salvați individual din listă:',
-  'batch_translation_beta': 'Traducere în Serie (Beta)',
-  'batch_timeout_log': 'Timp expirat, se trece la următorul fișier.',
-  'batch_process_completed': 'Procesarea în serie s-a încheiat.',
   'tour_add_file_title': 'Adăugare Fișier Subtitrare',
   'tour_add_file_desc':
       'Aici poți adăuga fișierele SRT sau VTT pe care vrei să le traduci.\nPoți selecta mai multe fișiere în același timp din dispozitivul tău, Google Drive, Dropbox sau Yandex Disk.',
@@ -657,13 +635,6 @@ const Map<String, String> translationsRo = {
   'tour_translate_title': 'Începeți Traducerea',
   'tour_translate_desc':
       'Puteți folosi acest buton pentru a traduce un singur fișier sau o listă selectată în mod secvențial pe dispozitivul dvs. Procesul de traducere poate fi urmărit live.',
-  'tour_batch_translate_title': 'Traducere în Masă (Batch API)',
-  'tour_batch_translate_desc':
-      'Aceasta este metoda recomandată atunci când traduceți mai multe fișiere. Fișierele sunt trimise la server, iar traducerea va fi finalizată în siguranță în fundal, chiar și dacă închideți aplicația. Veți fi notificat atunci când este gata.',
-  'tour_batch_translate_title_new':
-      'METODĂ NOUĂ: Traducere în Masă (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Nu mai este nevoie să păstrați aplicația deschisă când traduceți mai multe fișiere!\n\nTrimiteți toate fișierele către server dintr-o dată și lăsați-le să se traducă în siguranță în fundal. Veți primi o notificare la finalizare.',
   'tour_welcome_title': 'Cadou de Bun Venit 🎁',
   'tour_welcome_desc':
       'Uite un cadou de bun venit: 5 Credite au fost adăugate în contul tău! Îți poți urmări soldul de credite aici sau poți achiziționa mai multe în orice moment. Conectați-vă la contul dvs. Google pentru a obține +2 credite suplimentare!',
@@ -687,8 +658,6 @@ const Map<String, String> translationsRo = {
   'tour_skip': 'Sari peste',
   'tour_sdh_title': 'Ce este comutatorul SDH?',
   'tour_sdh_desc': 'Detectează efecte sau etichete inutile care indică sunete de fundal, precum [Zâmbește], (Muzică), găsite în subtitrările pentru surzi și deficiențe de auz (SDH) și sub nicio formă NU LE TRIMITE către modelul AI pentru traducere. Desigur, prezența lor NU SE SCADE DIN CREDITELE TALE. Când procesul se termină și primești fișierul de traducere, aceste efecte care erau inițial în fișier sunt plasate exact în locurile lor originale. În acest fel, îți salvezi creditele și obții o traducere fără erori.',
-  'batch_cloud_processing_text': 'Traducerea continuă pe server...',
-  'batch_translation_complete_text': 'Traducere completă!',
   'website_purchase': 'Achiziție pe site',
     'purchase_recovered_previous':
             'Creditele tale au fost adăugate dintr o achiziție finalizată anterior. Acum nu a fost efectuată o nouă taxare.',
@@ -702,6 +671,4 @@ const Map<String, String> translationsRo = {
   'credit_source_website': 'Site web',
   'credits_pack_generic': 'Pachet de credite',
   'error_multi_pack_detected': 'Acest fișier pare să conțină mai multe conținuturi de subtitrare. Vă rugăm să împărțiți fișierul în părți pentru securitate și echilibrul creditelor.',
-  'batch_report_success': '{count} fișier(e) traduse cu succes.',
-  'batch_report_failed_count': '{count} fișier(e) eșuate:',
 };

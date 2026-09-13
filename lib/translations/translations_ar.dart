@@ -602,33 +602,13 @@ const Map<String, String> translationsAr = {
   'feature_batch_title': 'الترجمة المجمعة',
   'feature_batch_desc':
       'أضف عدة ملفات ترجمة إلى قائمة الانتظار وترجمها دفعة واحدة. احفظ النتائج بشكل فردي أو كأرشيف ZIP.',
-  'batch_no_credit_log': 'رصيد غير كافٍ. ليس لديك رصيد كاف لبدء العملية.',
-  'batch_credit_partial':
-      'رصيدك ({credits}) أقل من عدد الملفات المحددة ({total})...',
-  'batch_api_triggered': 'تم تشغيل API المجمع لـ {count} من الملفات.',
-  'batch_starting': 'جاري بدء الترجمة المجمعة...',
-  'batch_file_sent': 'تم إرسال {filename} إلى الخادم. المهمة: {job}',
-  'batch_process_prefix': 'عملية مجمعة',
-  'batch_process_canceled': 'تم إلغاء العملية.',
-  'batch_process_ongoing':
-      'قيد التقدم (يتم الفحص كل 15 ثانية، المتبقي: {count})...',
-  'batch_file_success': 'تمت ترجمة {filename} بنجاح.',
-  'batch_file_error': 'واجه {filename} خطأ على الخادم.',
-  'batch_file_rate_limit': 'تجاوز حد السرعة للملف {filename}.',
-  'batch_all_completed': 'اكتملت ترجمة جميع الملفات.',
-  'batch_error_prefix': 'خطأ في الترجمة المجمعة',
-  'batch_unsupported_files_skipped': 'تم تخطي الملفات غير المدعومة',
   'batch_success_count': 'تمت ترجمة {count} ملفات بنجاح.',
   'batch_error_count': 'فشل {count} ملفات:',
-  'batch_starting_snackbar': 'بدأت الترجمة المجمعة لـ {count} ملفات...',
   'batch_background_notification_tip':
       'يمكنك إغلاق التطبيق، وسيتم إخطارك عند اكتمال الترجمة.',
   'batch_save_all_zip': 'حفظ الكل كـ ZIP',
   'batch_complete_title': 'اكتملت الترجمة المجمعة',
   'batch_save_individual_prompt': 'أو حفظ كل ملف على حدة من القائمة:',
-  'batch_translation_beta': 'الترجمة المجمعة (Beta)',
-  'batch_timeout_log': 'انتهت المهلة، الانتقال إلى الملف التالي.',
-  'batch_process_completed': 'اكتملت المعالجة المجمعة.',
   'tour_add_file_title': 'إضافة ملف ترجمة نصية',
   'tour_add_file_desc':
       'يمكنك هنا إضافة ملفات SRT أو VTT التي تريد ترجمتها.\nيمكنك تحديد ملفات متعددة في وقت واحد من جهازك أو Google Drive أو Dropbox أو Yandex Disk.',
@@ -639,13 +619,6 @@ const Map<String, String> translationsAr = {
   'tour_translate_title': 'بدء الترجمة',
   'tour_translate_desc':
       'يمكنك استخدام هذا الزر لترجمة ملفك الفردي أو القائمة المحددة بالتسلسل على جهازك. يمكنك تتبع العملية مباشرة أثناء الترجمة.',
-  'tour_batch_translate_title': 'الترجمة المجمعة (Batch API)',
-  'tour_batch_translate_desc':
-      'هذه هي الطريقة الموصى بها إذا كنت ستقوم بترجمة ملفات متعددة. يتم إرسال ملفاتك إلى الخادم، ويتم إكمال الترجمة بأمان في الخلفية حتى إذا أغلقت التطبيق. سيتم إشعارك عند الانتهاء.',
-  'tour_batch_translate_title_new':
-      'طريقة جديدة: الترجمة المجمعة (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'لم يعد عليك ترك التطبيق مفتوحًا عند ترجمة ملفات متعددة!\n\nأرسل ملفاتك إلى الخادم دفعة واحدة، واتركها تترجم بأمان في الخلفية. ستتلقى إشعارًا عند الانتهاء.',
   'tour_welcome_title': 'هدية ترحيبية 🎁',
   'tour_welcome_desc':
       'تمت إضافة هدية ترحيبية قدرها 5 أرصدة إلى حسابك! يمكنك تتبع رصيدك هنا أو إضافة المزيد في أي وقت. تسجيل الدخول بحساب Google الخاص بك للحصول على 2 أرصدة إضافية!',
@@ -668,8 +641,6 @@ const Map<String, String> translationsAr = {
   'tour_skip': 'تخطي',
   'tour_sdh_title': 'ما هو مفتاح SDH؟',
   'tour_sdh_desc': 'يكتشف التأثيرات أو العلامات غير الضرورية التي تشير إلى أصوات المشهد، مثل [يبتسم] أو (موسيقى)، والموجودة في الترجمات للصم وضعاف السمع (SDH) ولا يرسلها مطلقًا إلى نموذج الذكاء الاصطناعي للترجمة. وبطبيعة الحال، فإن وجودها لا يخصم من رصيدك. عند اكتمال العملية وتسليم ملف الترجمة إليك، يتم وضع هذه التأثيرات تمامًا في أماكنها الأصلية في الملف. بهذه الطريقة، يمكنك توفير رصيدك وضمان ترجمة خالية من الأخطاء.',
-  'batch_cloud_processing_text': 'الترجمة مستمرة على الخادم...',
-  'batch_translation_complete_text': 'اكتملت الترجمة!',
   'website_purchase': 'شراء من الموقع',
     'purchase_recovered_previous':
             'تمت إضافة رصيدك من عملية شراء مكتملة سابقا. لم يتم تحصيل رسوم جديدة الآن.',
@@ -683,6 +654,4 @@ const Map<String, String> translationsAr = {
   'credit_source_website': 'موقع إلكتروني',
   'credits_pack_generic': 'حزمة رصيد',
   'error_multi_pack_detected': 'يبدو أن هذا الملف يحتوي على محتويات ترجمة متعددة. يرجى تقسيم الملف إلى أجزاء للأمان وتوازن الرصيد.',
-  'batch_report_success': 'تم ترجمة {count} ملف(ات) بنجاح.',
-  'batch_report_failed_count': 'فشل {count} ملف(ات):',
 };

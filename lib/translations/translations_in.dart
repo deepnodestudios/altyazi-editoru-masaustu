@@ -603,33 +603,13 @@ const Map<String, String> translationsIn = {
   'feature_batch_title': 'बैच अनुवाद',
   'feature_batch_desc':
       'कतार में कई सबटाइटल फ़ाइलें जोड़ें और एक ही बार में उन सभी का अनुवाद करें। परिणामों को अलग-अलग या ZIP के रूप में सहेजें।',
-  'batch_no_credit_log':
-      'अपर्याप्त क्रेडिट। प्रक्रिया शुरू करने के लिए आपके पास शेष राशि नहीं है।',
-  'batch_credit_partial':
-      'आपके क्रेडिट ({credits}) चयनित फ़ाइल गणना ({total}) से कम हैं...',
-  'batch_api_triggered': '{count} फ़ाइलों के लिए बैच API ट्रिगर किया गया।',
-  'batch_starting': 'बैच अनुवाद शुरू हो रहा है...',
-  'batch_file_sent': '{filename} सर्वर को भेजा गया। कार्य: {job}',
-  'batch_process_prefix': 'बैच प्रक्रिया',
-  'batch_process_canceled': 'प्रक्रिया रद्द कर दी गई।',
-  'batch_process_ongoing': 'प्रगति पर (हर 15 सेकंड पर जाँच, शेष: {count})...',
-  'batch_file_success': '{filename} का सफलतापूर्वक अनुवाद हो गया।',
-  'batch_file_error': '{filename} को सर्वर पर त्रुटि का सामना करना पड़ा।',
-  'batch_file_rate_limit': '{filename} के लिए दर सीमा पार हो गई।',
-  'batch_all_completed': 'सभी फ़ाइलों का अनुवाद पूरा हो गया।',
-  'batch_error_prefix': 'बैच अनुवाद त्रुटि',
-  'batch_unsupported_files_skipped': 'असमर्थित फ़ाइलें छोड़ दी गईं',
   'batch_success_count': '{count} फ़ाइलों का सफलतापूर्वक अनुवाद हो गया।',
   'batch_error_count': '{count} फ़ाइलें विफल रहीं:',
-  'batch_starting_snackbar': '{count} फ़ाइलों के लिए बैच अनुवाद शुरू हुआ...',
   'batch_background_notification_tip':
       'आप ऐप छोड़ सकते हैं, अनुवाद पूरा होने पर आपको सूचित किया जाएगा।',
   'batch_save_all_zip': 'सभी को ZIP के रूप में सहेजें',
   'batch_complete_title': 'बैच अनुवाद संपन्न',
   'batch_save_individual_prompt': 'या सूची से अलग-अलग सहेजें:',
-  'batch_translation_beta': 'बैच अनुवाद (बीटा)',
-  'batch_timeout_log': 'समय समाप्त, अगली फ़ाइल पर जा रहे हैं।',
-  'batch_process_completed': 'बैच प्रसंस्करण पूर्ण।',
   'tour_add_file_title': 'सबटाइटल फ़ाइल जोड़ें',
   'tour_add_file_desc':
       'आप जिन SRT या VTT फ़ाइलों का अनुवाद करना चाहते हैं, उन्हें यहाँ जोड़ सकते हैं।\nआप अपने डिवाइस, Google Drive, Dropbox या Yandex Disk से एक साथ कई फ़ाइलें चुन सकते हैं।',
@@ -640,12 +620,6 @@ const Map<String, String> translationsIn = {
   'tour_translate_title': 'अनुवाद शुरू करें',
   'tour_translate_desc':
       'आप इस बटन का उपयोग अपने डिवाइस पर किसी एक फ़ाइल या चयनित सूची का क्रमिक रूप से अनुवाद करने के लिए कर सकते हैं। अनुवाद प्रक्रिया को लाइव ट्रैक किया जा सकता है।',
-  'tour_batch_translate_title': 'बैच अनुवाद (Batch API)',
-  'tour_batch_translate_desc':
-      'यदि आप कई फ़ाइलों का अनुवाद कर रहे हैं तो यह अनुशंसित तरीका है। आपकी फ़ाइलें सर्वर पर भेजी जाती हैं, और यदि आप ऐप बंद कर देते हैं तो भी पृष्ठभूमि में अनुवाद सुरक्षित रूप से पूरा हो जाता है। पूरा होने पर आपको सूचित किया जाएगा।',
-  'tour_batch_translate_title_new': 'नया तरीका: बैच अनुवाद (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'कई फ़ाइलों का अनुवाद करते समय अब आपको ऐप को खुला रखने की आवश्यकता नहीं है!\n\nअपनी सभी फ़ाइलें एक ही बार में सर्वर पर भेजें और उन्हें पृष्ठभूमि में सुरक्षित रूप से अनुवादित होने दें। पूरा होने पर आपको एक सूचना प्राप्त होगी।',
   'tour_welcome_title': 'स्वागत उपहार 🎁',
   'tour_welcome_desc':
       'आपके खाते में 5 क्रेडिट्स का स्वागत उपहार जोड़ा गया है! आप यहाँ अपना क्रेडिट बैलेंस ट्रैक कर सकते हैं या किसी भी समय और अधिक जोड़ सकते हैं। Masuk dengan akun Anda untuk mendapatkan +2 kredit tambahan!',
@@ -669,8 +643,6 @@ const Map<String, String> translationsIn = {
   'tour_skip': 'छोड़ें',
   'tour_sdh_title': 'SDH स्विच क्या है?',
   'tour_sdh_desc': 'यह [मुस्कुराता है], (संगीत) जैसे दृश्यों की ध्वनियों को दर्शाने वाले प्रभाव या अनावश्यक टैग का पता लगाता है, जो बधिरों और कम सुनने वालों के लिए सबटाइटल (SDH) में पाए जाते हैं और उन्हें अनुवाद के लिए AI मॉडल को बिल्कुल नहीं भेजता है। स्वाभाविक रूप से, इनकी उपस्थिति आपके क्रेडिट से नहीं काटी जाती है। जब प्रक्रिया पूरी हो जाती है और अनुवाद फ़ाइल आपको दी जाती है, तो ये प्रभाव जो मूल रूप से फ़ाइल में थे, ठीक अपने मूल स्थानों पर वापस रख दिए जाते हैं। इस तरह, आप अपने क्रेडिट बचाते हैं और त्रुटि-मुक्त अनुवाद प्राप्त करते हैं।',
-  'batch_cloud_processing_text': 'Terjemahan Berlanjut di Server...',
-  'batch_translation_complete_text': 'Terjemahan Selesai!',
   'website_purchase': 'वेबसाइट खरीद',
     'purchase_recovered_previous':
             'आपके क्रेडिट पहले से पूर्ण हुई खरीद से जोड़े गए। अभी कोई नया शुल्क नहीं लिया गया।',
@@ -684,6 +656,4 @@ const Map<String, String> translationsIn = {
   'credit_source_website': 'वेबसाइट',
   'credits_pack_generic': 'क्रेडिट पैक',
   'error_multi_pack_detected': 'ऐसा प्रतीत होता है कि इस फ़ाइल में कई सबटाइटल सामग्रियां हैं। सुरक्षा और क्रेडिट संतुलन के लिए कृपया फ़ाइल को भागों में विभाजित करें।',
-  'batch_report_success': '{count} फ़ाइलें सफलतापूर्वक अनुवादित की गईं।',
-  'batch_report_failed_count': '{count} फ़ाइलें विफल रहीं:',
 };

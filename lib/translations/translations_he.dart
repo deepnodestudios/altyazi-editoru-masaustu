@@ -604,32 +604,13 @@ const Map<String, String> translationsHe = {
   'feature_batch_title': 'תרגום אצווה',
   'feature_batch_desc':
       'הוסף קבצי כתוביות מרובים לתור ותרגם את כולם בבת אחת. שמור תוצאות בנפרד או כקובץ ZIP יחיד.',
-  'batch_no_credit_log': 'אין מספיק קרדיטים. אין לך יתרה כדי להתחיל בתהליך.',
-  'batch_credit_partial':
-      'הקרדיטים שלך ({credits}) פחותים ממספר הקבצים שנבחרו ({total})...',
-  'batch_api_triggered': 'ממשק API אצווה הופעל עבור {count} קבצים.',
-  'batch_starting': 'מתחיל תרגום אצווה...',
-  'batch_file_sent': '{filename} נשלח לשרת. משימה: {job}',
-  'batch_process_prefix': 'תהליך אצווה',
-  'batch_process_canceled': 'התהליך בוטל.',
-  'batch_process_ongoing': 'בביצוע (בודק כל 15 שניות, נותרו: {count})...',
-  'batch_file_success': '{filename} תורגם בהצלחה.',
-  'batch_file_error': 'אירעה שגיאה בשרת עבור {filename}.',
-  'batch_file_rate_limit': 'חרג ממגבלת הקצב עבור {filename}.',
-  'batch_all_completed': 'תרגום כל הקבצים הושלם.',
-  'batch_error_prefix': 'שגיאת תרגום אצווה',
-  'batch_unsupported_files_skipped': 'מדלג על קבצים בלתי נתמכים',
   'batch_success_count': '{count} קבצים תורגמו בהצלחה.',
   'batch_error_count': 'שגיאה ב- {count} קבצים:',
-  'batch_starting_snackbar': 'תרגום אצווה החל עבור {count} קבצים...',
   'batch_background_notification_tip':
       'באפשרותך לצאת מהאפליקציה, תקבל התראה כאשר התרגום יסתיים.',
   'batch_save_all_zip': 'שמור הכל כ- ZIP',
   'batch_complete_title': 'תרגום אצווה הושלם',
   'batch_save_individual_prompt': 'או שמור בנפרד מהרשימה:',
-  'batch_translation_beta': 'תרגום אצווה (בטא)',
-  'batch_timeout_log': 'זמן חלף, מדלג לקובץ הבא.',
-  'batch_process_completed': 'עיבוד אצווה הושלם.',
   'tour_add_file_title': 'הוסף קובץ כתוביות',
   'tour_add_file_desc':
       'באפשרותך להוסיף לכאן את קבצי ה-SRT או ה-VTT שברצונך לתרגם.\nניתן לבחור מספר קבצים בו-זמנית מהמכשיר שלך, מגוגל דרייב, דרופבוקס או יאנדקס דיסק.',
@@ -640,12 +621,6 @@ const Map<String, String> translationsHe = {
   'tour_translate_title': 'התחל תרגום',
   'tour_translate_desc':
       'באפשרותך להשתמש בכפתור זה כדי לתרגם קובץ בודד או רשימה נבחרת באופן רציף במכשיר שלך. ניתן לעקוב אחר תהליך התרגום בזמן אמת.',
-  'tour_batch_translate_title': 'תרגום קבוצתי (Batch API)',
-  'tour_batch_translate_desc':
-      'זוהי השיטה המומלצת כאשר אתה מתרגם מספר קבצים. הקבצים שלך נשלחים לשרת, והתרגום יושלם בבטחה ברקע, גם אם תסגור את האפליקציה. תקבל התראה עם סיום הפעולה.',
-  'tour_batch_translate_title_new': 'שיטה חדשה: תרגום קבוצתי (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'כבר לא צריך להשאיר את האפליקציה פתוחה כשמתרגמים מספר קבצים!\n\nשלח את כל הקבצים שלך לשרת בבת אחת ותן להם להיות מתורגמים בבטחה ברקע. תקבל התראה שתעדכן אותך כשהתהליך יסתיים.',
   'tour_welcome_title': 'מתנת הצטרפות 🎁',
   'tour_welcome_desc':
       'מתנת הצטרפות של 5 קרדיטים נוספה לחשבונך! ניתן לעקוב אחר יתרת הקרדיטים שלך כאן או להוסיף עוד בכל עת. היכנס עם החשבון שלך כדי לקבל +2 נקודות זכות נוספות!',
@@ -669,8 +644,6 @@ const Map<String, String> translationsHe = {
   'tour_skip': 'דלג',
   'tour_sdh_title': 'מהו מתג ה-SDH?',
   'tour_sdh_desc': 'הוא מזהה אפקטים או תגיות מיותרות המציינות צלילי רקע, כגון [מחייך], (מוזיקה), הנמצאים בכתוביות לכבדי שמיעה (SDH) ובשום פנים ואופן לא שולח אותם למודל ה-AI לתרגום. מטבע הדברים, נוכחותם אינה מופחתת מהקרדיטים שלך. בסיום התהליך וכאשר קובץ התרגום נמסר לך, אפקטים אלה מוחזרים בדיוק למקומם המקורי בקובץ. בדרך זו, אתה חוסך את הקרדיטים שלך ומשיג תרגום ללא שגיאות.',
-  'batch_cloud_processing_text': 'התרגום נמשך בשרת...',
-  'batch_translation_complete_text': 'התרגום הושלם!',
   'website_purchase': 'רכישה באתר',
     'purchase_recovered_previous':
             'הקרדיטים שלך נוספו מרכישה שהושלמה קודם. לא בוצע עכשיו חיוב חדש.',
@@ -684,6 +657,4 @@ const Map<String, String> translationsHe = {
   'credit_source_website': 'אתר אינטרנט',
   'credits_pack_generic': 'חבילת קרדיטים',
   'error_multi_pack_detected': 'קובץ זה נראה כמכיל מספר תכני כתוביות. אנא פצל את הקובץ לחלקים מטעמי אבטחה ויתרת קרדיטים.',
-  'batch_report_success': '{count} קבצים תורגמו בהצלחה.',
-  'batch_report_failed_count': '{count} קבצים נכשלו:',
 };

@@ -616,34 +616,13 @@ const Map<String, String> translationsIt = {
   'feature_batch_title': 'Traduzione Seriale',
   'feature_batch_desc':
       'Aggiungi più file di sottotitoli alla coda e traducili tutti in una volta. Salva i risultati singolarmente o come archivio ZIP.',
-  'batch_no_credit_log':
-      'Crediti insufficienti. Non hai saldo per avviare il processo.',
-  'batch_credit_partial':
-      'I tuoi crediti ({credits}) sono inferiori al numero di file selezionati ({total})...',
-  'batch_api_triggered': 'API seriale avviata per {count} file.',
-  'batch_starting': 'Avvio Traduzione Seriale...',
-  'batch_file_sent': '{filename} inviato al server. Operazione: {job}',
-  'batch_process_prefix': 'Processo Seriale',
-  'batch_process_canceled': 'Processo annullato.',
-  'batch_process_ongoing':
-      'In corso (controllo ogni 15s, rimanenti: {count})...',
-  'batch_file_success': '{filename} tradotto con successo.',
-  'batch_file_error': '{filename} ha riscontrato un errore sul server.',
-  'batch_file_rate_limit': 'Limite di velocità superato per {filename}.',
-  'batch_all_completed': 'Traduzione di tutti i file completata.',
-  'batch_error_prefix': 'Errore di Traduzione Seriale',
-  'batch_unsupported_files_skipped': 'File non supportati ignorati',
   'batch_success_count': '{count} file tradotti con successo.',
   'batch_error_count': 'Errore in {count} file:',
-  'batch_starting_snackbar': 'Traduzione in blocco avviata per {count} file...',
   'batch_background_notification_tip':
       'Puoi uscire dall\'app, ti avviseremo al termine della traduzione.',
   'batch_save_all_zip': 'Salva Tutto come ZIP',
   'batch_complete_title': 'Traduzione Seriale Completata',
   'batch_save_individual_prompt': 'Oppure salva singolarmente dall\'elenco:',
-  'batch_translation_beta': 'Traduzione Seriale (Beta)',
-  'batch_timeout_log': 'Tempo scaduto, passaggio al file successivo.',
-  'batch_process_completed': 'Elaborazione seriale completata.',
   'tour_add_file_title': 'Aggiungi file sottotitoli',
   'tour_add_file_desc':
       'Puoi aggiungere qui i file SRT o VTT che desideri tradurre.\nPuoi selezionare più file contemporaneamente dal tuo dispositivo, Google Drive, Dropbox o Yandex Disk.',
@@ -654,13 +633,6 @@ const Map<String, String> translationsIt = {
   'tour_translate_title': 'Avvia traduzione',
   'tour_translate_desc':
       'Usa questo pulsante per tradurre un singolo file o l\'elenco selezionato sul tuo dispositivo in sequenza. Puoi seguire il processo di traduzione in diretta.',
-  'tour_batch_translate_title': 'Traduzione in batch (Batch API)',
-  'tour_batch_translate_desc':
-      'Questo è il metodo suggerito per tradurre più file. I tuoi file verranno inviati al server e la traduzione continuerà in background, anche se chiudi l\'app. Riceverai una notifica a operazione completata.',
-  'tour_batch_translate_title_new':
-      'NUOVO METODO: Traduzione in batch (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Non devi più tenere l\'app aperta mentre traduci più file!\n\nInvia tutti i file al server in un colpo solo e lasciali tradurre in sicurezza in background. Verrai avvisato quando avrà finito.',
   'tour_welcome_title': 'Regalo di benvenuto 🎁',
   'tour_welcome_desc':
       'Un regalo speciale di 5 Crediti è stato accreditato sul tuo account! Puoi monitorare il tuo saldo qui o aggiungerne di nuovi in qualsiasi momento. Accedi con il tuo account Google per ottenere +2 crediti extra!',
@@ -684,8 +656,6 @@ const Map<String, String> translationsIt = {
   'tour_skip': 'Salta',
   'tour_sdh_title': 'Cos\'è l\'interruttore SDH?',
   'tour_sdh_desc': 'Rileva effetti o tag non necessari che indicano suoni di scena, come [Sorride], (Musica), trovati nei sottotitoli per non udenti e ipoudenti (SDH) e NON Li INVIA ASSOLUTAMENTE al modello AI per la traduzione. Naturalmente, la loro presenza NON VIENE SOTTRATTA DAI TUOI CREDITI. Al termine del processo, quando ti viene consegnato il file di traduzione, questi effetti vengano riposizionati esattamente ai loro posti originali. In questo modo, risparmi i tuoi crediti e ottieni una traduzione priva di errori.',
-  'batch_cloud_processing_text': 'La traduzione continua sul server...',
-  'batch_translation_complete_text': 'Traduzione completata!',
   'website_purchase': 'Acquisto sul sito web',
     'purchase_recovered_previous':
             'I tuoi crediti sono stati aggiunti da un acquisto completato in precedenza. Nessun nuovo addebito è stato effettuato ora.',
@@ -699,6 +669,4 @@ const Map<String, String> translationsIt = {
   'credit_source_website': 'Sito web',
   'credits_pack_generic': 'Pacchetto crediti',
   'error_multi_pack_detected': 'Questo file sembra contenere più contenuti di sottotitoli. Dividi il file in parti per sicurezza e saldo crediti.',
-  'batch_report_success': '{count} file tradotti con successo.',
-  'batch_report_failed_count': '{count} file non riusciti:',
 };

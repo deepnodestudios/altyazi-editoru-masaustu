@@ -620,34 +620,13 @@ const Map<String, String> translationsCs = {
   'feature_batch_title': 'Dávkový překlad',
   'feature_batch_desc':
       'Přidejte více souborů titulků do fronty a přeložte je všechny najednou. Výsledky uložte jednotlivě nebo jako jeden soubor ZIP.',
-  'batch_no_credit_log':
-      'Nedostatek kreditů. Nemáte zůstatek pro zahájení procesu.',
-  'batch_credit_partial':
-      'Vaše kredity ({credits}) jsou menší než počet vybraných souborů ({total})...',
-  'batch_api_triggered': 'Dávkové API spuštěno pro {count} souborů.',
-  'batch_starting': 'Zahajování dávkového překladu...',
-  'batch_file_sent': '{filename} odeslán na server. Úloha: {job}',
-  'batch_process_prefix': 'Dávkový proces',
-  'batch_process_canceled': 'Proces byl zrušen.',
-  'batch_process_ongoing':
-      'Probíhá zpracování (kontrola každých 15s, zbývá: {count})...',
-  'batch_file_success': '{filename} úspěšně přeložen.',
-  'batch_file_error': '{filename} zaznamenal chybu na serveru.',
-  'batch_file_rate_limit': 'Limit rychlosti překročen pro {filename}.',
-  'batch_all_completed': 'Překlad všech souborů byl dokončen.',
-  'batch_error_prefix': 'Chyba dávkového překladu',
-  'batch_unsupported_files_skipped': 'Nepodporované soubory byly přeskočeny',
   'batch_success_count': '{count} souborů úspěšně přeloženo.',
   'batch_error_count': 'Selhání u {count} souborů:',
-  'batch_starting_snackbar': 'Dávkový překlad začal pro {count} souborů...',
   'batch_background_notification_tip':
       'Můžete aplikaci opustit, po dokončení překladu budete upozorněni.',
   'batch_save_all_zip': 'Uložit vše jako ZIP',
   'batch_complete_title': 'Dávkový překlad dokončen',
   'batch_save_individual_prompt': 'Nebo uložte jednotlivě ze seznamu:',
-  'batch_translation_beta': 'Dávkový překlad (Beta)',
-  'batch_timeout_log': 'Časový limit vypršel, přeskočeno na další soubor.',
-  'batch_process_completed': 'Dávkové zpracování dokončeno.',
   'tour_add_file_title': 'Přidat soubor s titulky',
   'tour_add_file_desc':
       'Sem můžete přidat soubory SRT nebo VTT, které chcete přeložit.\nMůžete vybrat více souborů najednou ze svého zařízení, Google Drive, Dropbox nebo Yandex Disk.',
@@ -658,13 +637,6 @@ const Map<String, String> translationsCs = {
   'tour_translate_title': 'Zahájit překlad',
   'tour_translate_desc':
       'Pomocí tohoto tlačítka můžete přeložit jeden soubor nebo vybraný seznam postupně ve svém zařízení. Proces překladu můžete sledovat v reálném čase.',
-  'tour_batch_translate_title': 'Dávkový překlad (Batch API)',
-  'tour_batch_translate_desc':
-      'Toto je doporučená metoda, pokud překládáte více souborů. Vaše soubory se odešlou na server a překlad bezpečně proběhne na pozadí, i když aplikaci zavřete. Po dokončení budete upozorněni.',
-  'tour_batch_translate_title_new':
-      'NOVÁ METODA: Dávkový překlad (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Při překládání více souborů už nemusíte nechávat aplikaci otevřenou!\n\nOdešlete všechny soubory na server najednou a nechte je bezpečně přeložit na pozadí. Až bude hotovo, přijde vám upozornění.',
   'tour_welcome_title': 'Dárek na uvítanou 🎁',
   'tour_welcome_desc':
       'Jako dárek k prvnímu přihlášení bylo na váš účet přidáno 5 kreditů! Zde můžete sledovat svůj zůstatek nebo je kdykoli dobít. Přihlaste se ke svému účtu Google a získejte +2 extra kredity!',
@@ -688,8 +660,6 @@ const Map<String, String> translationsCs = {
   'tour_skip': 'Přeskočit',
   'tour_sdh_title': 'Co je přepínač SDH?',
   'tour_sdh_desc': 'Detekuje efekty nebo nepotřebné značky, které označují zvuky scén, jako je [Usmívá se] nebo (Hudba), nacházející se v titulcích pro neslyšící a nedoslýchavé (SDH), a v žádném případě je k překladu NEODESÍLÁ do modelu AI. Jejich přítomnost se vám tak NEODEČÍTÁ Z KREDITŮ. Jakmile je proces dokončen a obdržíte přeložený soubor, případné zvukové značky budou vložené přesně na svá původní místa. Ušetříte tak kredity a zajistíte bezchybný překlad.',
-  'batch_cloud_processing_text': 'Překlad pokračuje na serveru...',
-  'batch_translation_complete_text': 'Překlad dokončen!',
   'website_purchase': 'Nákup na webu',
     'purchase_recovered_previous':
             'Vaše kredity byly přidány z dříve dokončeného nákupu. Nyní nebyla účtována žádná nová platba.',
@@ -703,6 +673,4 @@ const Map<String, String> translationsCs = {
   'credit_source_website': 'Webová stránka',
   'credits_pack_generic': 'Balíček kreditů',
   'error_multi_pack_detected': 'Zdá se, že tento soubor obsahuje více obsahů titulků. Rozdělte soubor na části z důvodu bezpečnosti a rovnováhy kreditů.',
-  'batch_report_success': '{count} soubor(ů) úspěšně přeloženo.',
-  'batch_report_failed_count': '{count} soubor(ů) selhalo:',
 };

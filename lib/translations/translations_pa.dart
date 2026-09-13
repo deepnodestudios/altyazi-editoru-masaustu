@@ -607,34 +607,14 @@ const Map<String, String> translationsPa = {
   'feature_batch_title': 'ਬੈਚ ਅਨੁਵਾਦ',
   'feature_batch_desc':
       'ਕਤਾਰ ਵਿੱਚ ਕਈ ਸਬਟਾਈਟਲ ਫਾਈਲਾਂ ਸ਼ਾਮਲ ਕਰੋ ਅਤੇ ਉਹਨਾਂ ਸਭ ਦਾ ਇੱਕੋ ਵਾਰ ਅਨੁਵਾਦ ਕਰੋ।',
-  'batch_no_credit_log':
-      'ਨਾਕਾਫ਼ੀ ਕ੍ਰੈਡਿਟ। ਤੁਹਾਡੇ ਕੋਲ ਪ੍ਰਕਿਰਿਆ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਬਕਾਇਆ ਨਹੀਂ ਹੈ।',
-  'batch_credit_partial':
-      'ਤੁਹਾਡੇ ਕ੍ਰੈਡਿਟ ({credits}) ਚੁਣੀਆਂ ਗਈਆਂ ਫਾਈਲਾਂ ({total}) ਤੋਂ ਘੱਟ ਹਨ...',
-  'batch_api_triggered': '{count} ਫਾਈਲਾਂ ਲਈ ਏਪੀਆਈ ਬੇਨਤੀ ਕੀਤੀ ਗਈ।',
-  'batch_starting': 'ਬੈਚ ਅਨੁਵਾਦ ਸ਼ੁਰੂ ਹੋ ਰਿਹਾ ਹੈ...',
-  'batch_file_sent': '{filename} ਸਰਵਰ ਨੂੰ ਭੇਜੀ ਗਈ। ਜੌਬ: {job}',
-  'batch_process_prefix': 'ਬੈਚ ਪ੍ਰਕਿਰਿਆ',
-  'batch_process_canceled': 'ਪ੍ਰਕਿਰਿਆ ਰੱਦ ਕੀਤੀ ਗਈ।',
-  'batch_process_ongoing': 'ਚੱਲ ਰਿਹਾ ਹੈ (ਬਾਕੀ: {count})...',
-  'batch_file_success': '{filename} ਸਫਲਤਾਪੂਰਵਕ ਅਨੁਵਾਦ ਕੀਤੀ ਗਈ।',
-  'batch_file_error': '{filename} ਨੂੰ ਸਰਵਰ \'ਤੇ ਇੱਕ ਗਲਤੀ ਆਈ ਹੈ।',
-  'batch_file_rate_limit': '{filename} ਲਈ ਸੀਮਾ ਪਾਰ ਹੋ ਗਈ ਹੈ।',
-  'batch_all_completed': 'ਸਾਰੀਆਂ ਫਾਈਲਾਂ ਦਾ ਅਨੁਵਾਦ ਪੂਰਾ ਹੋ ਗਿਆ।',
-  'batch_error_prefix': 'ਬੈਚ ਅਨੁਵਾਦ ਗਲਤੀ',
-  'batch_unsupported_files_skipped': 'ਗੈਰ-ਸਮਰਥਿਤ ਫਾਈਲਾਂ ਛੱਡੀਆਂ ਗਈਆਂ',
   'batch_success_count': '{count} ਫਾਈਲਾਂ ਸਫਲਤਾਪੂਰਵਕ ਅਨੁਵਾਦ ਕੀਤੀਆਂ ਗਈਆਂ।',
   'batch_error_count': '{count} ਫਾਈਲਾਂ ਫੇਲ੍ਹ ਹੋਈਆਂ:',
-  'batch_starting_snackbar': '{count} ਫਾਈਲਾਂ ਲਈ ਬੈਚ ਅਨੁਵਾਦ ਸ਼ੁਰੂ ਹੋਇਆ...',
   'batch_background_notification_tip':
       'ਤੁਸੀਂ ਐਪ ਛੱਡ ਸਕਦੇ ਹੋ, ਮੁਕੰਮਲ ਹੋਣ \'ਤੇ ਤੁਹਾਨੂੰ ਸੂਚਿਤ ਕੀਤਾ ਜਾਵੇਗਾ।',
   'batch_save_all_zip': 'ਸਭ ਨੂੰ ਜ਼ਿਪ (ZIP) ਵਜੋਂ ਸੁਰੱਖਿਅਤ ਕਰੋ',
   'batch_complete_title': 'ਬੈਚ ਅਨੁਵਾਦ ਪੂਰਾ ਹੋਇਆ',
   'batch_save_individual_prompt':
       'ਜਾਂ ਸੂਚੀ ਵਿੱਚੋਂ ਵੱਖਰੇ ਤੌਰ \'ਤੇ ਸੁਰੱਖਿਅਤ ਕਰੋ:',
-  'batch_translation_beta': 'ਬੈਚ ਅਨੁਵਾਦ (ਬੀਟਾ)',
-  'batch_timeout_log': 'ਸਮਾਂ ਸਮਾਪਤ, ਅਗਲੀ ਫਾਈਲ \'ਤੇ ਜਾ ਰਿਹਾ ਹੈ।',
-  'batch_process_completed': 'ਬੈਚ ਪ੍ਰਕਿਰਿਆ ਪੂਰੀ ਹੋਈ।',
   'tour_add_file_title': 'ਸਬਟਾਈਟਲ ਫਾਈਲ ਸ਼ਾਮਲ ਕਰੋ',
   'tour_add_file_desc':
       'ਤੁਸੀਂ ਇੱਥੇ ਉਹ SRT ਜਾਂ VTT ਫਾਈਲਾਂ ਸ਼ਾਮਲ ਕਰ ਸਕਦੇ ਹੋ ਜਿਨ੍ਹਾਂ ਦਾ ਤੁਸੀਂ ਅਨੁਵਾਦ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ।\nਤੁਸੀਂ ਆਪਣੀ ਡਿਵਾਈਸ, Google Drive, Dropbox ਜਾਂ Yandex Disk ਤੋਂ ਇੱਕੋ ਸਮੇਂ ਕਈ ਫਾਈਲਾਂ ਚੁਣ ਸਕਦੇ ਹੋ।',
@@ -645,12 +625,6 @@ const Map<String, String> translationsPa = {
   'tour_translate_title': 'ਅਨੁਵਾਦ ਸ਼ੁਰੂ ਕਰੋ',
   'tour_translate_desc':
       'ਤੁਸੀਂ ਆਪਣੀ ਡਿਵਾਈਸ \'ਤੇ ਇਕੱਲੀ ਫਾਈਲ ਜਾਂ ਚੁਣੀ ਹੋਈ ਸੂਚੀ ਦਾ ਕ੍ਰਮਵਾਰ ਅਨੁਵਾਦ ਕਰਨ ਲਈ ਇਸ ਬਟਨ ਦੀ ਵਰਤੋਂ ਕਰ ਸਕਦੇ ਹੋ। ਅਨੁਵਾਦ ਪ੍ਰਕਿਰਿਆ ਨੂੰ ਲਾਈਵ ਟ੍ਰੈਕ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।',
-  'tour_batch_translate_title': 'ਬੈਚ ਅਨੁਵਾਦ (Batch API)',
-  'tour_batch_translate_desc':
-      'ਜੇਕਰ ਤੁਸੀਂ ਕਈ ਫਾਈਲਾਂ ਦਾ ਅਨੁਵਾਦ ਕਰ ਰਹੇ ਹੋ ਤਾਂ ਇਹ ਸਿਫ਼ਾਰਸ਼ ਕੀਤਾ ਤਰੀਕਾ ਹੈ। ਤੁਹਾਡੀਆਂ ਫਾਈਲਾਂ ਸਰਵਰ ਨੂੰ ਭੇਜੀਆਂ ਜਾਂਦੀਆਂ ਹਨ, ਅਤੇ ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਅਨੁਵਾਦ ਸੁਰੱਖਿਅਤ ਢੰਗ ਨਾਲ ਪੂਰਾ ਹੋ ਜਾਂਦਾ ਹੈ ਭਾਵੇਂ ਤੁਸੀਂ ਐਪ ਬੰਦ ਕਰ ਦਿੰਦੇ ਹੋ। ਇਹ ਪੂਰਾ ਹੋਣ \'ਤੇ ਤੁਹਾਨੂੰ ਸੂਚਿਤ ਕੀਤਾ ਜਾਵੇਗਾ।',
-  'tour_batch_translate_title_new': 'ਨਵਾਂ ਤਰੀਕਾ: ਬੈਚ ਅਨੁਵਾਦ (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'ਕਈ ਫਾਈਲਾਂ ਦਾ ਅਨੁਵਾਦ ਕਰਦੇ ਸਮੇਂ ਤੁਹਾਨੂੰ ਐਪ ਨੂੰ ਖੁੱਲਾ ਰੱਖਣ ਦੀ ਲੋੜ ਨਹੀਂ ਹੈ!\n\nਆਪਣੀਆਂ ਸਾਰੀਆਂ ਫਾਈਲਾਂ ਇੱਕੋ ਵਾਰ ਸਰਵਰ ਨੂੰ ਭੇਜੋ ਅਤੇ ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਸੁਰੱਖਿਅਤ ਢੰਗ ਨਾਲ ਉਹਨਾਂ ਦਾ ਅਨੁਵਾਦ ਹੋਣ ਦਿਓ। ਪੂਰਾ ਹੋਣ \'ਤੇ ਤੁਹਾਨੂੰ ਸੂਚਨਾ ਪ੍ਰਾਪਤ ਹੋਵੇਗੀ।',
   'tour_welcome_title': 'ਸਵਾਗਤ ਤੋਹਫ਼ਾ 🎁',
   'tour_welcome_desc':
       'ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ 5 ਕ੍ਰੈਡਿਟਸ ਤੋਹਫ਼ੇ ਵਜੋਂ ਸ਼ਾਮਲ ਕੀਤੇ ਗਏ ਹਨ! ਤੁਸੀਂ ਇੱਥੇ ਆਪਣਾ ਕ੍ਰੈਡਿਟ ਬੈਲੰਸ ਦੇਖ ਸਕਦੇ ਹੋ ਜਾਂ ਕਿਸੇ ਵੀ ਸਮੇਂ ਹੋਰ ਖਰੀਦ ਸਕਦੇ ਹੋ। Sign in with your Google account to get +2 extra credits!',
@@ -674,8 +648,6 @@ const Map<String, String> translationsPa = {
   'tour_skip': 'ਛੱਡੋ',
   'tour_sdh_title': 'SDH ਸਵਿੱਚ ਕੀ ਹੈ?',
   'tour_sdh_desc': 'ਇਹ ਬੋਲ਼ੇ ਅਤੇ ਘੱਟ ਸੁਣਨ ਵਾਲਿਆਂ ਲਈ ਸਬਟਾਈਟਲਾਂ (SDH) ਵਿੱਚ ਪਾਏ ਜਾਣ ਵਾਲੇ [ਮੁਸਕਰਾਉਂਦਾ ਹੈ], (ਸੰਗੀਤ) ਵਰਗੇ ਦ੍ਰਿਸ਼ ਦੀਆਂ ਆਵਾਜ਼ਾਂ ਨੂੰ ਦਰਸਾਉਣ ਵਾਲੇ ਪ੍ਰਭਾਵਾਂ ਜਾਂ ਗੈਰ-ਜ਼ਰੂਰੀ ਟੈਗਸ ਦਾ ਪਤਾ ਲਗਾਉਂਦਾ ਹੈ ਅਤੇ ਅਨੁਵਾਦ ਲਈ AI ਮਾਡਲ ਨੂੰ ਬਿਲਕੁਲ ਵੀ ਨਹੀਂ ਭੇਜਦਾ। ਕੁਦਰਤੀ ਤੌਰ \'ਤੇ, ਇਹਨਾਂ ਦੀ ਮੌਜੂਦਗੀ ਤੁਹਾਡੇ ਕ੍ਰੈਡਿਟਸ ਵਿੱਚੋਂ ਨਹੀਂ ਕੱਟੀ ਜਾਂਦੀ। ਜਦੋਂ ਪ੍ਰਕਿਰਿਆ ਪੂਰੀ ਹੋ ਜਾਂਦੀ ਹੈ ਅਤੇ ਅਨੁਵਾਦਿਤ ਫਾਈਲ ਤੁਹਾਨੂੰ ਦਿੱਤੀ ਜਾਂਦੀ ਹੈ, ਤਾਂ ਇਹ ਪ੍ਰਭਾਵ ਬਿਲਕੁਲ ਉਹਨਾਂ ਦੀਆਂ ਅਸਲ ਥਾਵਾਂ \'ਤੇ ਰੱਖੇ ਜਾਂਦੇ ਹਨ. ਇਸ ਤਰ੍ਹਾਂ, ਤੁਸੀਂ ਆਪਣੇ ਕ੍ਰੈਡਿਟਸ ਦੀ ਬਚਤ ਕਰਦੇ ਹੋ ਅਤੇ ਗਲਤੀ-ਰਹਿਤ ਅਨੁਵਾਦ ਪ੍ਰਾਪਤ ਕਰਦੇ ਹੋ.',
-  'batch_cloud_processing_text': 'ਸਰਵਰ \'ਤੇ ਅਨੁਵਾਦ ਜਾਰੀ ਹੈ...',
-  'batch_translation_complete_text': 'ਅਨੁਵਾਦ ਪੂਰਾ ਹੋਇਆ!',
   'website_purchase': 'ਵੈੱਬਸਾਈਟ ਖਰੀਦ',
     'purchase_recovered_previous':
             'ਤੁਹਾਡੇ ਕਰੈਡਿਟ ਪਹਿਲਾਂ ਪੂਰੀ ਹੋਈ ਖਰੀਦ ਤੋਂ ਜੋੜੇ ਗਏ ਹਨ। ਇਸ ਵੇਲੇ ਕੋਈ ਨਵਾਂ ਸ਼ੁਲਕ ਨਹੀਂ ਲਿਆ ਗਿਆ।',
@@ -689,6 +661,4 @@ const Map<String, String> translationsPa = {
   'credit_source_website': 'ਵੈੱਬਸਾਈਟ',
   'credits_pack_generic': 'ਕ੍ਰੈਡਿਟ ਪੈਕ',
   'error_multi_pack_detected': 'ਇਸ ਫਾਈਲ ਵਿੱਚ ਕਈ ਸਬਟਾਈਟਲ ਸਮੱਗਰੀਆਂ ਲੱਗਦੀਆਂ ਹਨ। ਸੁਰੱਖਿਆ ਅਤੇ ਕ੍ਰੈਡਿਟ ਬੈਲੇਂਸ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਫਾਈਲ ਨੂੰ ਹਿੱਸਿਆਂ ਵਿੱਚ ਵੰਡੋ।',
-  'batch_report_success': '{count} ਫਾਈਲਾਂ ਸਫਲਤਾਪੂਰਵਕ ਅਨੁਵਾਦ ਕੀਤੀਆਂ ਗਈਆਂ।',
-  'batch_report_failed_count': '{count} ਫਾਈਲਾਂ ਅਸਫਲ ਰਹੀਆਂ:',
 };

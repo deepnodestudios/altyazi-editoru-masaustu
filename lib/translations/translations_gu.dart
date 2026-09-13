@@ -607,34 +607,13 @@ const Map<String, String> translationsGu = {
   'feature_batch_title': 'બેચ અનુવાદ',
   'feature_batch_desc':
       'કતારમાં બહુવિધ સબટાઈટલ ફાઇલો ઉમેરો અને તે બધાનો એક સાથે અનુવાદ કરો. અલગથી કે ZIP તરીકે સાચવો.',
-  'batch_no_credit_log':
-      'અપર્યાપ્ત ક્રેડિટ્સ. પ્રક્રિયા શરૂ કરવા માટે બેલેન્સ નથી.',
-  'batch_credit_partial':
-      'તમારી ક્રેડિટ્સ ({credits}) પસંદ કરેલ ફાઇલો ({total}) કરતાં ઓછી છે...',
-  'batch_api_triggered': '{count} ફાઇલો માટે બેચ API ટ્રિગર થયું.',
-  'batch_starting': 'બેચ અનુવાદ શરૂ કરી રહ્યું છે...',
-  'batch_file_sent': '{filename} સર્વર પર મોકલી. જૉબ: {job}',
-  'batch_process_prefix': 'બેચ પ્રક્રિયા',
-  'batch_process_canceled': 'પ્રક્રિયા રદ કરવામાં આવી.',
-  'batch_process_ongoing':
-      'પ્રગતિમાં (દર 15 સેકન્ડે તપાસ, બાકી છે: {count})...',
-  'batch_file_success': '{filename} સફળતાપૂર્વક અનુવાદિત.',
-  'batch_file_error': '{filename} માટે સર્વર પર ભૂલ આવી.',
-  'batch_file_rate_limit': '{filename} માટે મર્યાદા ઓળંગાઈ છે.',
-  'batch_all_completed': 'બધી ફાઇલોનો અનુવાદ પૂર્ણ થયો.',
-  'batch_error_prefix': 'બેચ અનુવાદ ભૂલ',
-  'batch_unsupported_files_skipped': 'અસમર્થિત ફાઇલો છોડી દેવાઈ',
   'batch_success_count': '{count} ફાઇલો સફળતાપૂર્વક અનુવાદિત.',
   'batch_error_count': '{count} ફાઇલો નિષ્ફળ:',
-  'batch_starting_snackbar': '{count} ફાઇલો માટે બેચ અનુવાદ શરૂ થયો...',
   'batch_background_notification_tip':
       'તમે એપ્લિકેશન છોડી શકો છો, પ્રક્રિયા પૂર્ણ થવા પર તમને સૂચના મળશે.',
   'batch_save_all_zip': 'બધાં ZIP તરીકે સાચવો',
   'batch_complete_title': 'બેચ અનુવાદ પૂર્ણ',
   'batch_save_individual_prompt': 'અથવા સૂચિમાંથી વ્યક્તિગત રીતે સાચવો:',
-  'batch_translation_beta': 'બેચ અનુવાદ (બીટા)',
-  'batch_timeout_log': 'સમયસમાપ્તિ, આગલી ફાઇલ પર જાઓ.',
-  'batch_process_completed': 'બેચ પ્રક્રિયા પૂર્ણ.',
   'tour_add_file_title': 'સબટાઇટલ ફાઇલ ઉમેરો',
   'tour_add_file_desc':
       'તમે અહીં ભાષાંતર કરવા માંગતા SRT અથવા VTT ફાઇલો ઉમેરી શકો છો.\nતમે તમારા ઉપકરણ, Google Drive, Dropbox અથવા Yandex Disk માંથી એકસાથે એકથી વધુ ફાઇલો પસંદ કરી શકો છો.',
@@ -645,12 +624,6 @@ const Map<String, String> translationsGu = {
   'tour_translate_title': 'અનુવાદ શરૂ કરો',
   'tour_translate_desc':
       'તમે તમારા ઉપકરણ પર સળંગ એક ફાઇલ અથવા પસંદ કરેલ સૂચિને અનુવાદિત કરવા માટે આ બટનનો ઉપયોગ કરી શકો છો. અનુવાદ પ્રક્રિયાને લાઇવ ટ્રેક કરી શકાય છે.',
-  'tour_batch_translate_title': 'બૅચ અનુવાદ (Batch API)',
-  'tour_batch_translate_desc':
-      'જો તમે બહુવિધ ફાઇલોનું ભાષાંતર કરી રહ્યાં હોવ તો આ ભલામણ કરેલ પદ્ધતિ છે. તમારી ફાઇલો સર્વર પર મોકલવામાં આવે છે, અને જો તમે ઍપ બંધ કરો તો પણ અનુવાદ પૃષ્ઠભૂમિમાં સુરક્ષિત રીતે પૂર્ણ થાય છે. તે સમાપ્ત થાય ત્યારે તમને સૂચિત કરવામાં આવશે.',
-  'tour_batch_translate_title_new': 'નવી પદ્ધતિ: બૅચ અનુવાદ (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'બહુવિધ ફાઇલોનું ભાષાંતર કરતી વખતે હવે તમારે ઍપ ખુલ્લી રાખવાની જરૂર નથી!\n\nતમારી બધી ફાઇલોને એકસાથે સર્વર પર મોકલો અને તેમને પૃષ્ઠભૂમિમાં સુરક્ષિત રીતે અનુવાદિત થવા દો. પૂર્ણ થવા પર તમને એક સૂચના પ્રાપ્ત થશે.',
   'tour_welcome_title': 'સ્વાગત ભેટ 🎁',
   'tour_welcome_desc':
       'તમારા ખાતામાં 5 ક્રેડિટની સ્વાગત ભેટ ઉમેરવામાં આવી છે! તમે અહીં તમારું ક્રેડિટ બેલેન્સ ટ્રૅક કરી શકો છો અથવા કોઈપણ સમયે વધુ ઉમેરી શકો છો. Sign in with your Google account to get +2 extra credits!',
@@ -674,8 +647,6 @@ const Map<String, String> translationsGu = {
   'tour_skip': 'છોડો',
   'tour_sdh_title': 'SDH સ્વિચ શું છે?',
   'tour_sdh_desc': 'તે બહેરા અને સાંભળવામાં તકલીફ ધરાવતા લોકો માટેના સબટાઈટલ (SDH) માં મળતા [હસે છે], (સંગીત) જેવા સીનના અવાજો દર્શાવતા ઇફેક્ટ્સ અથવા બિનજરૂરી ટૅગ્સ શોધી કાઢે છે અને તેને AI મૉડલને અનુવાદ માટે બિલકુલ મોકલતું નથી. સ્વાભાવિક રીતે, તેમની હાજરી તમારા ક્રેડિટમાંથી કાપવામાં આવતી નથી. જ્યારે પ્રક્રિયા પૂરી થઈ જાય અને અનુવાદ ફાઇલ તમને પાછી મળે, ત્યારે ફાઇલમાં મૂળ સ્વરૂપે રહેલા આ ઇફેક્ટ્સ તેમની મૂળ જગ્યાએ જ પાછા મૂકવામાં આવે છે. આ રીતે, તમે ક્રેડિટ્સ બચાવી શકો છો અને ભૂલ-મુક્ત અનુવાદ મેળવી શકો છો.',
-  'batch_cloud_processing_text': 'સર્વર પર અનુવાદ ચાલુ છે...',
-  'batch_translation_complete_text': 'અનુવાદ પૂર્ણ થયો!',
   'website_purchase': 'વેબસાઇટ ખરીદી',
     'purchase_recovered_previous':
             'તમારા ક્રેડિટ્સ અગાઉ પૂર્ણ થયેલી ખરીદીમાંથી ઉમેરાયા છે. હાલમાં નવી રકમ લેવામાં આવી નથી.',
@@ -689,6 +660,4 @@ const Map<String, String> translationsGu = {
   'credit_source_website': 'વેબસાઇટ',
   'credits_pack_generic': 'ક્રેડિટ પેક',
   'error_multi_pack_detected': 'આ ફાઇલમાં એકથી વધુ સબટાઈટલ સામગ્રી હોય તેવું લાગે છે. સુરક્ષા અને ક્રેડિટ બેલેન્સ માટે કૃપા કરીને ફાઇલને ભાગોમાં વિભાજિત કરો.',
-  'batch_report_success': '{count} ફાઇલ(ઓ) સફળતાપૂર્વક અનુવાદિત થઈ.',
-  'batch_report_failed_count': '{count} ફાઇલ(ઓ) નિષ્ફળ રહી:',
 };

@@ -618,34 +618,13 @@ const Map<String, String> translationsTr = {
   'feature_batch_title': 'Toplu Çeviri',
   'feature_batch_desc':
       'Birden fazla altyazı dosyasını sıraya ekleyin ve tümünü tek seferde çevirin. Sonuçları tek tek veya ZIP arşivi olarak kaydedin.',
-  'batch_no_credit_log':
-      'Kredi yetersiz. İşlemi başlatabilmek için bakiyeniz bulunmuyor.',
-  'batch_credit_partial':
-      'Krediniz ({credits}), seçilen dosya sayısından ({total}) az...',
-  'batch_api_triggered': '{count} dosya için Toplu Çeviri başlatıldı.',
-  'batch_starting': 'Toplu Çeviri Başlatılıyor...',
-  'batch_file_sent': '{filename} sunucuya gönderildi. İş: {job}',
-  'batch_process_prefix': 'Toplu İşlem',
-  'batch_process_canceled': 'İşlem iptal edildi.',
-  'batch_process_ongoing':
-      'Devam ediyor (15sn aralıklarla kontrol ediliyor, kalan: {count})...',
-  'batch_file_success': '{filename} başarıyla çevrildi.',
-  'batch_file_error': '{filename} sunucuda hata ile karşılaştı.',
-  'batch_file_rate_limit': '{filename} için hız sınırına takılıldı.',
-  'batch_all_completed': 'Tüm dosyaların çevirisi tamamlandı.',
-  'batch_error_prefix': 'Toplu Çeviri Hatası',
-  'batch_unsupported_files_skipped': 'Desteklenmeyen dosyalar atlandı',
   'batch_success_count': '{count} dosya başarıyla çevrildi.',
   'batch_error_count': '{count} dosya hata aldı:',
-  'batch_starting_snackbar': '{count} dosya için Toplu Çeviri başlatılıyor...',
   'batch_background_notification_tip':
       'Uygulamadan çıkış yapabilirsiniz, çeviri tamamlandığında bildirim alacaksınız.',
   'batch_save_all_zip': 'Tümünü ZIP Olarak Kaydet',
   'batch_complete_title': 'Toplu Çeviri Tamamlandı',
   'batch_save_individual_prompt': 'Veya listeden tek tek kaydedin:',
-  'batch_translation_beta': 'Toplu Çeviri (Beta)',
-  'batch_timeout_log': 'Zaman aşımı, sıradaki dosyaya geçiliyor.',
-  'batch_process_completed': 'Toplu işlem başarıyla tamamlandı.',
   'tour_add_file_title': 'Altyazı Dosyası Ekleyin',
   'tour_add_file_desc':
       'Çeviri yapmak istediğiniz SRT veya VTT dosyalarını buradan ekleyebilirsiniz.\nCihazınızdan, Google Drive, Dropbox veya Yandex Disk\'ten aynı anda birden fazla dosya seçebilirsiniz.',
@@ -656,12 +635,6 @@ const Map<String, String> translationsTr = {
   'tour_translate_title': 'Çeviriyi Başlatın',
   'tour_translate_desc':
       'Tek dosyanızı veya seçili listenizi sırasıyla cihazınızda çevirmek için bu butonu kullanabilirsiniz. Çeviri yaparken işlemi canlı takip edebilirsiniz.',
-  'tour_batch_translate_title': 'Toplu Çeviri (Batch API)',
-  'tour_batch_translate_desc':
-      'Birden fazla dosya çevirecekseniz önerilen yöntemdir. Dosyalarınız sunucuya iletilir ve siz uygulamayı kapatsanız bile çeviri arka planda güvenle tamamlanır. Bittiğinde tarafınıza bildirim gönderilir.',
-  'tour_batch_translate_title_new': 'YENİ YÖNTEM: Toplu Çeviri (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Artık birden fazla dosyayı çevirirken uygulamayı açık tutmak zorunda değilsiniz!\n\nDosyalarınızı sunucuya tek seferde gönderin, arka planda güvenle çevrilsin. İşlem bittiğinde bildirim alacaksınız.',
   'tour_welcome_title': 'Hoşgeldin Hediyesi 🎁',
   'tour_welcome_desc':
       'İlk girişinize özel hediye edilen 2 Kredi hesabınıza tanımlandı! Kredi bakiyenizi buradan takip edebilir veya istediğiniz zaman yenilerini ekleyebilirsiniz. Google hesabınızla oturum açarsanız +2 kredi hediye!',
@@ -685,8 +658,6 @@ const Map<String, String> translationsTr = {
   'tour_skip': 'Atla',
   'tour_sdh_title': 'SDH Anahtarı Nedir?',
   'tour_sdh_desc': 'Sağırlar ve İşitme Güçlüğü Çekenler (SDH) için alt yazılarda bulunan [Gülümser], (Müzik) gibi sahne seslerini belirten efektleri veya gereksiz tagleri tespit eder ve bunları çeviri için AI modeline KESİNLİKLE GÖNDERMEZ. Doğal olarak bunların varlığı KREDİNİZDEN DÜŞMEZ. İşlem bitip çeviri dosyası size verildiğinde ise en başta dosyada olan bu efektler aynen orijinal yerlerine yerleştirilir. Böylece hem kredinizden tasarruf edersiniz, hem de çeviriniz hatasız gerçekleşir.',
-  'batch_cloud_processing_text': 'Çeviri Sunucuda Devam Ediyor...',
-  'batch_translation_complete_text': 'Çeviri Tamamlandı!',
   'website_purchase': 'Web Sitesi Alışverişi',
     'purchase_recovered_previous':
             'Kredileriniz önceki tamamlanmış bir satın alımdan eklendi. Şu an yeni bir ücret alınmadı.',
@@ -700,6 +671,4 @@ const Map<String, String> translationsTr = {
   'credit_source_website': 'Web Sitesi',
   'credits_pack_generic': 'Kredi Paketi',
   'error_multi_pack_detected': 'Bu dosya birden fazla altyazı içeriği barındırıyor gibi görünüyor. Güvenlik ve kredi dengesi için lütfen dosyayı parçalara ayırın.',
-  'batch_report_success': '{count} dosya başarıyla çevrildi.',
-  'batch_report_failed_count': '{count} dosya hata aldı:',
 };

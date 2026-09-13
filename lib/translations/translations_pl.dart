@@ -612,34 +612,13 @@ const Map<String, String> translationsPl = {
   'feature_batch_title': 'Tłumaczenie Masowe',
   'feature_batch_desc':
       'Dodaj wiele plików napisów do kolejki i przetłumacz je wszystkie naraz. Zapisz wyniki pojedynczo lub jako archiwum ZIP.',
-  'batch_no_credit_log':
-      'Niewystarczające kredyty. Nie masz środków, aby rozpocząć proces.',
-  'batch_credit_partial':
-      'Twoje kredyty ({credits}) są mniejsze niż liczba wybranych plików ({total})...',
-  'batch_api_triggered': 'Masowe API uruchomione dla {count} plików.',
-  'batch_starting': 'Rozpoczynam tłumaczenie masowe...',
-  'batch_file_sent': '{filename} wysłano na serwer. Zadanie: {job}',
-  'batch_process_prefix': 'Proces Masowy',
-  'batch_process_canceled': 'Proces anulowany.',
-  'batch_process_ongoing':
-      'W toku (sprawdzanie co 15 s, pozostało: {count})...',
-  'batch_file_success': '{filename} pomyślnie przetłumaczono.',
-  'batch_file_error': 'Wystąpił błąd na serwerze dla {filename}.',
-  'batch_file_rate_limit': 'Przekroczono limit szybkości dla {filename}.',
-  'batch_all_completed': 'Zakończono tłumaczenie wszystkich plików.',
-  'batch_error_prefix': 'Błąd Tłumaczenia Masowego',
-  'batch_unsupported_files_skipped': 'Pominięto nieobsługiwane pliki',
   'batch_success_count': '{count} plików pomyślnie przetłumaczono.',
   'batch_error_count': 'Błąd tłumaczenia dla {count} plików:',
-  'batch_starting_snackbar': 'Rozpoczęto tłumaczenie wsadowe dla {count} plików...',
   'batch_background_notification_tip':
       'Możesz wyjść z aplikacji. Zostaniesz powiadomiony, gdy tłumaczenie zostanie zakończone.',
   'batch_save_all_zip': 'Zapisz wszystkie jako ZIP',
   'batch_complete_title': 'Tłumaczenie Masowe Zakończone',
   'batch_save_individual_prompt': 'Albo zapisz oddzielnie z listy:',
-  'batch_translation_beta': 'Tłumaczenie Masowe (Beta)',
-  'batch_timeout_log': 'Limit czasu minął, przechodzę do następnego pliku.',
-  'batch_process_completed': 'Masowe przetwarzanie zakończone.',
   'tour_add_file_title': 'Dodaj plik napisów',
   'tour_add_file_desc':
       'Tutaj możesz dodać pliki SRT lub VTT, które chcesz przetłumaczyć.\nMożesz wybrać wiele plików jednocześnie ze swojego urządzenia, Google Drive, Dropbox lub Yandex Disk.',
@@ -650,13 +629,6 @@ const Map<String, String> translationsPl = {
   'tour_translate_title': 'Rozpocznij tłumaczenie',
   'tour_translate_desc':
       'Użyj tego przycisku, aby przetłumaczyć pojedynczy plik lub wybraną listę sekwencyjnie na swoim urządzeniu. Proces można śledzić na żywo.',
-  'tour_batch_translate_title': 'Tłumaczenie wsadowe (Batch API)',
-  'tour_batch_translate_desc':
-      'Zalecana metoda w przypadku tłumaczenia wielu plików. Twoje pliki są wysyłane na serwer, a tłumaczenie bezpiecznie przebiega w tle, nawet po zamknięciu aplikacji. Otrzymasz powiadomienie o zakończeniu.',
-  'tour_batch_translate_title_new':
-      'NOWA METODA: Tłumaczenie wsadowe (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Nie musisz już trzymać włączonej aplikacji podczas tłumaczenia wielu plików!\n\nWyślij pliki na serwer za jednym razem i pozwól im bezpiecznie przetłumaczyć się w tle. Otrzymasz powiadomienie po zakończeniu.',
   'tour_welcome_title': 'Prezent powitalny 🎁',
   'tour_welcome_desc':
       'Jako prezent za pierwsze logowanie otrzymujesz 5 kredytów! Tutaj możesz sprawdzić swoje saldo lub doładować konto w dowolnym momencie. Zaloguj się na swoje konto Google, aby otrzymać +2 dodatkowe kredyty!',
@@ -680,8 +652,6 @@ const Map<String, String> translationsPl = {
   'tour_skip': 'Pomiń',
   'tour_sdh_title': 'Co to jest przełącznik SDH?',
   'tour_sdh_desc': 'Wykrywa efekty lub niepotrzebne tagi wskazujące dźwięki sceny, takie jak [Uśmiecha się], (Muzyka), zlokalizowane w napisach dla niesłyszących i niedosłyszących (SDH) i ABSOLUTNIE NIE wysyła ich do modelu AI w celu przetłumaczenia. Oczywiście ich obecność NIE ZMNIEJSZA TWOICH KREDYTÓW. Po zakończeniu procesu i przekazaniu pliku z tłumaczeniem, te efekty zostają umieszczone dokładnie w ich pierwotnych miejscach. W ten sposób zaoszczędzisz kredyty i uzyskasz bezbłędne tłumaczenie.',
-  'batch_cloud_processing_text': 'Tłumaczenie kontynuowane na serwerze...',
-  'batch_translation_complete_text': 'Tłumaczenie zakończone!',
   'website_purchase': 'Zakup na stronie',
     'purchase_recovered_previous':
             'Twoje kredyty zostały dodane z wcześniej zakończonego zakupu. Teraz nie pobrano nowej opłaty.',
@@ -695,6 +665,4 @@ const Map<String, String> translationsPl = {
   'credit_source_website': 'Strona internetowa',
   'credits_pack_generic': 'Pakiet kredytów',
   'error_multi_pack_detected': 'Ten plik wydaje się zawierać wiele treści napisów. Podziel plik na części ze względü na bezpieczeństwo i stan kredytów.',
-  'batch_report_success': '{count} plik(ów) przetłumaczono pomyślnie.',
-  'batch_report_failed_count': '{count} plik(ów) nie powiodło się:',
 };

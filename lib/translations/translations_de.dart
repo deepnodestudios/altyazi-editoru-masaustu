@@ -633,33 +633,13 @@ const Map<String, String> translationsDe = {
   'feature_batch_title': 'Massenübersetzung',
   'feature_batch_desc':
       'Fügen Sie mehrere Untertiteldateien zur Warteschlange hinzu und übersetzen Sie alle auf einmal. Speichern Sie Einzeldateien oder ein ZIP-Archiv.',
-  'batch_no_credit_log': 'Unzureichendes Guthaben für diesen Vorgang.',
-  'batch_credit_partial':
-      'Ihr Guthaben ({credits}) ist geringer als die ausgewählten Dateien ({total})...',
-  'batch_api_triggered': 'Massenübersetzung für {count} Dateien gestartet.',
-  'batch_starting': 'Massenübersetzung wird gestartet...',
-  'batch_file_sent': '{filename} an den Server gesendet. Job: {job}',
-  'batch_process_prefix': 'Massenvorgang',
-  'batch_process_canceled': 'Vorgang abgebrochen.',
-  'batch_process_ongoing':
-      'In Bearbeitung (Prüfung alle 15s, verbleibend: {count})...',
-  'batch_file_success': '{filename} erfolgreich übersetzt.',
-  'batch_file_error': '{filename} meldet Serverfehler.',
-  'batch_file_rate_limit': 'Ratenlimit überschritten für {filename}.',
-  'batch_all_completed': 'Übersetzung aller Dateien abgeschlossen.',
-  'batch_error_prefix': 'Fehler bei Massenübersetzung',
-  'batch_unsupported_files_skipped': 'Nicht unterstützte Dateien übersprungen',
   'batch_success_count': '{count} Dateien erfolgreich übersetzt.',
   'batch_error_count': 'Fehler bei {count} Dateien:',
-  'batch_starting_snackbar': 'Stapelübersetzung für {count} Dateien gestartet...',
   'batch_background_notification_tip':
       'Sie können die App verlassen. Sie werden nach Abschluss benachrichtigt.',
   'batch_save_all_zip': 'Alle als ZIP speichern',
   'batch_complete_title': 'Massenübersetzung abgeschlossen',
   'batch_save_individual_prompt': 'Oder einzeln aus der Liste speichern:',
-  'batch_translation_beta': 'Massenübersetzung (Beta)',
-  'batch_timeout_log': 'Zeitüberschreitung, fahre mit nächster Datei fort.',
-  'batch_process_completed': 'Massenverarbeitung abgeschlossen.',
   'tour_add_file_title': 'Untertitel-Datei hinzufügen',
   'tour_add_file_desc':
       'Hier können Sie SRT- oder VTT-Dateien hinzufügen, die Sie übersetzen möchten.\nSie können mehrere Dateien gleichzeitig von Ihrem Gerät, Google Drive, Dropbox oder Yandex Disk auswählen.',
@@ -670,13 +650,6 @@ const Map<String, String> translationsDe = {
   'tour_translate_title': 'Übersetzung starten',
   'tour_translate_desc':
       'Mit dieser Schaltfläche können Sie Ihre einzelne Datei oder die ausgewählte Liste nacheinander auf Ihrem Gerät übersetzen. Sie können den Vorgang live mitverfolgen.',
-  'tour_batch_translate_title': 'Massenübersetzung (Batch API)',
-  'tour_batch_translate_desc':
-      'Dies ist die empfohlene Methode für die Übersetzung mehrerer Dateien. Ihre Dateien werden an den Server gesendet und die Übersetzung sicher im Hintergrund abgeschlossen, selbst wenn Sie die App schließen. Sie werden benachrichtigt, wenn es fertig ist.',
-  'tour_batch_translate_title_new':
-      'NEUE METHODE: Massenübersetzung (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Sie müssen die App bei der Übersetzung mehrerer Dateien nicht mehr geöffnet lassen!\n\nSenden Sie Ihre Dateien auf einmal an den Server und lassen Sie sie sicher im Hintergrund übersetzen. Sie erhalten eine Benachrichtigung bei Abschluss.',
   'tour_welcome_title': 'Willkommensgeschenk 🎁',
   'tour_welcome_desc':
       'Ein Willkommensgeschenk von 5 Credits wurde Ihrem Konto gutgeschrieben! Hier können Sie Ihr Credit-Guthaben verfolgen oder jederzeit aufladen. Melden Sie sich mit Ihrem Google-Konto an, um 2 zusätzliche Credits zu erhalten!',
@@ -700,8 +673,6 @@ const Map<String, String> translationsDe = {
   'tour_skip': 'Überspringen',
   'tour_sdh_title': 'Was ist der SDH-Schalter?',
   'tour_sdh_desc': 'Er erkennt Effekte oder unnötige Tags, die Szenengeräusche anzeigen, wie z. B. [Lächelt], (Musik), die in Untertiteln für Gehörlose und Schwerhörige (SDH) zu finden sind, und sendet sie AUF KEINEN FALL zur Übersetzung an das KI-Modell. Natürlich wird deren Vorhandensein NICHT VON IHREM GUTHABEN ABGEZOGEN. Wenn der Vorgang abgeschlossen ist und Ihnen die Übersetzungsdatei übergeben wird, werden diese Effekte wieder genau an ihren ursprünglichen Platz eingefügt. Auf diese Weise sparen Sie Guthaben und gewährleisten eine fehlerfreie Übersetzung.',
-  'batch_cloud_processing_text': 'Übersetzung wird auf dem Server fortgesetzt...',
-  'batch_translation_complete_text': 'Übersetzung abgeschlossen!',
   'website_purchase': 'Website-Kauf',
     'purchase_recovered_previous':
             'Deine Credits wurden aus einem zuvor abgeschlossenen Kauf gutgeschrieben. Jetzt wurde keine neue Zahlung belastet.',
@@ -715,6 +686,4 @@ const Map<String, String> translationsDe = {
   'credit_source_website': 'Webseite',
   'credits_pack_generic': 'Guthabenpaket',
   'error_multi_pack_detected': 'Diese Datei scheint mehrere Untertitelinhalte zu enthalten. Bitte teilen Sie die Datei aus Sicherheitsgründen und zur Kreditbalance in Teile auf.',
-  'batch_report_success': '{count} Datei(en) erfolgreich übersetzt.',
-  'batch_report_failed_count': '{count} Datei(en) fehlgeschlagen:',
 };

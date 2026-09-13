@@ -614,35 +614,13 @@ const Map<String, String> translationsPt = {
   'feature_batch_title': 'Tradução em Lote',
   'feature_batch_desc':
       'Adicione vários arquivos de legenda à fila e traduza todos de uma vez. Salve os resultados individualmente ou como um arquivo ZIP.',
-  'batch_no_credit_log':
-      'Créditos insuficientes. Você não tem saldo para iniciar o processo.',
-  'batch_credit_partial':
-      'Seus créditos ({credits}) são menores que a quantidade de arquivos selecionados ({total})...',
-  'batch_api_triggered': 'API em lote acionada para {count} arquivos.',
-  'batch_starting': 'Iniciando Tradução em Lote...',
-  'batch_file_sent': '{filename} enviado ao servidor. Tarefa: {job}',
-  'batch_process_prefix': 'Processo em Lote',
-  'batch_process_canceled': 'Processo cancelado.',
-  'batch_process_ongoing':
-      'Em andamento (verificando a cada 15s, restantes: {count})...',
-  'batch_file_success': '{filename} traduzido com sucesso.',
-  'batch_file_error': '{filename} encontrou um erro no servidor.',
-  'batch_file_rate_limit': 'Limite de taxa excedido para {filename}.',
-  'batch_all_completed': 'Tradução de todos os arquivos concluída.',
-  'batch_error_prefix': 'Erro na Tradução em Lote',
-  'batch_unsupported_files_skipped': 'Arquivos não suportados ignorados',
   'batch_success_count': '{count} arquivos traduzidos com sucesso.',
   'batch_error_count': '{count} arquivos falharam:',
-  'batch_starting_snackbar': 'Tradução em lote iniciada para {count} arquivos...',
   'batch_background_notification_tip':
       'Você pode sair do aplicativo, será notificado quando a tradução for concluída.',
   'batch_save_all_zip': 'Salvar Todos como ZIP',
   'batch_complete_title': 'Tradução em Lote Concluída',
   'batch_save_individual_prompt': 'Ou salve individualmente na lista:',
-  'batch_translation_beta': 'Tradução em Lote (Beta)',
-  'batch_timeout_log':
-      'Tempo limite excedido, passando para o próximo arquivo.',
-  'batch_process_completed': 'Processamento em lote concluído.',
   'tour_add_file_title': 'Adicionar Arquivo de Legenda',
   'tour_add_file_desc':
       'Pode adicionar os ficheiros SRT ou VTT que deseja traduzir aqui.\nPode selecionar vários ficheiros simultaneamente do seu dispositivo, Google Drive, Dropbox ou Yandex Disk.',
@@ -653,13 +631,6 @@ const Map<String, String> translationsPt = {
   'tour_translate_title': 'Iniciar Tradução',
   'tour_translate_desc':
       'Pode usar este botão para traduzir o seu ficheiro ou a lista de forma sequencial no seu dispositivo. Poderá acompanhar o progresso em direto.',
-  'tour_batch_translate_title': 'Tradução em Lote (Batch API)',
-  'tour_batch_translate_desc':
-      'Este é o método recomendado se for traduzir vários ficheiros. Os ficheiros são enviados para o servidor e a tradução prossegue em segundo plano. Será notificado quando estiver concluída.',
-  'tour_batch_translate_title_new':
-      'NOVO MÉTODO: Tradução em Lote (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Já não precisa de deixar a aplicação aberta quando estiver a traduzir vários ficheiros!\n\nEnvie os ficheiros para o servidor todos de uma vez, de forma segura, e permita o processamento em segundo plano. Uma notificação será enviada quando estiver pronto.',
   'tour_welcome_title': 'Presente de Boas-Vindas 🎁',
   'tour_welcome_desc':
       'Um presente de boas-vindas de 5 Créditos foi creditado na sua conta! Pode verificar o seu saldo de créditos ou adicionar mais aqui a qualquer altura. Entre com sua conta do Google para ganhar +2 créditos extras!',
@@ -683,8 +654,6 @@ const Map<String, String> translationsPt = {
   'tour_skip': 'Ignorar',
   'tour_sdh_title': 'O que é o botão SDH?',
   'tour_sdh_desc': 'Ele detecta efeitos ou tags desnecessárias que indicam sons de cena, como [Sorri], (Música), encontrados em legendas para surdos e deficientes auditivos (SDH) e ABSOLUTAMENTE NÃO os envia para o modelo de IA para tradução. Naturalmente, a presença deles NÃO É DEDUZIDA DOS SEUS CRÉDITOS. Quando o processo é concluído e o arquivo de tradução é entregue a você, esses efeitos que estavam inicialmente no arquivo são colocados exatamente em seus lugares originais. Dessa forma, você economiza seus créditos e obtém uma tradução sem erros.',
-  'batch_cloud_processing_text': 'A tradução continua no servidor...',
-  'batch_translation_complete_text': 'Tradução Concluída!',
   'website_purchase': 'Compra no site',
     'purchase_recovered_previous':
             'Seus créditos foram adicionados de uma compra concluída anteriormente. Nenhuma nova cobrança foi feita agora.',
@@ -698,6 +667,4 @@ const Map<String, String> translationsPt = {
   'credit_source_website': 'Website',
   'credits_pack_generic': 'Pacote de créditos',
   'error_multi_pack_detected': 'Este arquivo parece conter vários conteúdos de legendas. Divida o arquivo em partes por segurança e saldo de créditos.',
-  'batch_report_success': '{count} arquivo(s) traduzido(s) com sucesso.',
-  'batch_report_failed_count': '{count} arquivo(s) falhado(s):',
 };

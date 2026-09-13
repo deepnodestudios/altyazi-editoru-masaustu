@@ -619,34 +619,13 @@ const Map<String, String> translationsDa = {
   'feature_batch_title': 'Batch-oversættelse',
   'feature_batch_desc':
       'Tilføj flere undertekstfiler til en kø og oversæt dem alle på én gang. Gem resultaterne individuelt eller som et samlet ZIP-arkiv.',
-  'batch_no_credit_log':
-      'Utilstrækkelige kreditter. Du har ikke saldo til at starte processen.',
-  'batch_credit_partial':
-      'Dine kreditter ({credits}) er mindre end antallet af valgte filer ({total})...',
-  'batch_api_triggered': 'Batch API udløst for {count} filer.',
-  'batch_starting': 'Starter batch-oversættelse...',
-  'batch_file_sent': '{filename} sendt til serveren. Job: {job}',
-  'batch_process_prefix': 'Batch Proces',
-  'batch_process_canceled': 'Proces annulleret.',
-  'batch_process_ongoing':
-      'I gang (tjekker hvert 15. sekund, resterende: {count})...',
-  'batch_file_success': '{filename} blev oversat med succes.',
-  'batch_file_error': '{filename} stødte på en fejl på serveren.',
-  'batch_file_rate_limit': 'Hastighedsgrænse overskredet for {filename}.',
-  'batch_all_completed': 'Oversættelse af alle filer er fuldført.',
-  'batch_error_prefix': 'Fejl i batch-oversættelse',
-  'batch_unsupported_files_skipped': 'Ikke-understøttede filer sprunget over',
   'batch_success_count': '{count} filer blev oversat med succes.',
   'batch_error_count': '{count} filer mislykkedes:',
-  'batch_starting_snackbar': 'Batchoversættelse startet for {count} filer...',
   'batch_background_notification_tip':
       'Du kan forlade appen, du får besked, når oversættelsen er færdig.',
   'batch_save_all_zip': 'Gem alle som ZIP',
   'batch_complete_title': 'Batch-oversættelse Fuldført',
   'batch_save_individual_prompt': 'Eller gem individuelt fra listen:',
-  'batch_translation_beta': 'Batch-oversættelse (Beta)',
-  'batch_timeout_log': 'Tidsgrænse overskredet, springer til næste fil.',
-  'batch_process_completed': 'Batch-behandling fuldført.',
   'tour_add_file_title': 'Tilføj Undertekstfil',
   'tour_add_file_desc':
       'Du kan tilføje de SRT- eller VTT-filer, du vil oversætte her.\nDu kan vælge flere filer samtidigt fra din enhed, Google Drev, Dropbox eller Yandex Disk.',
@@ -657,13 +636,6 @@ const Map<String, String> translationsDa = {
   'tour_translate_title': 'Start Oversættelse',
   'tour_translate_desc':
       'Du kan bruge denne knap til at oversætte en enkelt fil eller den valgte liste sekventielt på din enhed. Oversættelsesprocessen kan følges live.',
-  'tour_batch_translate_title': 'Batch Oversættelse (Batch API)',
-  'tour_batch_translate_desc':
-      'Dette er den anbefalede metode, når du oversætter flere filer. Dine filer sendes til serveren, og oversættelsen gennemføres sikkert i baggrunden, selvom du lukker appen. Du får en notifikation, når den er færdig.',
-  'tour_batch_translate_title_new':
-      'NY METODE: Batch Oversættelse (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      'Du behøver ikke længere lade appen stå åben, når du oversætter flere filer!\n\nSend alle dine filer til serveren på én gang, og lad dem blive oversat sikkert i baggrunden. Du modtager en notifikation, når det er gjort.',
   'tour_welcome_title': 'Velkomstgave 🎁',
   'tour_welcome_desc':
       'En velkomstgave på 5 Kreditter er blevet tilføjet til din konto! Du kan holde øje med din saldo her eller købe mere når som helst. Log ind med din Google-konto for at få +2 ekstra kreditter!',
@@ -687,8 +659,6 @@ const Map<String, String> translationsDa = {
   'tour_skip': 'Spring over',
   'tour_sdh_title': 'Hvad er SDH-indstillingen?',
   'tour_sdh_desc': 'Den registrerer effekter eller unødvendige tags, der angiver scenelyde, såsom [Smiler], (Musik), som findes i undertekster for døve og hørehæmmede (SDH), og SENDER DEM ABSOLUT IKKE til AI-modellen til oversættelse. Naturligvis TRÆKKES DER IKKE FRA DINE KREDITTER for disse. Når processen er færdig, og oversættelsesfilen gives til dig, placeres disse effekter, der oprindeligt var i filen, nøjagtigt på deres oprindelige pladser. På denne måde sparer du både dine kreditter og opnår en fejlfri oversættelse.',
-  'batch_cloud_processing_text': 'Oversættelsen fortsætter på serveren...',
-  'batch_translation_complete_text': 'Oversættelse fuldført!',
   'website_purchase': 'Hjemmeside køb',
     'purchase_recovered_previous':
             'Dine kreditter blev tilføjet fra et tidligere gennemført køb. Der blev ikke trukket en ny betaling nu.',
@@ -702,6 +672,4 @@ const Map<String, String> translationsDa = {
   'credit_source_website': 'Hjemmeside',
   'credits_pack_generic': 'Kreditpakke',
   'error_multi_pack_detected': 'Denne fil ser ud til at indeholde flere undertekstindhold. Opdel venligst filen i dele for sikkerhed og kreditbalance.',
-  'batch_report_success': '{count} fil(er) oversat med succes.',
-  'batch_report_failed_count': '{count} fil(er) fejlede:',
 };

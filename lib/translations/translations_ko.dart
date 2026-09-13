@@ -569,30 +569,12 @@ const Map<String, String> translationsKo = {
   'feature_batch_title': '일괄 번역',
   'feature_batch_desc':
       '여러 자막 파일을 대기열에 추가하고 한 번에 모두 번역하세요. 결과를 개별적으로 또는 ZIP 아카이브로 저장합니다.',
-  'batch_no_credit_log': '크레딧이 부족합니다. 프로세스를 시작할 잔액이 없습니다.',
-  'batch_credit_partial': '잔여 크레딧({credits})이 선택한 파일 수({total})보다 적습니다...',
-  'batch_api_triggered': '{count}개 파일에 대한 일괄 API가 트리거되었습니다.',
-  'batch_starting': '일괄 번역을 시작하는 중...',
-  'batch_file_sent': '{filename} 서버로 전송됨. 작업: {job}',
-  'batch_process_prefix': '일괄 처리',
-  'batch_process_canceled': '프로세스 취소됨.',
-  'batch_process_ongoing': '진행 중 (15초마다 확인, 남은 개수: {count})...',
-  'batch_file_success': '{filename} 번역이 완료되었습니다.',
-  'batch_file_error': '서버에서 {filename} 에러가 발생했습니다.',
-  'batch_file_rate_limit': '{filename} 에 대한 요청 속도 제한 초과.',
-  'batch_all_completed': '모든 파일의 번역이 완료되었습니다.',
-  'batch_error_prefix': '일괄 번역 오류',
-  'batch_unsupported_files_skipped': '지원되지 않는 파일 건너뜀',
   'batch_success_count': '{count}개 파일 번역 성공.',
   'batch_error_count': '{count}개 파일 실패:',
-  'batch_starting_snackbar': '{count}개 파일에 대한 일괄 번역이 시작되었습니다...',
   'batch_background_notification_tip': '앱을 종료하셔도 됩니다. 번역이 완료되면 알림을 받게 됩니다.',
   'batch_save_all_zip': 'ZIP으로 모두 저장',
   'batch_complete_title': '일괄 번역 완료',
   'batch_save_individual_prompt': '또는 목록에서 개별적으로 저장:',
-  'batch_translation_beta': '일괄 번역 (Beta)',
-  'batch_timeout_log': '시간 초과, 다음 파일로 이동합니다.',
-  'batch_process_completed': '일괄 처리 완료.',
   'tour_add_file_title': '자막 파일 추가',
   'tour_add_file_desc':
       '여기에 번역할 SRT 또는 VTT 파일을 추가할 수 있습니다.\n기기, Google 드라이브, Dropbox 또는 Yandex Disk에서 여러 파일을 동시에 선택할 수 있습니다.',
@@ -603,12 +585,6 @@ const Map<String, String> translationsKo = {
   'tour_translate_title': '번역 시작',
   'tour_translate_desc':
       '이 버튼을 사용하여 기기에서 단일 파일 또는 선택한 목록을 순차적으로 번역할 수 있습니다. 번역 진행 상황을 실시간으로 추적할 수 있습니다.',
-  'tour_batch_translate_title': '일괄 번역 (Batch API)',
-  'tour_batch_translate_desc':
-      '여러 파일을 번역할 때 권장되는 방법입니다. 파일이 서버로 전송되며 앱을 닫더라도 백그라운드에서 안전하게 번역이 완료됩니다. 완료되면 알림을 받게 됩니다.',
-  'tour_batch_translate_title_new': '새로운 방법: 일괄 번역 (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      '이제 여러 파일을 번역할 때 앱을 열어둘 필요가 없습니다!\n\n파일을 한 번에 서버로 전송하고 백그라운드에서 안전하게 번역하세요. 완료되면 알림이 전송됩니다.',
   'tour_welcome_title': '환영 선물 🎁',
   'tour_welcome_desc':
       '첫 로그인 기념으로 5 크레딧이 계정에 추가되었습니다! 여기서 크레딧 잔액을 확인하거나 언제든지 추가할 수 있습니다. Google 계정으로 로그인하여 +2 추가 크레딧을 받으세요!',
@@ -630,8 +606,6 @@ const Map<String, String> translationsKo = {
   'tour_skip': '건너뛰기',
   'tour_sdh_title': 'SDH 스위치란 무엇입니까?',
   'tour_sdh_desc': '청각 장애인 및 난청 환자를 위한 자막(SDH)에서 [미소 지음], (음악)과 같은 장면 소리를 나타내는 효과나 불필요한 태그를 감지하고 번역을 위해 AI 모델에 절대 보내지 않습니다. 자연스럽게 이러한 부분이 있어도 크레딧이 차감되지 않습니다. 프로세스가 완료되고 번역 파일이 제공되면 파일에 처음 있었던 이러한 효과가 원래 위치에 정확히 배치됩니다. 이렇게 하면 크레딧을 절약하고 오류 없는 번역을 달성할 수 있습니다.',
-  'batch_cloud_processing_text': '서버에서 번역이 계속 진행 중입니다...',
-  'batch_translation_complete_text': '번역 완료!',
   'website_purchase': '웹사이트 구매',
     'purchase_recovered_previous':
             '크레딧이 이전에 완료된 구매에서 추가되었습니다. 이번에는 새로 청구되지 않았습니다.',
@@ -645,6 +619,4 @@ const Map<String, String> translationsKo = {
   'credit_source_website': '웹사이트',
   'credits_pack_generic': '크레딧 팩',
   'error_multi_pack_detected': '이 파일에는 여러 자막 콘텐츠가 포함되어 있는 것으로 보입니다. 보안 및 크레딧 잔액을 위해 파일을 여러 부분으로 나누어 주세요.',
-  'batch_report_success': '{count}개의 파일이 성공적으로 번역되었습니다.',
-  'batch_report_failed_count': '{count}개의 파일 실패:',
 };

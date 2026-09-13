@@ -618,35 +618,13 @@ const Map<String, String> translationsEs = {
   'feature_batch_title': 'Traducción Masiva',
   'feature_batch_desc':
       'Añade múltiples archivos de subtítulos y tradúcelos todos a la vez. Guarda los resultados individualmente o como archivo ZIP.',
-  'batch_no_credit_log':
-      'Créditos insuficientes. No tienes saldo para iniciar el proceso.',
-  'batch_credit_partial':
-      'Tus créditos ({credits}) son menores que los archivos seleccionados ({total})...',
-  'batch_api_triggered':
-      'API de traducción masiva iniciada para {count} archivos.',
-  'batch_starting': 'Iniciando traducción masiva...',
-  'batch_file_sent': '{filename} enviado al servidor. Tarea: {job}',
-  'batch_process_prefix': 'Proceso Masivo',
-  'batch_process_canceled': 'Proceso cancelado.',
-  'batch_process_ongoing':
-      'En progreso (comprobando cada 15s, restantes: {count})...',
-  'batch_file_success': '{filename} traducido correctamente.',
-  'batch_file_error': '{filename} encontró un error en el servidor.',
-  'batch_file_rate_limit': 'Límite de velocidad excedido para {filename}.',
-  'batch_all_completed': 'Traducción de todos los archivos completada.',
-  'batch_error_prefix': 'Error de Traducción Masiva',
-  'batch_unsupported_files_skipped': 'Archivos no compatibles omitidos',
   'batch_success_count': '{count} archivos traducidos correctamente.',
   'batch_error_count': '{count} archivos fallaron:',
-  'batch_starting_snackbar': 'Traducción por lotes iniciada para {count} archivos...',
   'batch_background_notification_tip':
       'Puedes salir de la aplicación, te notificaremos cuando la traducción termine.',
   'batch_save_all_zip': 'Guardar todo como ZIP',
   'batch_complete_title': 'Traducción Masiva Completada',
   'batch_save_individual_prompt': 'O guardar individualmente desde la lista:',
-  'batch_translation_beta': 'Traducción Masiva (Beta)',
-  'batch_timeout_log': 'Tiempo de espera, pasando al siguiente archivo.',
-  'batch_process_completed': 'Procesamiento masivo completado.',
   'tour_add_file_title': 'Añadir archivo de subtítulos',
   'tour_add_file_desc':
       'Aquí puedes añadir los archivos SRT o VTT que deseas traducir.\nEs posible seleccionar varios archivos a la vez desde tu dispositivo, Google Drive, Dropbox o Yandex Disk.',
@@ -657,13 +635,6 @@ const Map<String, String> translationsEs = {
   'tour_translate_title': 'Iniciar traducción',
   'tour_translate_desc':
       'Usa este botón para traducir un solo archivo o la lista seleccionada secuencialmente en tu dispositivo. Podrás seguir el proceso de traducción en directo.',
-  'tour_batch_translate_title': 'Traducción por lotes (Batch API)',
-  'tour_batch_translate_desc':
-      'Este es el método recomendado al traducir varios archivos. Tus archivos se envían al servidor y la traducción se completa de forma segura en segundo plano, incluso si cierras la app. Recibirás una notificación cuando haya terminado.',
-  'tour_batch_translate_title_new':
-      'NUEVO MÉTODO: Traducción por lotes (Batch API) 🎉',
-  'tour_batch_translate_desc_new':
-      '¡Ya no tienes que mantener la aplicación abierta mientras traduces varios archivos!\n\nEnvía tus archivos al servidor de una vez y deja que se traduzcan de manera segura en segundo plano. Te notificaremos al finalizar.',
   'tour_welcome_title': 'Regalo de bienvenida 🎁',
   'tour_welcome_desc':
       '¡Se ha añadido un regalo de bienvenida de 5 créditos a tu cuenta! Puedes seguir tu saldo de créditos aquí o añadir más en cualquier momento. Inicie sesión con su cuenta de Google para obtener +2 créditos adicionales!',
@@ -687,8 +658,6 @@ const Map<String, String> translationsEs = {
   'tour_skip': 'Omitir',
   'tour_sdh_title': '¿Qué es el interruptor SDH?',
   'tour_sdh_desc': 'Detecta efectos o etiquetas innecesarias que indican sonidos de escena, como [Sonríe], (Música), que se encuentran en subtítulos para personas sordas y con problemas de audición (SDH) y bajo NINGUNA CIRCUNSTANCIA los envía al modelo de IA para su traducción. Naturalmente, su presencia NO SE DEDUCE DE SUS CRÉDITOS. Cuando finaliza el proceso y se le entrega el archivo de traducción, estos efectos que estaban inicialmente en el archivo se colocan exactamente en sus lugares originales. De esta manera, usted ahorra sus créditos y logra una traducción sin errores.',
-  'batch_cloud_processing_text': 'La traducción continúa en el servidor...',
-  'batch_translation_complete_text': '¡Traducción completada!',
   'website_purchase': 'Compra en sitio web',
     'purchase_recovered_previous':
             'Tus créditos se añadieron desde una compra completada anteriormente. No se realizó un nuevo cobro ahora.',
@@ -702,6 +671,4 @@ const Map<String, String> translationsEs = {
   'credit_source_website': 'Sitio web',
   'credits_pack_generic': 'Paquete de créditos',
   'error_multi_pack_detected': 'Este archivo parece contener varios contenidos de subtítulos. Divida el archivo en partes por seguridad y saldo de créditos.',
-  'batch_report_success': '{count} archivo(s) traducido(s) con éxito.',
-  'batch_report_failed_count': '{count} archivo(s) fallido(s):',
 };
