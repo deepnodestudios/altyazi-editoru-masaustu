@@ -649,10 +649,11 @@ export async function consumeCreditInternal({
         let expectedQuoteChargeMode = '';
         let expectedQuoteFromPaidTokens = 0;
         let expectedQuoteFromGrantTokens = 0;
+        let sessionData: any = {};
 
         if (sessionRef) {
             const sessionDoc = await transaction.get(sessionRef);
-            const sessionData = sessionDoc.data() ?? {};
+            sessionData = sessionDoc.data() ?? {};
             const sessionQuoteProtocolVersion = Math.floor(
                 Number(sessionData.quoteProtocolVersion ?? 0),
             );
@@ -742,7 +743,12 @@ export async function consumeCreditInternal({
                     );
                 }
                 authoritativeCharCount = quotedCharacterCount;
-                authoritativeEstimatedTokens = quotedAppTokens;
+                // First-free translation: only the amount above the fair-use
+                // cap is charged; the free part is covered by the policy.
+                authoritativeEstimatedTokens =
+                    sessionData.firstFreeApplied === true
+                        ? clampNonNegativeInt(sessionData.chargeAppTokens)
+                        : quotedAppTokens;
                 appliedQuoteProtocolVersion =
                     sessionQuoteProtocolVersion;
                 appliedQuoteId = requestedQuoteId;
@@ -859,7 +865,7 @@ export async function consumeCreditInternal({
         let fromSubscriptionPurchased = 0;
         let fromExtraPurchased = 0;
         let chargedAmount = amount;
-        let chargeMode: TokenChargeMode | 'credits' = 'credits';
+        let chargeMode: TokenChargeMode | 'credits' | 'first_free' = 'credits';
         let fromPaidTokens = 0;
         let fromGrantTokens = 0;
         let remainingTokenBalance = 0;
@@ -942,131 +948,159 @@ export async function consumeCreditInternal({
                     activeGrantLots = [...activeGrantLots, conversionLot];
                 }
             }
-            const chargePlan = planTokenWalletCharge({
-                state: walletState,
-                bonus: {
-                    adRewardCredits: 0,
-                    freeCredits: 0,
-                    googleLoginCredits: 0,
-                    deviceCredits: 0,
-                },
-                charCount: authoritativeCharCount,
-                estimatedTokens: authoritativeEstimatedTokens,
-                platform: platformText,
-                appVersion,
-                preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
-                googleLoginTokenGrantBalance:
-                    resolveGoogleLoginTokenGrantBalance(
-                        userData,
-                        activeGrantLots,
-                        trackedGoogleLoginGrantLots.length > 0,
-                    ),
-            });
-            chargeMode = chargePlan.mode;
-            chargedAmount = chargePlan.mode === 'tokens'
-                ? chargePlan.estimatedTokens
-                : 1;
-            fromPaidTokens = chargePlan.fromPaidTokens;
-            fromGrantTokens = chargePlan.fromGrantTokens;
-            if (
-                appliedQuoteProtocolVersion > 0
-                && (
-                    expectedQuoteChargeMode !== chargePlan.mode
-                    || expectedQuoteFromPaidTokens !== fromPaidTokens
-                    || expectedQuoteFromGrantTokens !== fromGrantTokens
-                )
-            ) {
-                throw new HttpsError(
-                    'failed-precondition',
-                    'TRANSLATION_QUOTE_BALANCE_CHANGED',
-                );
-            }
-            fromPurchased = chargePlan.fromLegacy;
-            fromAdReward = chargePlan.fromAdReward;
-            fromFree = chargePlan.fromFree;
-            fromGoogleLogin = chargePlan.fromGoogleLogin;
-            fromDevice = chargePlan.fromDevice;
-            deviceCredits = chargePlan.bonusNext.deviceCredits;
-            totalBonusConsumed += fromDevice;
-            adRewardCredits = chargePlan.bonusNext.adRewardCredits;
-            freeCredits = chargePlan.bonusNext.freeCredits;
-            googleLoginCredits = chargePlan.bonusNext.googleLoginCredits;
-            purchasedCredits = chargePlan.next.purchasedCredits;
-            subscriptionPurchasedCredits = chargePlan.next.subscriptionPurchasedCredits;
-            extraPurchasedCredits = chargePlan.next.extraPurchasedCredits;
-            fromSubscriptionPurchased = Math.max(
-                0,
-                walletState.subscriptionPurchasedCredits - subscriptionPurchasedCredits,
-            );
-            fromExtraPurchased = Math.max(
-                0,
-                walletState.extraPurchasedCredits - extraPurchasedCredits,
-            );
-            const trackedSubscriptionBeforeSpend =
-                sumActiveLotRemainingBySources(
-                    activeGrantLots,
-                    ['subscription_bonus'],
-                );
-            const legacySubscriptionBeforeSpend = Math.max(
-                0,
-                walletState.subscriptionTokenGrantRemaining
-                    - trackedSubscriptionBeforeSpend,
-            );
-            if (userRef && fromGrantTokens > 0) {
-                const spentLots = spendGrantLotsFifoInTx(
-                    transaction,
-                    userRef,
-                    activeGrantLots,
-                    fromGrantTokens,
-                    grantNow,
-                );
-                activeGrantLots = spentLots.lots;
-                grantAllocations = spentLots.allocations;
-            }
-            const sourceAwareWalletState =
-                reconcileSubscriptionGrantRemainingFromLots(
-                    {
-                        ...chargePlan.next,
-                        // applyTokenSpend cannot see FIFO lot sources. Preserve
-                        // the pre-spend slice and rebuild it from updated lots.
-                        subscriptionTokenGrantRemaining:
-                            walletState.subscriptionTokenGrantRemaining,
-                    },
-                    activeGrantLots,
-                    {
-                        legacyUnattributedLimit:
-                            legacySubscriptionBeforeSpend,
-                    },
-                );
-            remainingTokenBalance = sourceAwareWalletState.tokenBalance;
-            remainingTokenGrantBalance = sourceAwareWalletState.tokenGrantBalance;
-            remainingLegacyFlatRateRemaining =
-                sourceAwareWalletState.legacyFlatRateRemaining;
-            const googleLoginLotTrackingKnown =
-                trackedGoogleLoginGrantLots.length > 0
-                || activeGrantLots.some(
-                    (lot) => String(lot.source).trim().toLowerCase() ===
-                        'google_login_bonus',
-                );
-            const loginGrantSpent = googleLoginLotTrackingKnown
-                ? 0
-                : googleLoginGrantSpendAmount({
-                    platform: platformText,
-                    userData,
-                    tokenGrantBalance: walletState.tokenGrantBalance,
-                    fromGrantTokens,
-                });
-            walletUserPatch = {
-                ...tokenWalletUserFields(sourceAwareWalletState),
-                googleLoginTokenGrantBalance: googleLoginLotTrackingKnown
-                    ? resolveGoogleLoginTokenGrantBalance(
-                        userData,
-                        activeGrantLots,
-                        true,
+            const isFirstFreeFullyFree = sessionData.firstFreeApplied === true
+                && clampNonNegativeInt(sessionData.chargeAppTokens) <= 0;
+
+            if (isFirstFreeFullyFree) {
+                chargeMode = 'first_free';
+                chargedAmount = 0;
+                fromPaidTokens = 0;
+                fromGrantTokens = 0;
+                remainingTokenBalance = walletState.tokenBalance;
+                remainingTokenGrantBalance = walletState.tokenGrantBalance;
+                remainingLegacyFlatRateRemaining = walletState.legacyFlatRateRemaining;
+                if (
+                    appliedQuoteProtocolVersion > 0
+                    && (
+                        expectedQuoteChargeMode !== chargeMode
+                        || expectedQuoteFromPaidTokens !== fromPaidTokens
+                        || expectedQuoteFromGrantTokens !== fromGrantTokens
                     )
-                    : withGoogleLoginGrantSpend(userData, loginGrantSpent),
-            };
-            walletDevicePatch = tokenWalletDeviceFields(sourceAwareWalletState);
+                ) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'TRANSLATION_QUOTE_BALANCE_CHANGED',
+                    );
+                }
+            } else {
+                const chargePlan = planTokenWalletCharge({
+                    state: walletState,
+                    bonus: {
+                        adRewardCredits: 0,
+                        freeCredits: 0,
+                        googleLoginCredits: 0,
+                        deviceCredits: 0,
+                    },
+                    charCount: sessionData.firstFreeApplied === true
+                        ? undefined
+                        : authoritativeCharCount,
+                    estimatedTokens: authoritativeEstimatedTokens,
+                    platform: platformText,
+                    appVersion,
+                    preferFreeCreditsFirst: paidCreditsOnly ? false : preferFreeCreditsFirst,
+                    googleLoginTokenGrantBalance:
+                        resolveGoogleLoginTokenGrantBalance(
+                            userData,
+                            activeGrantLots,
+                            trackedGoogleLoginGrantLots.length > 0,
+                        ),
+                });
+                chargeMode = chargePlan.mode;
+                chargedAmount = chargePlan.mode === 'tokens'
+                    ? chargePlan.estimatedTokens
+                    : 1;
+                fromPaidTokens = chargePlan.fromPaidTokens;
+                fromGrantTokens = chargePlan.fromGrantTokens;
+                if (
+                    appliedQuoteProtocolVersion > 0
+                    && (
+                        expectedQuoteChargeMode !== chargePlan.mode
+                        || expectedQuoteFromPaidTokens !== fromPaidTokens
+                        || expectedQuoteFromGrantTokens !== fromGrantTokens
+                    )
+                ) {
+                    throw new HttpsError(
+                        'failed-precondition',
+                        'TRANSLATION_QUOTE_BALANCE_CHANGED',
+                    );
+                }
+                fromPurchased = chargePlan.fromLegacy;
+                fromAdReward = chargePlan.fromAdReward;
+                fromFree = chargePlan.fromFree;
+                fromGoogleLogin = chargePlan.fromGoogleLogin;
+                fromDevice = chargePlan.fromDevice;
+                deviceCredits = chargePlan.bonusNext.deviceCredits;
+                totalBonusConsumed += fromDevice;
+                adRewardCredits = chargePlan.bonusNext.adRewardCredits;
+                freeCredits = chargePlan.bonusNext.freeCredits;
+                googleLoginCredits = chargePlan.bonusNext.googleLoginCredits;
+                purchasedCredits = chargePlan.next.purchasedCredits;
+                subscriptionPurchasedCredits = chargePlan.next.subscriptionPurchasedCredits;
+                extraPurchasedCredits = chargePlan.next.extraPurchasedCredits;
+                fromSubscriptionPurchased = Math.max(
+                    0,
+                    walletState.subscriptionPurchasedCredits - subscriptionPurchasedCredits,
+                );
+                fromExtraPurchased = Math.max(
+                    0,
+                    walletState.extraPurchasedCredits - extraPurchasedCredits,
+                );
+                const trackedSubscriptionBeforeSpend =
+                    sumActiveLotRemainingBySources(
+                        activeGrantLots,
+                        ['subscription_bonus'],
+                    );
+                const legacySubscriptionBeforeSpend = Math.max(
+                    0,
+                    walletState.subscriptionTokenGrantRemaining
+                        - trackedSubscriptionBeforeSpend,
+                );
+                if (userRef && fromGrantTokens > 0) {
+                    const spentLots = spendGrantLotsFifoInTx(
+                        transaction,
+                        userRef,
+                        activeGrantLots,
+                        fromGrantTokens,
+                        grantNow,
+                    );
+                    activeGrantLots = spentLots.lots;
+                    grantAllocations = spentLots.allocations;
+                }
+                const sourceAwareWalletState =
+                    reconcileSubscriptionGrantRemainingFromLots(
+                        {
+                            ...chargePlan.next,
+                            // applyTokenSpend cannot see FIFO lot sources. Preserve
+                            // the pre-spend slice and rebuild it from updated lots.
+                            subscriptionTokenGrantRemaining:
+                                walletState.subscriptionTokenGrantRemaining,
+                        },
+                        activeGrantLots,
+                        {
+                            legacyUnattributedLimit:
+                                legacySubscriptionBeforeSpend,
+                        },
+                    );
+                remainingTokenBalance = sourceAwareWalletState.tokenBalance;
+                remainingTokenGrantBalance = sourceAwareWalletState.tokenGrantBalance;
+                remainingLegacyFlatRateRemaining =
+                    sourceAwareWalletState.legacyFlatRateRemaining;
+                const googleLoginLotTrackingKnown =
+                    trackedGoogleLoginGrantLots.length > 0
+                    || activeGrantLots.some(
+                        (lot) => String(lot.source).trim().toLowerCase() ===
+                            'google_login_bonus',
+                    );
+                const loginGrantSpent = googleLoginLotTrackingKnown
+                    ? 0
+                    : googleLoginGrantSpendAmount({
+                        platform: platformText,
+                        userData,
+                        tokenGrantBalance: walletState.tokenGrantBalance,
+                        fromGrantTokens,
+                    });
+                walletUserPatch = {
+                    ...tokenWalletUserFields(sourceAwareWalletState),
+                    googleLoginTokenGrantBalance: googleLoginLotTrackingKnown
+                        ? resolveGoogleLoginTokenGrantBalance(
+                            userData,
+                            activeGrantLots,
+                            true,
+                        )
+                        : withGoogleLoginGrantSpend(userData, loginGrantSpent),
+                };
+                walletDevicePatch = tokenWalletDeviceFields(sourceAwareWalletState);
+            }
         } else {
             if (currentTotal < amount) {
                 throw new HttpsError(
@@ -1117,6 +1151,7 @@ export async function consumeCreditInternal({
                 ? 'paid'
                 : (
                     chargeMode === 'bonus_file'
+                    || chargeMode === 'first_free'
                     || fromAdReward > 0
                     || fromFree > 0
                     || fromGoogleLogin > 0
@@ -1304,6 +1339,20 @@ export async function consumeCreditInternal({
                 chargedAt: admin.firestore.FieldValue.serverTimestamp(),
                 lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
             };
+            if (sessionData.firstFreeApplied === true) {
+                const now = admin.firestore.FieldValue.serverTimestamp();
+                sessionPayload.firstFreeApplied = true;
+                sessionPayload.firstFreeCoverageTokens =
+                    clampNonNegativeInt(sessionData.firstFreeCoverageTokens);
+                sessionPayload.regularAppTokens =
+                    clampNonNegativeInt(sessionData.regularAppTokens ?? sessionData.quotedAppTokens);
+                sessionPayload.firstFreeTranslationUsedAt =
+                    sessionData.firstFreeTranslationUsedAt ?? now;
+                transaction.set(deviceBonusRef, { firstFreeTranslationUsedAt: now }, { merge: true });
+                if (userRef) {
+                    transaction.set(userRef, { firstFreeTranslationUsedAt: now }, { merge: true });
+                }
+            }
             if (allowAutoApproveSession) {
                 sessionPayload.approved = true;
                 sessionPayload.approvedAt = admin.firestore.FieldValue.serverTimestamp();

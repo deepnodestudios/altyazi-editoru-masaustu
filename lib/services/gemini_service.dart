@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import '../constants/ai_language_options.dart';
 import 'app_version_service.dart';
 
@@ -24,6 +25,10 @@ class TranslationQuote {
     required this.translationCreditType,
     required this.spendableTokens,
     required this.sourceContent,
+    this.firstTranslationFree = false,
+    this.firstFreeCoverageTokens = 0,
+    this.chargeAppTokens = 0,
+    this.regularAppTokens = 0,
   });
 
   final int quoteProtocolVersion;
@@ -41,8 +46,14 @@ class TranslationQuote {
   final String? translationCreditType;
   final int spendableTokens;
   final String sourceContent;
+  final bool firstTranslationFree;
+  final int firstFreeCoverageTokens;
+  final int chargeAppTokens;
+  final int regularAppTokens;
 
   bool get chargesTokens => chargeMode == 'tokens';
+  bool get isFullyFreeFirstTranslation =>
+      firstTranslationFree && chargeAppTokens <= 0;
 
   static int _intValue(dynamic value) {
     if (value is int) return value;
@@ -58,6 +69,7 @@ class TranslationQuote {
       throw const FormatException('Invalid translation quote response.');
     }
     final creditType = raw['translationCreditType']?.toString().trim();
+    final quotedAppTokens = _intValue(raw['quotedAppTokens']);
     final quote = TranslationQuote(
       quoteProtocolVersion: _intValue(raw['quoteProtocolVersion']),
       quoteVersion: raw['quoteVersion']?.toString() ?? '',
@@ -66,7 +78,7 @@ class TranslationQuote {
       quotedCharacterCount: _intValue(raw['quotedCharacterCount']),
       characterMultiplier:
           (raw['characterMultiplier'] as num?)?.toDouble() ?? 0,
-      quotedAppTokens: _intValue(raw['quotedAppTokens']),
+      quotedAppTokens: quotedAppTokens,
       sufficient: raw['sufficient'] == true,
       chargeMode: raw['chargeMode']?.toString() ?? 'tokens',
       fromPaidTokens: _intValue(raw['fromPaidTokens']),
@@ -76,6 +88,14 @@ class TranslationQuote {
           creditType == 'paid' || creditType == 'free' ? creditType : null,
       spendableTokens: _intValue(raw['spendableTokens']),
       sourceContent: sourceContent,
+      firstTranslationFree: raw['firstTranslationFree'] == true,
+      firstFreeCoverageTokens: _intValue(raw['firstFreeCoverageTokens']),
+      chargeAppTokens: raw['chargeAppTokens'] != null
+          ? _intValue(raw['chargeAppTokens'])
+          : quotedAppTokens,
+      regularAppTokens: raw['regularAppTokens'] != null
+          ? _intValue(raw['regularAppTokens'])
+          : quotedAppTokens,
     );
     if (quote.quoteProtocolVersion != 1 ||
         quote.quoteId.isEmpty ||
@@ -185,6 +205,149 @@ class GeminiService {
     return AppVersionService.getVersion();
   }
 
+  bool get _supportsFunctionsPlugin =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
+  Future<dynamic> _callCloudFunction({
+    required String functionName,
+    required Map<String, dynamic> data,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    if (_supportsFunctionsPlugin) {
+      try {
+        final callable = _functions.httpsCallable(
+          functionName,
+          options: HttpsCallableOptions(timeout: timeout),
+        );
+        final result = await callable.call(data);
+        return result.data;
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code != 'unknown' &&
+            e.code != 'internal' &&
+            e.code != 'unavailable') {
+          rethrow;
+        }
+      } catch (_) {
+        // Platform channel error on unsupported platforms, fall back to HTTP.
+      }
+    }
+
+    return await _callCloudFunctionViaHttp(
+      functionName: functionName,
+      data: data,
+      timeout: timeout,
+    );
+  }
+
+  Future<dynamic> _callCloudFunctionViaHttp({
+    required String functionName,
+    required Map<String, dynamic> data,
+    required Duration timeout,
+  }) async {
+    await _ensureAuthReady();
+
+    final projectId = _app.options.projectId.trim();
+    if (projectId.isEmpty) {
+      throw FirebaseFunctionsException(
+        message: 'Server Error: Firebase projectId not found.',
+        code: 'internal',
+      );
+    }
+
+    final endpoint = Uri.parse(
+      'https://us-central1-$projectId.cloudfunctions.net/$functionName',
+    );
+
+    final user = _auth.currentUser;
+    final idToken = await user?.getIdToken();
+    final headers = <String, String>{
+      'Content-Type': 'application/json; charset=utf-8',
+      if (idToken != null && idToken.isNotEmpty)
+        'Authorization': 'Bearer $idToken',
+    };
+
+    final payload = jsonEncode({'data': data});
+
+    http.Response response;
+    try {
+      response = await http
+          .post(endpoint, headers: headers, body: payload)
+          .timeout(timeout);
+    } on TimeoutException {
+      throw FirebaseFunctionsException(
+        message: 'Request timed out ($functionName)',
+        code: 'deadline-exceeded',
+      );
+    } catch (e) {
+      throw FirebaseFunctionsException(
+        message: 'Connection failed ($functionName): $e',
+        code: 'unavailable',
+      );
+    }
+
+    dynamic decoded;
+    try {
+      decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+    } catch (_) {
+      throw FirebaseFunctionsException(
+        message:
+            'Invalid response from server (${response.statusCode}): ${response.body}',
+        code: 'internal',
+      );
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (decoded is Map) {
+        if (decoded.containsKey('result')) {
+          return decoded['result'];
+        }
+        if (decoded.containsKey('data')) {
+          return decoded['data'];
+        }
+      }
+      return decoded;
+    }
+
+    String code = 'unknown';
+    String message = response.body;
+    dynamic details;
+
+    if (decoded is Map && decoded['error'] != null) {
+      final errorPayload = decoded['error'];
+      if (errorPayload is Map) {
+        message = errorPayload['message']?.toString() ?? message;
+        final rawStatus = errorPayload['status']?.toString();
+        if (rawStatus != null && rawStatus.isNotEmpty) {
+          code = rawStatus.toLowerCase().replaceAll('_', '-');
+        }
+        details = errorPayload['details'];
+      }
+    } else {
+      if (response.statusCode == 401) {
+        code = 'unauthenticated';
+      } else if (response.statusCode == 403) {
+        code = 'permission-denied';
+      } else if (response.statusCode == 404) {
+        code = 'not-found';
+      } else if (response.statusCode == 400) {
+        code = 'invalid-argument';
+      } else if (response.statusCode == 503) {
+        code = 'unavailable';
+      } else if (response.statusCode == 504) {
+        code = 'deadline-exceeded';
+      }
+    }
+
+    throw FirebaseFunctionsException(
+      message: message,
+      code: code,
+      details: details,
+    );
+  }
+
   Future<TranslationQuote> quoteTranslationCost({
     required String chargeKey,
     required String sourceContent,
@@ -196,26 +359,26 @@ class GeminiService {
   }) async {
     await _ensureAuthReady();
     final appVersion = await AppVersionService.getVersion();
-    final callable = _functions.httpsCallable(
-      'quoteTranslationCost',
-      options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+    final resultData = await _callCloudFunction(
+      functionName: 'quoteTranslationCost',
+      data: {
+        'quoteProtocolVersion': 1,
+        'deviceId': _deviceId,
+        'chargeKey': chargeKey,
+        'sourceContent': sourceContent,
+        'sourceHash': sourceHash,
+        'targetLanguage': targetLanguage,
+        'platform': platform,
+        'appVersion': appVersion,
+        if (fileName != null && fileName.trim().isNotEmpty)
+          'fileName': fileName.trim(),
+        if (platform == 'android' || platform == 'ios')
+          'preferFreeCreditsFirst': preferFreeCreditsFirst,
+      },
+      timeout: const Duration(seconds: 30),
     );
-    final result = await callable.call({
-      'quoteProtocolVersion': 1,
-      'deviceId': _deviceId,
-      'chargeKey': chargeKey,
-      'sourceContent': sourceContent,
-      'sourceHash': sourceHash,
-      'targetLanguage': targetLanguage,
-      'platform': platform,
-      'appVersion': appVersion,
-      if (fileName != null && fileName.trim().isNotEmpty)
-        'fileName': fileName.trim(),
-      if (platform == 'android' || platform == 'ios')
-        'preferFreeCreditsFirst': preferFreeCreditsFirst,
-    });
     final quote = TranslationQuote.fromCallable(
-      result.data,
+      resultData,
       sourceContent: sourceContent,
     );
     _chargeKey = chargeKey;
@@ -266,11 +429,11 @@ class GeminiService {
     };
 
     try {
-      final callable = _functions.httpsCallable(
-        'checkTranslationAccess',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      final resultData = await _callCloudFunction(
+        functionName: 'checkTranslationAccess',
+        data: payload,
+        timeout: const Duration(seconds: 30),
       );
-      final result = await callable.call(payload);
       _chargeKey = chargeKey;
       _approveChargeOnNextCall = true;
       _pendingQuote = exactQuote;
@@ -278,29 +441,9 @@ class GeminiService {
           exactQuote?.quotedCharacterCount ?? charCount;
       _pendingEstimatedTokens =
           exactQuote?.quotedAppTokens ?? estimatedTokens;
-      _capturePreparedChargePlan(result.data);
-      return _readPreparedTranslationCreditType(result.data);
+      _capturePreparedChargePlan(resultData);
+      return _readPreparedTranslationCreditType(resultData);
     } on FirebaseFunctionsException catch (e) {
-      if (_shouldUseCheckAccessFallback(e)) {
-        try {
-          final fallbackCallable = _functions.httpsCallableFromUrl(
-            _callableUrl('checkTranslationAccess'),
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          );
-          final fallbackResult = await fallbackCallable.call(payload);
-          _chargeKey = chargeKey;
-          _approveChargeOnNextCall = true;
-          _pendingQuote = exactQuote;
-          _pendingCharCount =
-              exactQuote?.quotedCharacterCount ?? charCount;
-          _pendingEstimatedTokens =
-              exactQuote?.quotedAppTokens ?? estimatedTokens;
-          _capturePreparedChargePlan(fallbackResult.data);
-          return _readPreparedTranslationCreditType(fallbackResult.data);
-        } on FirebaseFunctionsException catch (fallbackError) {
-          _throwTranslationAccessError(fallbackError);
-        }
-      }
       _throwTranslationAccessError(e);
     }
   }
@@ -332,19 +475,6 @@ class GeminiService {
       return raw;
     }
     return null;
-  }
-
-  bool _shouldUseCheckAccessFallback(FirebaseFunctionsException error) {
-    return !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.windows &&
-        (error.code == 'internal' ||
-            error.code == 'unavailable' ||
-            error.code == 'unknown');
-  }
-
-  String _callableUrl(String functionName) {
-    final projectId = _app.options.projectId;
-    return 'https://us-central1-$projectId.cloudfunctions.net/$functionName';
   }
 
   Never _throwTranslationAccessError(FirebaseFunctionsException error) {
@@ -407,41 +537,39 @@ class GeminiService {
     targetLanguage = (targetLanguage != null && targetLanguage.trim().isNotEmpty) ? _getFullLanguageName(targetLanguage.trim()) : null;
 
     await _ensureAuthReady();
-    final callable = _functions.httpsCallable(
-      'translateText',
-      options: HttpsCallableOptions(
-          timeout: const Duration(minutes: 2)), // Uzun timeout
+    final resultData = await _callCloudFunction(
+      functionName: 'translateText',
+      data: {
+        'text': text,
+        'systemPrompt': systemPrompt,
+        'model': model,
+        'deviceId': _deviceId,
+        if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
+          'targetLanguage': targetLanguage.trim(),
+        if (platform != null && platform.trim().isNotEmpty)
+          'platform': platform.trim(),
+        if (_chargeKey != null && _chargeKey!.trim().isNotEmpty)
+          'chargeKey': _chargeKey,
+        if (appVersion != null) 'appVersion': appVersion,
+        'approveCharge': approveCharge,
+        if (_pendingQuote != null) ...{
+          'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
+          'quoteId': _pendingQuote!.quoteId,
+          'contentHash': _pendingQuote!.contentHash,
+        },
+        if (approveCharge && _pendingQuote != null)
+          'quoteSourceContent': _pendingQuote!.sourceContent,
+        if (approveCharge && _pendingCharCount != null && _pendingCharCount! > 0)
+          'charCount': _pendingCharCount,
+        if (approveCharge &&
+            _pendingEstimatedTokens != null &&
+            _pendingEstimatedTokens! > 0)
+          'estimatedTokens': _pendingEstimatedTokens,
+      },
+      timeout: const Duration(minutes: 4),
     );
 
-    final result = await callable.call({
-      'text': text,
-      'systemPrompt': systemPrompt,
-      'model': model,
-      'deviceId': _deviceId,
-      if (targetLanguage != null && targetLanguage.trim().isNotEmpty)
-        'targetLanguage': targetLanguage.trim(),
-      if (platform != null && platform.trim().isNotEmpty)
-        'platform': platform.trim(),
-      if (_chargeKey != null && _chargeKey!.trim().isNotEmpty)
-        'chargeKey': _chargeKey,
-      if (appVersion != null) 'appVersion': appVersion,
-      'approveCharge': approveCharge,
-      if (_pendingQuote != null) ...{
-        'quoteProtocolVersion': _pendingQuote!.quoteProtocolVersion,
-        'quoteId': _pendingQuote!.quoteId,
-        'contentHash': _pendingQuote!.contentHash,
-      },
-      if (approveCharge && _pendingQuote != null)
-        'quoteSourceContent': _pendingQuote!.sourceContent,
-      if (approveCharge && _pendingCharCount != null && _pendingCharCount! > 0)
-        'charCount': _pendingCharCount,
-      if (approveCharge &&
-          _pendingEstimatedTokens != null &&
-          _pendingEstimatedTokens! > 0)
-        'estimatedTokens': _pendingEstimatedTokens,
-    });
-
-    final data = result.data as Map;
+    final data = resultData is Map ? resultData : const {};
     final receipt = data['chargeReceipt'];
     if (receipt is Map) {
       _lastChargeReceipt = Map<String, dynamic>.from(receipt);

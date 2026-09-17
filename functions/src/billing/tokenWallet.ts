@@ -40,6 +40,27 @@ export const REFERRAL_TOKENS = 150_000;
 export const AD_REWARD_TOKENS = 5_000;
 export const AD_REWARD_WEEKLY_TOKEN_LIMIT = 200_000;
 
+/**
+ * First-free-translation era: mobile 1.8.5+ no longer receives starter tokens.
+ * Instead the very first translation is free up to FIRST_FREE_MAX_TOKENS.
+ * Older clients (and desktop) keep the legacy starter/quote flow untouched.
+ */
+export const FIRST_FREE_MIN_MOBILE_VERSION = '1.8.5';
+/** Fair-use cap for the one-time free first translation. */
+export const FIRST_FREE_MAX_TOKENS = 250_000;
+
+/** True when the client participates in the first-free-translation policy (mobile 1.8.5+). */
+export function usesFirstFreeTranslation(args: {
+    appVersion?: string | null;
+    platform?: string | null;
+}): boolean {
+    const platform = String(args.platform ?? '').trim().toLowerCase();
+    if (platform !== 'android' && platform !== 'ios') {
+        return false;
+    }
+    return meetsMinimumVersion(args.appVersion, FIRST_FREE_MIN_MOBILE_VERSION);
+}
+
 const TOKEN_CHAR_MULTIPLIER = 1.30;
 
 export const TOKEN_PACKS: Record<string, { base: number; bonus: number; tokens: number }> = {

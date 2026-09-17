@@ -115,6 +115,65 @@ function getApiModelCandidates(modelName: string): string[] {
     return [...new Set(candidates)];
 }
 
+/**
+ * Marks the one-time first-free translation allowance as used.
+ * Idempotent: repeated calls keep the original `firstFreeTranslationUsedAt` value.
+ */
+async function markFirstFreeTranslationUsed({
+    db,
+    uid,
+    deviceId,
+    chargeKey,
+    coverageTokens,
+    regularTokens,
+    keepExistingChargeFields = false,
+}: {
+    db: admin.firestore.Firestore;
+    uid: string;
+    deviceId: string;
+    chargeKey: string;
+    coverageTokens: number;
+    regularTokens: number;
+    keepExistingChargeFields?: boolean;
+}): Promise<void> {
+    const sessionRef = db
+        .collection('device_bonuses')
+        .doc(deviceId)
+        .collection('translation_sessions')
+        .doc(chargeKey);
+    const deviceRef = db.collection('device_bonuses').doc(deviceId);
+    const userRef = db.collection('users').doc(uid);
+    await db.runTransaction(async (tx) => {
+        const sessionSnap = await tx.get(sessionRef);
+        if (!sessionSnap.exists) {
+            throw new HttpsError('permission-denied', 'Translation session mismatch.');
+        }
+        const data = sessionSnap.data() ?? {};
+        if (data.uid != null && data.uid !== uid) {
+            throw new HttpsError('permission-denied', 'Translation session mismatch.');
+        }
+        const now = admin.firestore.FieldValue.serverTimestamp();
+        tx.set(
+            sessionRef,
+            {
+                charged: true,
+                firstFreeApplied: true,
+                firstFreeCoverageTokens: coverageTokens,
+                regularAppTokens: regularTokens,
+                firstFreeTranslationUsedAt:
+                    data.firstFreeTranslationUsedAt ?? now,
+                chargedAt: data.chargedAt ?? now,
+                ...(keepExistingChargeFields
+                    ? {}
+                    : { chargeMode: 'first_free', chargedAmount: 0 }),
+            },
+            { merge: true },
+        );
+        tx.set(deviceRef, { firstFreeTranslationUsedAt: now }, { merge: true });
+        tx.set(userRef, { firstFreeTranslationUsedAt: now }, { merge: true });
+    });
+}
+
 async function loadTranslationSessionByChargeKey({
     db,
     deviceId,
@@ -288,6 +347,30 @@ export const translateText = onCall({
             throw new HttpsError('permission-denied', 'Translation session mismatch.');
         }
 
+        const firstFreeApplied = sessionData.firstFreeApplied === true;
+        const firstFreeCoverageTokens = firstFreeApplied
+            ? Math.max(
+                0,
+                Math.floor(Number(sessionData.firstFreeCoverageTokens ?? 0)),
+            )
+            : 0;
+        const firstFreeRegularTokens = Math.max(
+            0,
+            Math.floor(Number(
+                firstFreeApplied
+                    ? sessionData.regularAppTokens ?? sessionData.quotedAppTokens
+                    : sessionData.quotedAppTokens,
+            )),
+        );
+        const firstFreeChargeTokens = firstFreeApplied
+            ? Math.max(
+                0,
+                Math.floor(Number(sessionData.chargeAppTokens ?? 0)),
+            )
+            : 0;
+        const isFirstFreeFullyFree =
+            firstFreeApplied && firstFreeChargeTokens <= 0;
+
         finalFileName = finalFileName || sessionData.fileName;
         finalTargetLanguage = finalTargetLanguage || sessionData.targetLanguage;
         // Platform bilgisi eksik gelirse oturumdaki bilgiyi kullan
@@ -316,6 +399,35 @@ export const translateText = onCall({
                 contentHash: sessionData.contentHash ?? null,
                 quotedCharacterCount: sessionData.charCount ?? null,
                 characterMultiplier: sessionData.characterMultiplier ?? null,
+            };
+        } else if (isFirstFreeFullyFree) {
+            // First-free translation (mobile 1.8.5+): nothing to charge.
+            await markFirstFreeTranslationUsed({
+                db,
+                uid: request.auth.uid,
+                deviceId: normalizedDeviceId,
+                chargeKey: trimmedChargeKey,
+                coverageTokens: firstFreeCoverageTokens,
+                regularTokens: firstFreeRegularTokens,
+            });
+            chargeReceipt = {
+                success: true,
+                charged: true,
+                alreadyCharged: false,
+                chargeMode: 'first_free',
+                chargedAmount: 0,
+                fromPaidTokens: 0,
+                fromGrantTokens: 0,
+                translationCreditType: 'free',
+                quoteProtocolVersion: sessionData.quoteProtocolVersion ?? null,
+                quoteVersion: sessionData.quoteVersion ?? null,
+                quoteId: sessionData.quoteId ?? null,
+                contentHash: sessionData.contentHash ?? null,
+                quotedCharacterCount: sessionData.charCount ?? null,
+                characterMultiplier: sessionData.characterMultiplier ?? null,
+                firstFreeApplied: true,
+                firstFreeCoverageTokens,
+                regularAppTokens: firstFreeRegularTokens,
             };
         } else {
             if (sessionData.requiresRewardedAd === true && sessionData.rewardedAdConfirmed !== true) {
@@ -357,6 +469,18 @@ export const translateText = onCall({
                 contentHash,
                 sourceContent: quoteSourceContent,
             });
+            if (firstFreeApplied) {
+                // Partial first-free translation: record that the allowance was used.
+                await markFirstFreeTranslationUsed({
+                    db,
+                    uid: request.auth.uid,
+                    deviceId: normalizedDeviceId,
+                    chargeKey: trimmedChargeKey,
+                    coverageTokens: firstFreeCoverageTokens,
+                    regularTokens: firstFreeRegularTokens,
+                    keepExistingChargeFields: true,
+                });
+            }
         }
     } else {
         let hasChargedSession = false;

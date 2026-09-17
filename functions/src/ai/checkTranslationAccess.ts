@@ -132,7 +132,16 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         }
         quoteSessionData = data;
         charCount = quotedCharacterCount;
-        estimatedTokens = quotedAppTokens;
+        if (data.firstFreeApplied === true) {
+            // First-free translation: only the amount above the fair-use cap
+            // is charged; the free part still counts for quoting character counts.
+            estimatedTokens = Math.max(
+                0,
+                Math.floor(Number(data.chargeAppTokens ?? 0)),
+            );
+        } else {
+            estimatedTokens = quotedAppTokens;
+        }
     }
 
     const summary = await loadCreditSummary({
@@ -142,6 +151,10 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         platform,
         appVersion,
     });
+
+    const isFirstFreeFullyFree =
+        quoteSessionData?.firstFreeApplied === true
+        && Math.floor(Number(quoteSessionData?.chargeAppTokens ?? 0)) <= 0;
 
     if (summary.usesTokenWallet) {
         const bonusFiles = summary.adRewardCredits
@@ -158,7 +171,8 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
             googleLoginTokenGrantBalance: summary.googleLoginTokenGrantBalance,
         });
         if (
-            summary.legacyFlatRateRemaining <= 0
+            !isFirstFreeFullyFree
+            && summary.legacyFlatRateRemaining <= 0
             && bonusFiles <= 0
             && spendableTokens <= 0
             && !(summary.accessActive && !usesExactQuote)
@@ -184,7 +198,15 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
     let plannedFromPaidTokens = 0;
     let plannedFromGrantTokens = 0;
 
-    if (summary.usesTokenWallet) {
+    if (isFirstFreeFullyFree) {
+        chargeMode = 'first_free';
+        plannedEstimatedTokens = 0;
+        plannedFromPaidTokens = 0;
+        plannedFromGrantTokens = 0;
+        requiresRewardedAd = supportsRewardedAd;
+        usesAdRewardCredits = false;
+        translationCreditType = 'free';
+    } else if (summary.usesTokenWallet) {
         const userSnap = await db.collection('users').doc(request.auth.uid).get();
         const chargePlan = planTokenWalletCharge({
             state: {
@@ -201,7 +223,7 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
                 googleLoginCredits: 0,
                 deviceCredits: 0,
             },
-            charCount,
+            charCount: quoteSessionData?.firstFreeApplied === true ? undefined : charCount,
             estimatedTokens,
             platform,
             appVersion,

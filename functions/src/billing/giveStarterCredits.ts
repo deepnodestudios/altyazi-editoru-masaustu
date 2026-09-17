@@ -15,6 +15,7 @@ import {
     starterTokenGrant,
     tokenWalletDeviceFields,
     tokenWalletUserFields,
+    usesFirstFreeTranslation,
 } from './tokenWallet';
 import {
     ensureGrantLotsConsistentInTx,
@@ -279,7 +280,14 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 appVersion,
                 platform: resolvedPlatform,
             });
+            // First-free translation era (mobile 1.8.5+): no starter tokens.
+            // The very first translation is free up to a fair-use cap instead.
+            const firstFreePolicyActive = usesFirstFreeTranslation({
+                appVersion,
+                platform: resolvedPlatform,
+            });
             const canGiveStarterBonus =
+                !firstFreePolicyActive &&
                 starterBonusAmount > 0 &&
                 (!deviceBonusDoc?.exists || isAdRewardOnlyInit) &&
                 !starterBonusBlockedOnRootedDevice;
@@ -326,9 +334,46 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 !deviceAlreadyHasLoginBonus
                 ? GOOGLE_LOGIN_BONUS
                 : 0;
+            // Authoritative first-free eligibility for client UI and starter buffer check.
+            // Must mirror quoteTranslationCost: no prior first-free usage,
+            // no legacy starter grant, and not a rooted (no App Check) device.
+            const firstFreeUsed =
+                (userDoc.data() ?? {}).firstFreeTranslationUsedAt != null ||
+                existingData.firstFreeTranslationUsedAt != null;
+            const starterAlreadyGranted =
+                !!deviceBonusDoc?.exists &&
+                existingData.bonusGranted === true &&
+                Number(existingData.bonusAmount ?? 0) > 0 &&
+                existingData.adRewardOnlyInit !== true;
+            const firstTranslationFree =
+                firstFreePolicyActive &&
+                !starterBonusBlockedOnRootedDevice &&
+                !firstFreeUsed &&
+                !starterAlreadyGranted;
+
+            const existingUserTokens = Number((userDoc.data() ?? {}).tokenBalance ?? 0);
+            // Hotfix for legacy client v1.8.5: v1.8.5 checks `hasSpendableBalance` at line 1085
+            // before running the translation engine, even when the quote is fully free.
+            // In v1.8.6+ this client bug is fixed, so 1.8.6+ users correctly receive 0 starter tokens.
+            const isV185BuggyClient =
+                firstFreePolicyActive &&
+                !meetsMinimumVersion(appVersion, '1.8.6');
+
+            const firstFreeStarterBufferToGive =
+                useWallet &&
+                isV185BuggyClient &&
+                firstTranslationFree &&
+                existingUserTokens <= 0
+                    ? 100
+                    : 0;
+
             const starterTokensToGive = useWallet && canGiveStarterBonus
                 ? starterTokenGrant(freeRewardsRestricted)
-                : 0;
+                : firstFreeStarterBufferToGive;
+
+            if (firstFreeStarterBufferToGive > 0) {
+                grantedNow = true;
+            }
             // Token-wallet era: no Google login token grant (all regions).
             const googleLoginTokensToGive = 0;
 
@@ -375,6 +420,12 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 canGiveStarterBonus ||
                 googleLoginBonusToGive > 0
             );
+            // First-free clients must not receive a starter-device document;
+            // otherwise the device would look like a starter recipient and lose
+            // its first-free translation allowance.
+            if (firstFreePolicyActive && !deviceBonusDoc?.exists) {
+                shouldWriteDeviceState = false;
+            }
             if (starterBonusBlockedOnRootedDevice && !deviceBonusDoc?.exists) {
                 shouldWriteDeviceState = false;
             }
@@ -586,6 +637,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                     ? 'Başlangıç kredisi verildi.'
                     : ((isWebPlatform || isDesktopPlatform) ? 'Hesap kredisi hazır.' : 'Cihaz kredisi hazır.');
 
+
             return {
                 success: true,
                 message: googleLoginBonusToGive > 0
@@ -599,6 +651,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 tokenBalance: walletState?.tokenBalance ?? 0,
                 legacyFlatRateRemaining: walletState?.legacyFlatRateRemaining ?? 0,
                 usesTokenWallet: useWallet,
+                firstTranslationFree,
                 starterBonusBlockedReason: starterBonusBlockedOnRootedDevice
                     ? 'ROOTED_DEVICE'
                     : null,
@@ -617,6 +670,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             purchasedCredits: payload.purchasedCredits,
             totalCredits: payload.totalCredits,
             bonusAmount: payload.bonusAmount,
+            firstTranslationFree: payload.firstTranslationFree,
             starterBonusBlockedReason: payload.starterBonusBlockedReason ?? null,
             freeRewardsRestricted: payload.freeRewardsRestricted,
             freeRewardsGeoLocked: payload.freeRewardsGeoLocked,

@@ -8,10 +8,12 @@ import {
     requireDeviceId,
 } from '../billing/creditUtils';
 import {
+    FIRST_FREE_MAX_TOKENS,
     hydrateTokenWallet,
     planTokenWalletCharge,
     spendableTokenBalance,
     tokenChargeRequiresRewardedAd,
+    usesFirstFreeTranslation,
 } from '../billing/tokenWallet';
 import {
     isUnsupportedDesktopClient,
@@ -241,20 +243,85 @@ export const quoteTranslationCost = onCall(
             targetLanguage,
             preferFreeCreditsFirst,
         });
-        const preview = await buildQuotePreview({
-            db: admin.firestore(),
-            uid: request.auth.uid,
-            deviceId,
-            platform,
-            appVersion,
-            quotedAppTokens,
-            preferFreeCreditsFirst,
-        });
+        const db = admin.firestore();
+
+        // First-free translation (mobile 1.8.5+): the very first translation is
+        // free up to a fair-use cap. Older clients and desktop are untouched.
+        let firstFreeEligible = false;
+        if (usesFirstFreeTranslation({ appVersion, platform })) {
+            const [userSnap, deviceSnap] = await Promise.all([
+                db.collection('users').doc(request.auth.uid).get(),
+                db.collection('device_bonuses').doc(deviceId).get(),
+            ]);
+            const userData = userSnap.data() ?? {};
+            const deviceData = deviceSnap.data() ?? {};
+            const usedByUser = userData.firstFreeTranslationUsedAt != null;
+            const usedByDevice = deviceData.firstFreeTranslationUsedAt != null;
+            const starterAlreadyGranted =
+                deviceSnap.exists
+                && deviceData.bonusGranted === true
+                && Number(deviceData.bonusAmount ?? 0) > 0
+                && deviceData.adRewardOnlyInit !== true;
+            // Rooted/modified devices cannot obtain an App Check token; the
+            // same signal already blocks starter tokens for mobile. Rooted
+            // devices must not receive the free first translation either.
+            const rootedDeviceBlocked = !request.app;
+            firstFreeEligible =
+                !rootedDeviceBlocked &&
+                !usedByUser && !usedByDevice && !starterAlreadyGranted;
+        }
+        const firstFreeCoverageTokens = firstFreeEligible
+            ? Math.min(FIRST_FREE_MAX_TOKENS, quotedAppTokens)
+            : 0;
+        const chargeAppTokens = Math.max(
+            0,
+            quotedAppTokens - firstFreeCoverageTokens,
+        );
+
+        let preview: QuotePreview;
+        if (firstFreeEligible && chargeAppTokens <= 0) {
+            const summary = await loadCreditSummary({
+                db,
+                uid: request.auth.uid,
+                deviceId,
+                platform,
+                appVersion,
+            });
+            const spendableTokens = summary.usesTokenWallet
+                ? spendableTokenBalance({
+                    state: {
+                        tokenBalance: summary.tokenBalance,
+                        tokenGrantBalance: summary.tokenGrantBalance,
+                    },
+                    platform,
+                    appVersion,
+                    googleLoginTokenGrantBalance: summary.googleLoginTokenGrantBalance,
+                })
+                : 0;
+            preview = {
+                sufficient: true,
+                chargeMode: 'first_free',
+                fromPaidTokens: 0,
+                fromGrantTokens: 0,
+                requiresRewardedAd: (platform === 'android' || platform === 'ios'),
+                translationCreditType: 'free',
+                spendableTokens,
+            };
+        } else {
+            preview = await buildQuotePreview({
+                db,
+                uid: request.auth.uid,
+                deviceId,
+                platform,
+                appVersion,
+                quotedAppTokens: chargeAppTokens,
+                preferFreeCreditsFirst,
+            });
+        }
         const now = Date.now();
         const expiresAt = admin.firestore.Timestamp.fromMillis(
             now + TRANSLATION_QUOTE_TTL_MS,
         );
-        const db = admin.firestore();
         const sessionRef = db
             .collection('device_bonuses')
             .doc(deviceId)
@@ -262,6 +329,10 @@ export const quoteTranslationCost = onCall(
             .doc(chargeKey);
         let resolvedPreview = preview;
         let resolvedExpiresAt = expiresAt;
+        let resolvedFirstFreeApplied = firstFreeEligible;
+        let resolvedFirstFreeCoverage = firstFreeCoverageTokens;
+        let resolvedChargeAppTokens = chargeAppTokens;
+        let resolvedRegularAppTokens = quotedAppTokens;
 
         await db.runTransaction(async (tx) => {
             const existingSnap = await tx.get(sessionRef);
@@ -329,6 +400,27 @@ export const quoteTranslationCost = onCall(
                 if (existing.quoteExpiresAt != null) {
                     resolvedExpiresAt = existing.quoteExpiresAt;
                 }
+                resolvedFirstFreeApplied = existing.firstFreeApplied === true;
+                resolvedFirstFreeCoverage = Math.max(
+                    0,
+                    Math.floor(Number(existing.firstFreeCoverageTokens ?? 0)),
+                );
+                resolvedChargeAppTokens = Math.max(
+                    0,
+                    Math.floor(Number(
+                        existing.chargeAppTokens
+                        ?? existing.quotedAppTokens
+                        ?? 0,
+                    )),
+                );
+                resolvedRegularAppTokens = Math.max(
+                    0,
+                    Math.floor(Number(
+                        existing.regularAppTokens
+                        ?? existing.quotedAppTokens
+                        ?? 0,
+                    )),
+                );
                 tx.set(sessionRef, {
                     lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
                 }, { merge: true });
@@ -355,6 +447,10 @@ export const quoteTranslationCost = onCall(
                 quotedCharacterCount,
                 characterMultiplier: TRANSLATION_QUOTE_MULTIPLIER,
                 quotedAppTokens,
+                firstFreeApplied: firstFreeEligible,
+                firstFreeCoverageTokens,
+                chargeAppTokens,
+                regularAppTokens: quotedAppTokens,
                 quotedChargeMode: preview.chargeMode,
                 quotedFromPaidTokens: preview.fromPaidTokens,
                 quotedFromGrantTokens: preview.fromGrantTokens,
@@ -388,6 +484,10 @@ export const quoteTranslationCost = onCall(
             quotedCharacterCount,
             characterMultiplier: TRANSLATION_QUOTE_MULTIPLIER,
             quotedAppTokens,
+            firstTranslationFree: resolvedFirstFreeApplied,
+            firstFreeCoverageTokens: resolvedFirstFreeCoverage,
+            chargeAppTokens: resolvedChargeAppTokens,
+            regularAppTokens: resolvedRegularAppTokens,
             sufficient: resolvedPreview.sufficient,
             chargeMode: resolvedPreview.chargeMode,
             fromPaidTokens: resolvedPreview.fromPaidTokens,
