@@ -326,9 +326,8 @@ function buildFailureStatus(error: HttpsError): Record<string, unknown> {
 export const addCredits = onCall<AddCreditsData>({
   region: 'us-central1',
   serviceAccount: PLAY_BILLING_SERVICE_ACCOUNT,
-  // Keep one warm instance so Play purchases are not lost on cold-start 503
-  // (same callable credits used for years; token packs share this path).
-  minInstances: 1,
+  // Scale to zero when idle to avoid 24/7 idle server charges.
+  minInstances: 0,
   timeoutSeconds: 120,
 }, async (request) => {
   const { data, auth } = request;

@@ -3,7 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Type } from '@google/genai';
 import { assertCreditsAvailable, consumeCreditInternal, getAuthEmail, normalizePlatform, requireDeviceId } from '../billing/creditUtils';
-import { isUnsupportedDesktopClient } from '../referral/referralUtils';
+import { isUnsupportedDesktopClient, isUnsupportedMobileClient } from '../referral/referralUtils';
 import { resolveGeminiModel, shouldUseVertexAi } from './modelUtils';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
@@ -322,6 +322,12 @@ export const translateText = onCall({
         platform: normalizedPlatform,
     })) {
         throw new HttpsError('failed-precondition', 'DESKTOP_UPDATE_REQUIRED');
+    }
+    if (isUnsupportedMobileClient({
+        appVersion: resolvedAppVersion,
+        platform: normalizedPlatform,
+    })) {
+        throw new HttpsError('failed-precondition', 'APP_UPDATE_REQUIRED');
     }
 
     const db = admin.firestore();

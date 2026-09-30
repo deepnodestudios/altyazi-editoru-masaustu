@@ -9,6 +9,9 @@ const MIN_MOBILE_BONUS_POLICY_APP_VERSION = '1.7.5';
 const MIN_DESKTOP_BONUS_POLICY_APP_VERSION = '1.7.4';
 /** Desktop clients below this must update; translation APIs reject them. */
 const MIN_DESKTOP_SUPPORTED_APP_VERSION = '1.7.6';
+/** Mobile clients below this must update; translation APIs reject them (matches Remote Config). */
+const MIN_MOBILE_SUPPORTED_APP_VERSION = '1.8.3';
+
 
 function parseVersion(value: string): { parts: number[]; build: number | null } {
   const trimmed = value.trim();
@@ -127,6 +130,16 @@ export function isUnsupportedDesktopClient(args: {
   return isDesktopPlatform(args.platform) &&
     !meetsMinimumVersion(args.appVersion, MIN_DESKTOP_SUPPORTED_APP_VERSION);
 }
+
+/** True when a mobile client is older than the minimum supported release (1.8.3). */
+export function isUnsupportedMobileClient(args: {
+  appVersion: string | null | undefined;
+  platform: string | null | undefined;
+}): boolean {
+  return isMobilePlatform(args.platform) &&
+    !meetsMinimumVersion(args.appVersion, MIN_MOBILE_SUPPORTED_APP_VERSION);
+}
+
 
 /**
  * Grants free credits to a user (referral bonus, monthly bonus, etc.).

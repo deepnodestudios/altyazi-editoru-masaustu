@@ -55,6 +55,9 @@ export function usesFirstFreeTranslation(args: {
     platform?: string | null;
 }): boolean {
     const platform = String(args.platform ?? '').trim().toLowerCase();
+    if (platform === 'web') {
+        return true;
+    }
     if (platform !== 'android' && platform !== 'ios') {
         return false;
     }

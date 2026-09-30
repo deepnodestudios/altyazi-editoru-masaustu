@@ -81,10 +81,65 @@ export const EXPANDED_RESTRICTED_COUNTRY_CODES_V177 = new Set([
   'SS',
 ]);
 
-/** @deprecated Prefer V176 / V177 sets. Full union for docs. */
+/** Applied when appVersion >= 1.7.7 (Tier 3 low eCPM expansion: MENA, Central Asia, Latin America, remaining Africa). */
+export const EXPANDED_RESTRICTED_COUNTRY_CODES_TIER3 = new Set([
+  // North Africa & Middle East (low eCPM)
+  'EG', // Egypt
+  'DZ', // Algeria
+  'MA', // Morocco
+  'TN', // Tunisia
+  'LY', // Libya
+  'JO', // Jordan
+  'LB', // Lebanon
+  'PS', // Palestine
+  // Central Asia & Caucasus (CIS)
+  'UZ', // Uzbekistan
+  'KG', // Kyrgyzstan
+  'TJ', // Tajikistan
+  'TM', // Turkmenistan
+  'AZ', // Azerbaijan
+  'AM', // Armenia
+  'GE', // Georgia
+  'MD', // Moldova
+  // Latin America & Caribbean (very low eCPM / crisis)
+  'VE', // Venezuela
+  'BO', // Bolivia
+  'CU', // Cuba
+  'NI', // Nicaragua
+  'HT', // Haiti
+  'HN', // Honduras
+  'GT', // Guatemala
+  'SV', // El Salvador
+  'PY', // Paraguay
+  'EC', // Ecuador
+  'DO', // Dominican Republic
+  // Africa (remaining low eCPM)
+  'CG', // Republic of the Congo
+  'GA', // Gabon
+  'GQ', // Equatorial Guinea
+  'NA', // Namibia
+  'BW', // Botswana
+  'GM', // Gambia
+  'GW', // Guinea-Bissau
+  'CV', // Cape Verde
+  'ST', // Sao Tome and Principe
+  'DJ', // Djibouti
+  'KM', // Comoros
+  'ER', // Eritrea
+  'MR', // Mauritania
+  'LS', // Lesotho
+  'SZ', // Eswatini
+  // Asia
+  'MN', // Mongolia
+  'BT', // Bhutan
+  'MV', // Maldives
+]);
+
+/** @deprecated Prefer V176 / V177 / TIER3 sets. Full union for docs. */
 export const EXPANDED_RESTRICTED_COUNTRY_CODES = new Set([
   ...EXPANDED_RESTRICTED_COUNTRY_CODES_V176,
   ...EXPANDED_RESTRICTED_COUNTRY_CODES_V177,
+  ...EXPANDED_RESTRICTED_COUNTRY_CODES_TIER3,
 ]);
 
 /** Full set for docs / clients on latest. */
@@ -92,6 +147,7 @@ export const RESTRICTED_COUNTRY_CODES = new Set([
   ...LEGACY_RESTRICTED_COUNTRY_CODES,
   ...EXPANDED_RESTRICTED_COUNTRY_CODES_V176,
   ...EXPANDED_RESTRICTED_COUNTRY_CODES_V177,
+  ...EXPANDED_RESTRICTED_COUNTRY_CODES_TIER3,
 ]);
 
 export const RESTRICTED_STARTER_BONUS = 1;
@@ -125,8 +181,11 @@ function activeRestrictedCountryCodes(appVersion?: unknown): Set<string> {
       codes.add(code);
     }
   }
-  if (meetsMinimumVersion(version, EXPANDED_GEO_V177_MIN_VERSION)) {
+  if (meetsMinimumVersion(version, EXPANDED_GEO_V177_MIN_VERSION) || version == null) {
     for (const code of EXPANDED_RESTRICTED_COUNTRY_CODES_V177) {
+      codes.add(code);
+    }
+    for (const code of EXPANDED_RESTRICTED_COUNTRY_CODES_TIER3) {
       codes.add(code);
     }
   }

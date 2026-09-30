@@ -17,6 +17,7 @@ import {
 } from '../billing/tokenWallet';
 import {
     isUnsupportedDesktopClient,
+    isUnsupportedMobileClient,
     shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
 } from '../referral/referralUtils';
@@ -217,6 +218,12 @@ export const quoteTranslationCost = onCall(
                 'DESKTOP_UPDATE_REQUIRED',
             );
         }
+        if (isUnsupportedMobileClient({ appVersion, platform })) {
+            throw new HttpsError(
+                'failed-precondition',
+                'APP_UPDATE_REQUIRED',
+            );
+        }
 
         const targetLanguage = String(
             request.data.targetLanguage ?? '',
@@ -265,7 +272,8 @@ export const quoteTranslationCost = onCall(
             // Rooted/modified devices cannot obtain an App Check token; the
             // same signal already blocks starter tokens for mobile. Rooted
             // devices must not receive the free first translation either.
-            const rootedDeviceBlocked = !request.app;
+            const isWeb = platform === 'web';
+            const rootedDeviceBlocked = isWeb ? false : !request.app;
             firstFreeEligible =
                 !rootedDeviceBlocked &&
                 !usedByUser && !usedByDevice && !starterAlreadyGranted;

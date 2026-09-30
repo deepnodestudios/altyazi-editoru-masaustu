@@ -76,11 +76,12 @@ export const handleSubscription = onCall<HandleSubscriptionData>(
       appVersion: data.appVersion,
     });
 
-    console.log(`✅ Subscription synced: user=${auth.uid}, product=${canonicalProductId}, credits=${product.credits}`);
+    console.log(`✅ Subscription synced: user=${auth.uid}, product=${canonicalProductId}, credits=${result.credits}, tokens=${result.tokensGranted ?? 0}`);
     return {
       success: true,
       alreadyProcessed: result.alreadyProcessed,
       credits: result.credits,
+      tokensGranted: result.tokensGranted ?? 0,
       tier: result.tier,
     };
   }

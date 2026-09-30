@@ -15,6 +15,7 @@ import {
 } from '../billing/tokenWallet';
 import {
     isUnsupportedDesktopClient,
+    isUnsupportedMobileClient,
     meetsMinimumVersion,
     shouldEnforceDesktopPaidCreditsOnly,
     shouldUseV160ClientRules,
@@ -52,6 +53,9 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
     const appVersion = (request.data.appVersion ?? '').trim() || '1.6.0';
     if (isUnsupportedDesktopClient({ appVersion, platform })) {
         throw new HttpsError('failed-precondition', 'DESKTOP_UPDATE_REQUIRED');
+    }
+    if (isUnsupportedMobileClient({ appVersion, platform })) {
+        throw new HttpsError('failed-precondition', 'APP_UPDATE_REQUIRED');
     }
     const useRewardedAd = request.data.useRewardedAd === true;
     const paidCreditsOnly = shouldEnforceDesktopPaidCreditsOnly({

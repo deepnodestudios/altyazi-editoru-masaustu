@@ -540,6 +540,11 @@ export async function consumeCreditInternal({
     });
     const trimmedDeviceId = requireDeviceId(deviceId);
     const trimmedChargeKey = (chargeKey ?? '').trim();
+    const isServerTranslation =
+        reasonText === 'server_translation'
+        || platformText === 'web';
+    const canAutoApproveSession =
+        allowAutoApproveSession || isServerTranslation;
 
     if (!usesTokenWallet && (!amount || amount <= 0)) {
         throw new HttpsError('invalid-argument', 'Geçersiz kredi miktarı');
@@ -672,7 +677,7 @@ export async function consumeCreditInternal({
                 );
             }
 
-            if (allowAutoApproveSession) {
+            if (canAutoApproveSession) {
                 if (!sessionDoc.exists) {
                     throw new HttpsError('failed-precondition', 'Translation session not prepared.');
                 }
@@ -1353,7 +1358,7 @@ export async function consumeCreditInternal({
                     transaction.set(userRef, { firstFreeTranslationUsedAt: now }, { merge: true });
                 }
             }
-            if (allowAutoApproveSession) {
+            if (canAutoApproveSession) {
                 sessionPayload.approved = true;
                 sessionPayload.approvedAt = admin.firestore.FieldValue.serverTimestamp();
             }

@@ -9,6 +9,7 @@ import {
   hydrateTokenWallet,
   resolveSubscriptionTokenGrant,
   shouldUseTokenWallet,
+  TOKEN_WALLET_STARTS_AT_MS,
   tokenWalletUserFields,
 } from '../billing/tokenWallet';
 import {
@@ -281,7 +282,7 @@ export async function applySubscriptionRenewal(args: {
   linkedPurchaseToken: string | null;
   cancellationReason: SubscriptionCancellationReason;
   appVersion?: string | null;
-}): Promise<{ alreadyProcessed: boolean; credits: number; tier: string }> {
+}): Promise<{ alreadyProcessed: boolean; credits: number; tier: string; tokensGranted?: number }> {
   const {
     db,
     uid,
@@ -313,6 +314,8 @@ export async function applySubscriptionRenewal(args: {
   const userRef = db.collection('users').doc(uid);
 
   let alreadyProcessed = false;
+  let finalUsesWallet = false;
+  let finalTokensGranted = 0;
 
   await db.runTransaction(async (tx) => {
     const subscriptionDoc = await tx.get(subscriptionRef);
@@ -333,13 +336,20 @@ export async function applySubscriptionRenewal(args: {
       alreadyProcessed = true;
     }
 
+    const usesWallet =
+      shouldUseTokenWallet({ appVersion, platform: 'android' }) ||
+      userData.creditPolicy === 'token_v1' ||
+      (existingData.tokensGranted != null && Number(existingData.tokensGranted) > 0) ||
+      Date.now() >= TOKEN_WALLET_STARTS_AT_MS;
+    finalUsesWallet = usesWallet;
+
     // Lot reads before any writes.
-    let activeGrantLots = shouldUseTokenWallet({ appVersion, platform: 'android' })
+    let activeGrantLots = usesWallet
       ? await loadActiveGrantLots(tx, userRef)
       : [];
 
     if (!alreadyProcessed) {
-      if (shouldUseTokenWallet({ appVersion, platform: 'android' })) {
+      if (usesWallet) {
         const tokenGrant = resolveSubscriptionTokenGrant(canonicalProductId);
         const now = new Date();
         let hydratedWallet = hydrateTokenWallet({ userData });
@@ -637,15 +647,18 @@ export async function applySubscriptionRenewal(args: {
       }
     }
 
+    const tokensGrantedAmount = usesWallet
+      ? (resolveSubscriptionTokenGrant(canonicalProductId)?.tokens ?? 0)
+      : 0;
+    finalTokensGranted = tokensGrantedAmount;
+
     tx.set(subscriptionRef, {
       userId: uid,
       email,
       productId,
       tier: product.tier,
-      credits: product.credits,
-      tokensGranted: shouldUseTokenWallet({ appVersion, platform: 'android' })
-        ? (resolveSubscriptionTokenGrant(canonicalProductId)?.tokens ?? 0)
-        : 0,
+      credits: usesWallet ? 0 : product.credits,
+      tokensGranted: tokensGrantedAmount,
       purchaseToken,
       orderId,
       expiryTimeMillis,
@@ -662,7 +675,8 @@ export async function applySubscriptionRenewal(args: {
 
   return {
     alreadyProcessed,
-    credits: product.credits,
+    credits: finalUsesWallet ? 0 : product.credits,
+    tokensGranted: finalTokensGranted,
     tier: product.tier,
   };
 }

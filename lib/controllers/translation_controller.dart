@@ -306,111 +306,34 @@ class TranslationController extends ChangeNotifier {
     _onLog?.call('log_resume_debug', jsonEncode({'message': message}));
   }
 
-  bool _isLikelyEnglishSubtitleContent(String subtitleContent) {
-    // Parse blocks to avoid timestamps/indices affecting detection.
+  static final RegExp _validLetterOrDigitRegex =
+      RegExp(r'[\p{L}\p{N}]', unicode: true);
+  static final RegExp _sdhSymbolsRegex = RegExp(r"[\[\]()♪>]");
+
+  static bool isValidSubtitleContent(String subtitleContent) {
+    // Dil bağımsız doğrulama: altyazı bloğu sayısı ve anlamlı karakter yoğunluğu.
     final blocks = SubtitleParser.parseSrt(subtitleContent);
     if (blocks.isEmpty) return false;
 
-    final buffer = StringBuffer();
+    var meaningfulBlocks = 0;
+    var lettersDigits = 0;
     for (final block in blocks) {
       final text = block.text.trim();
       if (text.isEmpty) continue;
-      buffer.writeln(text);
-      if (buffer.length >= 8000) break; // enough sample
-    }
+      // Sadece SDH / işaret satırlarını (örn. "[müzik]", "♪", ">") kapsam dışı bırak.
+      final cleaned = text.replaceAll(_sdhSymbolsRegex, '').trim();
+      if (cleaned.isEmpty) continue;
+      meaningfulBlocks++;
+      lettersDigits += _validLetterOrDigitRegex.allMatches(cleaned).length;
 
-    final sample = buffer.toString().toLowerCase();
-    final words = sample
-        .replaceAll(RegExp(r"[^a-z\u00C0-\u024F'\s]"), ' ')
-        .split(RegExp(r"\s+"))
-        .where((w) => w.length > 1)
-        .toList();
-
-    if (words.length < 10) {
-      // Too little text to be confident; default to NOT storing in Firebase.
-      return false;
-    }
-
-    // Quick Turkish-character heuristic (very strong signal for TR source).
-    final turkishCharHits = RegExp(r"[ğüşöçıİĞÜŞÖÇ]").allMatches(sample).length;
-    if (turkishCharHits >= 2) return false;
-
-    const stopwords = <String>{
-      'the',
-      'and',
-      'to',
-      'of',
-      'in',
-      'is',
-      'it',
-      'you',
-      'i',
-      'that',
-      'for',
-      'on',
-      'with',
-      'as',
-      'this',
-      'be',
-      'are',
-      'was',
-      'were',
-      'have',
-      'has',
-      'had',
-      'not',
-      'at',
-      'but',
-      'we',
-      'they',
-      'he',
-      'she',
-      'my',
-      'your',
-      'me',
-      'do',
-      'does',
-      'did',
-      'so',
-      'if',
-      'what',
-      'there',
-      'their',
-      'them',
-      'can',
-      'will',
-      'just',
-      'one',
-      'all',
-      'no',
-      'yes',
-      'okay',
-      'yeah',
-    };
-
-    var stopHits = 0;
-    var letters = 0;
-    var asciiLetters = 0;
-    for (final word in words) {
-      if (stopwords.contains(word)) stopHits++;
-      for (final codeUnit in word.codeUnits) {
-        final isAsciiLower = codeUnit >= 97 && codeUnit <= 122; // a-z
-        final isLatinExtended = (codeUnit >= 192 && codeUnit <= 591);
-        if (isAsciiLower || isLatinExtended) {
-          letters++;
-          if (isAsciiLower) asciiLetters++;
-        }
+      // En az 2 anlamlı blok ve toplam en az 40 harf/rakam sağlandığında erken onay ver.
+      if (meaningfulBlocks >= 2 && lettersDigits >= 40) {
+        return true;
       }
     }
 
-    if (letters == 0) return false;
-
-    final stopRatio = stopHits / words.length;
-    final asciiRatio = asciiLetters / letters;
-
-    // Conservative thresholds: only store when we're fairly confident it's English.
-    // Lowered for short subtitles: stopRatio >= 0.02 and asciiRatio >= 0.80
-    return stopRatio >= 0.02 && asciiRatio >= 0.80;
+    // En az 2 anlamlı blok ve toplam en az 40 harf/rakam gerekir.
+    return meaningfulBlocks >= 2 && lettersDigits >= 40;
   }
 
   Future<bool> _shouldUseFirebaseForFile(File file) async {
@@ -422,7 +345,7 @@ class TranslationController extends ChangeNotifier {
       if (clearSdh) {
         content = SubtitleParser.clearSdh(content);
       }
-      return _isLikelyEnglishSubtitleContent(content);
+      return isValidSubtitleContent(content);
     } catch (_) {
       return false;
     }

@@ -26,6 +26,22 @@ import {
   reduceGrantLotsInTx,
 } from '../billing/tokenGrantLots';
 
+const SUBSCRIPTION_NOTIFICATION_TYPE_NAMES: Record<number, string> = {
+  1: 'RECOVERED',
+  2: 'RENEWED',
+  3: 'CANCELED',
+  4: 'PURCHASED',
+  5: 'ON_HOLD',
+  6: 'IN_GRACE_PERIOD',
+  7: 'RESTARTED',
+  8: 'PRICE_CHANGE_CONFIRMED',
+  9: 'DEFERRED',
+  10: 'PAUSED',
+  11: 'PAUSE_SCHEDULE_CHANGED',
+  12: 'REVOKED',
+  13: 'EXPIRED',
+};
+
 /**
  * Google Play Real-Time Developer Notifications (RTDN) webhook.
  * Handles voided purchases — revokes credits from users who got refunds.
@@ -50,14 +66,30 @@ export const handleVoidedPurchase = onRequest(
         return;
       }
 
-      const decoded = JSON.parse(Buffer.from(message.data, 'base64').toString('utf8'));
+      let decoded: any;
+      try {
+        decoded = JSON.parse(Buffer.from(message.data, 'base64').toString('utf8'));
+      } catch (parseErr: any) {
+        console.error('❌ Failed to parse RTDN message payload JSON, acknowledging to drop poison pill:', parseErr);
+        res.status(200).send('Malformed message acknowledged');
+        return;
+      }
       const db = admin.firestore();
+
+      if (decoded.testNotification) {
+        console.log('✅ Google Play RTDN test notification received successfully:', JSON.stringify(decoded));
+        res.status(200).send('OK — test notification received');
+        return;
+      }
 
       const subscriptionNotification = decoded.subscriptionNotification;
       if (subscriptionNotification) {
         const purchaseToken = String(subscriptionNotification.purchaseToken ?? '').trim();
         const subscriptionId = String(subscriptionNotification.subscriptionId ?? '').trim();
         const notificationType = Number(subscriptionNotification.notificationType ?? -1);
+        const notificationTypeName = SUBSCRIPTION_NOTIFICATION_TYPE_NAMES[notificationType] ?? 'UNKNOWN';
+
+        console.log(`🔔 RTDN Subscription Event: type=${notificationType} (${notificationTypeName}), product=${subscriptionId}, token=${purchaseToken.substring(0, 20)}...`);
 
         if (!purchaseToken || !subscriptionId) {
           res.status(400).send('Missing subscription payload');
@@ -97,6 +129,7 @@ export const handleVoidedPurchase = onRequest(
             cancellationReason: verification.cancellationReason,
             lastWebhookAt: admin.firestore.FieldValue.serverTimestamp(),
             lastNotificationType: notificationType,
+            lastNotificationTypeName: notificationTypeName,
           }, { merge: true });
           res.status(200).send('OK — subscription inactive');
           return;
@@ -115,11 +148,13 @@ export const handleVoidedPurchase = onRequest(
           autoRenewEnabled: verification.autoRenewEnabled,
           linkedPurchaseToken: verification.linkedPurchaseToken,
           cancellationReason: verification.cancellationReason,
+          appVersion: typeof subscriptionData.appVersion === 'string' ? subscriptionData.appVersion : null,
         });
 
         await subscriptionRef.set({
           lastWebhookAt: admin.firestore.FieldValue.serverTimestamp(),
           lastNotificationType: notificationType,
+          lastNotificationTypeName: notificationTypeName,
           status: verification.status,
           subscriptionState: verification.subscriptionState,
           autoRenewEnabled: verification.autoRenewEnabled,
