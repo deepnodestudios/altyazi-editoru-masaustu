@@ -29,7 +29,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'firebase_options.dart';
+
+const String kSentryDsn =
+    'https://b475ca7076c2499baac1d734301acaff@o4512196697128960.ingest.de.sentry.io/4512196703420496';
 
 const String _kPrefAppInForeground = 'app_in_foreground';
 const String _kPrefCrashForcePrompt = 'crash_report_force_prompt';
@@ -201,6 +205,12 @@ Future<void> _deferredStartupWork(FirebaseAuth auth) async {
 
       try {
         final currentUid = auth.currentUser?.uid ?? restoredUser.uid;
+        final currentEmail = auth.currentUser?.email ?? restoredUser.email;
+        if (currentUid.isNotEmpty) {
+          await Sentry.configureScope((scope) {
+            scope.setUser(SentryUser(id: currentUid, email: currentEmail));
+          });
+        }
         await FirebaseFirestore.instance.collection('users').doc(currentUid).set({
           'lastAppOpen': FieldValue.serverTimestamp(),
           'platforms': FieldValue.arrayUnion([Platform.operatingSystem]),
@@ -265,8 +275,17 @@ class _ForegroundFlagObserver extends WidgetsBindingObserver {
 }
 
 void main() async {
-  final mainStopwatch = Stopwatch()..start();
-  WidgetsFlutterBinding.ensureInitialized();
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = kSentryDsn;
+      options.tracesSampleRate = 0.2;
+      options.environment = kDebugMode ? 'development' : 'production';
+      options.sendDefaultPii = false;
+      options.attachScreenshot = false;
+    },
+    appRunner: () async {
+      final mainStopwatch = Stopwatch()..start();
+      WidgetsFlutterBinding.ensureInitialized();
   debugPrint('⏱️ [${mainStopwatch.elapsedMilliseconds}ms] WidgetsFlutterBinding.ensureInitialized');
 
   // Windows: tek örnek kontrolü.
@@ -342,6 +361,15 @@ void main() async {
     } catch (_) {
       // Ignore logging failures.
     }
+    unawaited(Sentry.captureException(
+      error,
+      stackTrace: stack,
+      withScope: (scope) {
+        scope.setTag('error_source', header);
+        scope.setTag('platform', 'desktop_windows');
+        scope.setTag('language', lang);
+      },
+    ));
   }
 
   // If the previous run ended while the app was still considered foreground,
@@ -452,6 +480,8 @@ void main() async {
       ),
     ),
   );
+  },
+);
 }
 
 class MyApp extends StatefulWidget {
@@ -1248,6 +1278,9 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
           )
         : MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [
+        SentryNavigatorObserver(),
+      ],
       debugShowCheckedModeBanner: false,
       title: windowTitle,
       themeMode: theme.themeMode,

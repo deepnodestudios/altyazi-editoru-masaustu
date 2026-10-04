@@ -206,8 +206,13 @@ export function isGeoFreeRewardsRestricted(args: {
   countryCodes?: unknown;
   timeZoneOffsetMinutes?: unknown;
   appVersion?: unknown;
+  ipCountryCode?: unknown;
 }): boolean {
   const countries = collectCountryCodes(args.countryCodes);
+  const ipCountry = normalizeCountryCode(args.ipCountryCode);
+  if (ipCountry) {
+    countries.add(ipCountry);
+  }
   const offsetRaw = Number(args.timeZoneOffsetMinutes);
   const offsetMinutes = Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : NaN;
   const restricted = activeRestrictedCountryCodes(args.appVersion);
@@ -225,6 +230,7 @@ export function isFreeRewardsRestricted(args: {
   timeZoneOffsetMinutes?: unknown;
   languageCodes?: unknown;
   appVersion?: unknown;
+  ipCountryCode?: unknown;
 }): boolean {
   return isGeoFreeRewardsRestricted(args);
 }
@@ -234,10 +240,15 @@ export function restrictedReason(args: {
   timeZoneOffsetMinutes?: unknown;
   languageCodes?: unknown;
   appVersion?: unknown;
+  ipCountryCode?: unknown;
 }): string | null {
   if (!isGeoFreeRewardsRestricted(args)) return null;
 
   const countries = collectCountryCodes(args.countryCodes);
+  const ipCountry = normalizeCountryCode(args.ipCountryCode);
+  if (ipCountry) {
+    countries.add(ipCountry);
+  }
   const offsetRaw = Number(args.timeZoneOffsetMinutes);
   const offsetMinutes = Number.isFinite(offsetRaw) ? Math.trunc(offsetRaw) : NaN;
   const restricted = activeRestrictedCountryCodes(args.appVersion);
@@ -262,11 +273,12 @@ export function resolveFreeRewardsRestriction(args: {
   countryCodes?: unknown;
   timeZoneOffsetMinutes?: unknown;
   appVersion?: unknown;
+  ipCountryCode?: unknown;
 }): FreeRewardsRestrictionResolution {
   const userData = args.userData ?? {};
   const geoLocked = userData.freeRewardsGeoLocked === true;
-  const geoRestricted = isGeoFreeRewardsRestricted(args);
 
+  // STICKY LOCK: If user already has geo-lock, return immediately without re-checking signals.
   if (geoLocked) {
     return {
       restricted: true,
@@ -278,10 +290,19 @@ export function resolveFreeRewardsRestriction(args: {
     };
   }
 
+  // If userData already has a saved country, also feed it into the evaluation
+  const savedCountry = normalizeCountryCode(userData.country || userData.ipCountry);
+  const ipCountry = normalizeCountryCode(args.ipCountryCode) || savedCountry;
+
+  const geoRestricted = isGeoFreeRewardsRestricted({
+    ...args,
+    ipCountryCode: ipCountry,
+  });
+
   if (geoRestricted) {
     return {
       restricted: true,
-      reason: restrictedReason(args),
+      reason: restrictedReason({ ...args, ipCountryCode: ipCountry }),
       geoLocked: true,
       clearLegacyRestrictedFlag: false,
     };
@@ -311,15 +332,33 @@ export async function assertFreeRewardsAllowed(args: {
   countryCodes?: unknown;
   timeZoneOffsetMinutes?: unknown;
   appVersion?: unknown;
+  ipCountryCode?: unknown;
 }): Promise<void> {
   const userDoc = await args.db.collection('users').doc(args.uid).get();
+  const userData = userDoc.data() ?? {};
+
+  // STICKY CHECK: If user is already geo-locked, throw immediately
+  if (userData.freeRewardsGeoLocked === true) {
+    throw new HttpsError('permission-denied', 'FREE_REWARDS_RESTRICTED');
+  }
+
   const resolution = resolveFreeRewardsRestriction({
-    userData: userDoc.data(),
+    userData,
     countryCodes: args.countryCodes,
     timeZoneOffsetMinutes: args.timeZoneOffsetMinutes,
     appVersion: args.appVersion,
+    ipCountryCode: args.ipCountryCode,
   });
   if (resolution.restricted) {
+    // Persist sticky lock on user doc
+    await userDoc.ref.set({
+      freeRewardsRestricted: true,
+      freeRewardsGeoLocked: true,
+      freeRewardsRestrictedReason: resolution.reason,
+      freeRewardsRestrictedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(args.ipCountryCode ? { country: args.ipCountryCode, ipCountry: args.ipCountryCode } : {}),
+    }, { merge: true }).catch(() => {});
+
     throw new HttpsError('permission-denied', 'FREE_REWARDS_RESTRICTED');
   }
 }

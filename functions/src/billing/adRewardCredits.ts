@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 
 import { shouldUseV163AdRewardRules, shouldUseV169DeviceAdRewardRules } from '../referral/referralUtils';
 import { assertFreeRewardsAllowed } from './regionPolicy';
+import { resolveClientCountry } from './geoIp';
 import {
   AD_REWARD_TOKENS,
   addGrantTokens,
@@ -193,12 +194,14 @@ export const getAdRewardStatus = onCall<AdRewardData>(
     }
 
     const db = admin.firestore();
+    const clientCountry = resolveClientCountry(request.rawRequest).country;
     await assertFreeRewardsAllowed({
       db,
       uid: auth.uid,
       countryCodes: data.countryCodes,
       timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
       appVersion: data.appVersion,
+      ipCountryCode: clientCountry,
     });
 
     let stateData: Record<string, unknown> = {};
@@ -247,12 +250,14 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
     }
 
     const db = admin.firestore();
+    const clientCountry = resolveClientCountry(request.rawRequest).country;
     await assertFreeRewardsAllowed({
       db,
       uid: auth.uid,
       countryCodes: data.countryCodes,
       timeZoneOffsetMinutes: data.timeZoneOffsetMinutes,
       appVersion: data.appVersion,
+      ipCountryCode: clientCountry,
     });
 
     const deviceId = (data.deviceId ?? '').trim();

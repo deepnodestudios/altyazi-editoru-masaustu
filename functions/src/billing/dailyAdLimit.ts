@@ -41,6 +41,9 @@ export const checkDailyAdLimit = onCall<CheckAdLimitData>(
       const userDoc = await db.collection('users').doc(uid).get();
       const userData = userDoc.data() ?? {};
       const purchasedCredits = Number(userData.purchasedCredits ?? userData.credits ?? 0);
+      if (userData.freeRewardsGeoLocked === true) {
+        return { allowed: false, remaining: 0, limit: 0, isRestricted: true };
+      }
       if (userData.isPaidUser || userData.subscriptionActive || purchasedCredits > 0) {
         return { allowed: true, remaining: DAILY_AD_LIMIT, limit: DAILY_AD_LIMIT, isPaid: true };
       }

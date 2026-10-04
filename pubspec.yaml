@@ -3,7 +3,7 @@ description: AI Altyazı Çeviri ve Editör
 
 publish_to: 'none'
 
-version: 1.8.3
+version: 1.8.4
 environment:
   sdk: '>=3.2.0 <4.0.0'
 
@@ -53,6 +53,7 @@ dependencies:
   desktop_drop: ^0.7.0
   super_drag_and_drop: ^0.9.1
   tray_manager: ^0.3.0
+  sentry_flutter: ^8.14.2
 
 dev_dependencies:
   flutter_test:

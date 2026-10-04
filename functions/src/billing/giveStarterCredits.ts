@@ -6,6 +6,7 @@ import {
     resolveFreeRewardsRestriction,
     RESTRICTED_STARTER_BONUS,
 } from './regionPolicy';
+import { resolveClientCountry } from './geoIp';
 import {
     addGrantTokens,
     hydrateTokenWallet,
@@ -185,11 +186,27 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 ? await transaction.get(deviceBonusRef)
                 : null;
             const userDoc = await transaction.get(userRef);
+            const userData = userDoc.exists ? (userDoc.data() ?? {}) : {};
             const trackingDoc = trackingRef ? await transaction.get(trackingRef) : null;
 
+            let clientCountry: string | null = typeof userData.country === 'string' ? userData.country : null;
+            let clientIp: string | null = typeof userData.lastIp === 'string' ? userData.lastIp : null;
+
+            // STICKY CHECK: Resolve from request IP only if user does not already have a country or is not yet geo-locked
+            if (!clientCountry || userData.freeRewardsGeoLocked !== true) {
+                const geoResult = resolveClientCountry(request.rawRequest);
+                if (geoResult.country) {
+                    clientCountry = geoResult.country;
+                }
+                if (geoResult.ip) {
+                    clientIp = geoResult.ip;
+                }
+            }
+
             const restriction = resolveFreeRewardsRestriction({
-                userData: userDoc.data(),
+                userData,
                 ...geoPolicyArgs,
+                ipCountryCode: clientCountry,
             });
             const freeRewardsRestricted = restriction.restricted;
             const freeRewardsRestrictedReason = restriction.reason;
@@ -321,7 +338,6 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             let purchasedCredits = 0;
             let googleLoginCredits = 0;
             if (userDoc.exists) {
-                const userData = userDoc.data() ?? {};
                 const raw = userData.purchasedCredits ?? userData.credits ?? 0;
                 purchasedCredits = Number.isFinite(Number(raw)) ? Number(raw) : 0;
                 googleLoginCredits = Number.isFinite(Number(userData.googleLoginCredits)) ? Number(userData.googleLoginCredits) : 0;
@@ -443,6 +459,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                         : admin.firestore.FieldValue.serverTimestamp(),
                     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
                     lastUserId: userId,
+                    ...(clientCountry && !existingData.country ? { country: clientCountry } : {}),
                     ...(googleLoginBonusToGive > 0 ? {
                         googleLoginBonusGranted: true,
                         loginBonusGranted: true,
@@ -602,27 +619,28 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 }
             }
 
+            const userGeoPatch: Record<string, any> = {};
+            if (clientCountry && userData.country !== clientCountry) {
+                userGeoPatch.country = clientCountry;
+                userGeoPatch.ipCountry = clientCountry;
+            }
+            if (clientIp && userData.lastIp !== clientIp) {
+                userGeoPatch.lastIp = clientIp;
+            }
+
             if (restriction.clearLegacyRestrictedFlag) {
-                transaction.set(
-                    userRef,
-                    {
-                        freeRewardsRestricted: admin.firestore.FieldValue.delete(),
-                        freeRewardsRestrictedReason: admin.firestore.FieldValue.delete(),
-                        freeRewardsRestrictedAt: admin.firestore.FieldValue.delete(),
-                    },
-                    { merge: true },
-                );
+                userGeoPatch.freeRewardsRestricted = admin.firestore.FieldValue.delete();
+                userGeoPatch.freeRewardsRestrictedReason = admin.firestore.FieldValue.delete();
+                userGeoPatch.freeRewardsRestrictedAt = admin.firestore.FieldValue.delete();
             } else if (freeRewardsRestricted) {
-                transaction.set(
-                    userRef,
-                    {
-                        freeRewardsRestricted: true,
-                        freeRewardsGeoLocked: restriction.geoLocked,
-                        freeRewardsRestrictedReason: freeRewardsRestrictedReason ?? 'RESTRICTED',
-                        freeRewardsRestrictedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    },
-                    { merge: true },
-                );
+                userGeoPatch.freeRewardsRestricted = true;
+                userGeoPatch.freeRewardsGeoLocked = restriction.geoLocked;
+                userGeoPatch.freeRewardsRestrictedReason = freeRewardsRestrictedReason ?? 'RESTRICTED';
+                userGeoPatch.freeRewardsRestrictedAt = admin.firestore.FieldValue.serverTimestamp();
+            }
+
+            if (Object.keys(userGeoPatch).length > 0) {
+                transaction.set(userRef, userGeoPatch, { merge: true });
             }
 
             const totalCredits = useWallet
@@ -658,6 +676,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 freeRewardsRestricted,
                 freeRewardsGeoLocked: restriction.geoLocked,
                 freeRewardsRestrictedReason,
+                country: clientCountry,
             };
         });
 
