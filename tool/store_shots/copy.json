@@ -1,0 +1,253 @@
+{
+  "_note": "Her sahne: [etiket, başlık 1. satır, başlık 2. satır ({...} vurgulu), alt yazı]. Sahne sırası: ceviri, dil, gecmis, onizleme, karsilastir, ayarlar, ozellikler, editor.",
+  "Türkçe": [
+    ["YAPAY ZEKÂ ÇEVİRİ", "Altyazılarını", "{yapay zekâyla} çevir", "Dosyanı ekle, dilini seç, çeviriyi başlat."],
+    ["DİL SEÇİMİ", "İstediğin dile", "{tek tıkla} çevir", "Hedef dilini saniyeler içinde ara ve seç."],
+    ["ÇEVİRİ GEÇMİŞİ", "Kaldığın yerden", "{devam et}", "Çevirilerin otomatik kaydedilir."],
+    ["ÖNİZLEME", "Sonucu hemen", "{önizle}", "Çevrilen satırları zaman kodlarıyla gör."],
+    ["KARŞILAŞTIR", "Kaynakla", "{yan yana} kontrol et", "Orijinal ve çeviri satır satır, tek ekranda."],
+    ["KİŞİSELLEŞTİR", "Uygulamayı", "{sana göre} ayarla", "Koyu tema, OLED modu ve pencere seçenekleri."],
+    ["HEPSİ BİR ARADA", "İhtiyacın olan", "{her şey} burada", "Bağlamı koruyan çeviri, SDH temizleme, toplu çeviri."],
+    ["ALTYAZI EDİTÖRÜ", "Her satır", "{kontrolünde}", "Zaman kaydır, bul-değiştir, geri al."]
+  ],
+  "İngilizce": [
+    ["AI TRANSLATION", "Translate subtitles", "{with AI}", "Add files, pick a language, start translating."],
+    ["LANGUAGES", "Translate into", "{any language}", "Search and pick your target language in seconds."],
+    ["TRANSLATION HISTORY", "Pick up", "{where you left off}", "Your translations are saved automatically."],
+    ["PREVIEW", "Preview results", "{instantly}", "See every translated line with its timecode."],
+    ["COMPARE", "Check it", "{side by side}", "Source and translation, line by line."],
+    ["PERSONALIZE", "Make it", "{yours}", "Dark theme, OLED mode and window options."],
+    ["ALL IN ONE", "Everything you need", "{in one place}", "Context-aware translation, SDH cleanup, batch translation."],
+    ["SUBTITLE EDITOR", "Every line,", "{in your control}", "Shift timing, find & replace, undo."]
+  ],
+  "Almanca": [
+    ["KI-ÜBERSETZUNG", "Untertitel", "{mit KI} übersetzen", "Datei hinzufügen, Sprache wählen, loslegen."],
+    ["SPRACHEN", "In jede Sprache", "{übersetzen}", "Zielsprache in Sekunden suchen und auswählen."],
+    ["ÜBERSETZUNGSVERLAUF", "Dort weitermachen,", "{wo du aufgehört hast}", "Deine Übersetzungen werden automatisch gespeichert."],
+    ["VORSCHAU", "Ergebnis", "{sofort} ansehen", "Jede übersetzte Zeile mit Zeitcode."],
+    ["VERGLEICHEN", "Direkt", "{nebeneinander} prüfen", "Original und Übersetzung, Zeile für Zeile."],
+    ["ANPASSEN", "Ganz nach", "{deinem Geschmack}", "Dunkles Design, OLED-Modus und Fensteroptionen."],
+    ["ALLES IN EINEM", "Alles, was du brauchst,", "{an einem Ort}", "Kontextbewusste Übersetzung, SDH-Bereinigung, Stapelübersetzung."],
+    ["UNTERTITEL-EDITOR", "Jede Zeile", "{unter Kontrolle}", "Timing verschieben, Suchen & Ersetzen, Rückgängig."]
+  ],
+  "Arapça": [
+    ["ترجمة بالذكاء الاصطناعي", "ترجم ترجماتك", "{بالذكاء الاصطناعي}", "أضف ملفًا، اختر اللغة، وابدأ الترجمة."],
+    ["اللغات", "ترجم إلى", "{أي لغة}", "ابحث عن لغتك المستهدفة واخترها في ثوانٍ."],
+    ["سجل الترجمة", "تابع", "{من حيث توقفت}", "تُحفظ ترجماتك تلقائيًا."],
+    ["معاينة", "عاين النتيجة", "{فورًا}", "شاهد كل سطر مترجم مع توقيته."],
+    ["مقارنة", "راجعها", "{جنبًا إلى جنب}", "النص الأصلي والترجمة سطرًا بسطر."],
+    ["التخصيص", "اجعله", "{على ذوقك}", "سمة داكنة ووضع OLED وخيارات النافذة."],
+    ["كل شيء في مكان واحد", "كل ما تحتاجه", "{في مكان واحد}", "ترجمة تحافظ على السياق، تنظيف SDH، ترجمة دفعية."],
+    ["محرر الترجمة", "كل سطر", "{تحت سيطرتك}", "إزاحة التوقيت، البحث والاستبدال، التراجع."]
+  ],
+  "Danca": [
+    ["AI-OVERSÆTTELSE", "Oversæt undertekster", "{med AI}", "Tilføj en fil, vælg sprog, start oversættelsen."],
+    ["SPROG", "Oversæt til", "{ethvert sprog}", "Søg og vælg dit målsprog på få sekunder."],
+    ["OVERSÆTTELSESHISTORIK", "Fortsæt", "{hvor du slap}", "Dine oversættelser gemmes automatisk."],
+    ["FORHÅNDSVISNING", "Se resultatet", "{med det samme}", "Se hver oversat linje med tidskode."],
+    ["SAMMENLIGN", "Tjek det", "{side om side}", "Original og oversættelse, linje for linje."],
+    ["TILPAS", "Gør den", "{til din egen}", "Mørkt tema, OLED-tilstand og vinduesindstillinger."],
+    ["ALT I ÉN", "Alt hvad du behøver", "{ét sted}", "Kontekstbevidst oversættelse, SDH-rensning, batchoversættelse."],
+    ["UNDERTEKSTEDITOR", "Hver linje", "{under kontrol}", "Forskyd timing, søg og erstat, fortryd."]
+  ],
+  "Endonezce": [
+    ["TERJEMAHAN AI", "Terjemahkan subtitle", "{dengan AI}", "Tambah file, pilih bahasa, mulai menerjemahkan."],
+    ["BAHASA", "Terjemahkan ke", "{bahasa apa pun}", "Cari dan pilih bahasa target dalam hitungan detik."],
+    ["RIWAYAT TERJEMAHAN", "Lanjutkan", "{dari terakhir kali}", "Terjemahanmu tersimpan otomatis."],
+    ["PRATINJAU", "Lihat hasilnya", "{seketika}", "Lihat setiap baris terjemahan beserta kode waktunya."],
+    ["BANDINGKAN", "Periksa", "{berdampingan}", "Sumber dan terjemahan, baris demi baris."],
+    ["PERSONALISASI", "Atur", "{sesukamu}", "Tema gelap, mode OLED, dan opsi jendela."],
+    ["SEMUA DALAM SATU", "Semua yang kamu butuhkan", "{di satu tempat}", "Terjemahan sadar konteks, pembersihan SDH, terjemahan massal."],
+    ["EDITOR SUBTITLE", "Setiap baris", "{dalam kendalimu}", "Geser waktu, cari & ganti, urungkan."]
+  ],
+  "Felemenkçe": [
+    ["AI-VERTALING", "Vertaal ondertitels", "{met AI}", "Voeg een bestand toe, kies een taal, start."],
+    ["TALEN", "Vertaal naar", "{elke taal}", "Zoek en kies je doeltaal in enkele seconden."],
+    ["VERTAALGESCHIEDENIS", "Ga verder", "{waar je was}", "Je vertalingen worden automatisch opgeslagen."],
+    ["VOORBEELD", "Bekijk het resultaat", "{direct}", "Zie elke vertaalde regel met tijdcode."],
+    ["VERGELIJKEN", "Controleer het", "{naast elkaar}", "Bron en vertaling, regel voor regel."],
+    ["PERSONALISEREN", "Maak het", "{helemaal van jou}", "Donker thema, OLED-modus en vensteropties."],
+    ["ALLES IN ÉÉN", "Alles wat je nodig hebt", "{op één plek}", "Contextbewuste vertaling, SDH-opschoning, batchvertaling."],
+    ["ONDERTITELEDITOR", "Elke regel", "{onder controle}", "Timing verschuiven, zoeken & vervangen, ongedaan maken."]
+  ],
+  "Fransızca": [
+    ["TRADUCTION IA", "Traduisez vos sous-titres", "{avec l’IA}", "Ajoutez un fichier, choisissez la langue, lancez."],
+    ["LANGUES", "Traduisez vers", "{n’importe quelle langue}", "Recherchez et choisissez la langue cible en quelques secondes."],
+    ["HISTORIQUE", "Reprenez", "{là où vous étiez}", "Vos traductions sont enregistrées automatiquement."],
+    ["APERÇU", "Voyez le résultat", "{instantanément}", "Chaque ligne traduite avec son horodatage."],
+    ["COMPARER", "Vérifiez", "{côte à côte}", "Source et traduction, ligne par ligne."],
+    ["PERSONNALISER", "Adaptez l’app", "{à votre goût}", "Thème sombre, mode OLED et options de fenêtre."],
+    ["TOUT-EN-UN", "Tout ce qu’il vous faut", "{au même endroit}", "Traduction contextuelle, nettoyage SDH, traduction par lot."],
+    ["ÉDITEUR DE SOUS-TITRES", "Chaque ligne", "{sous contrôle}", "Décalage du timing, rechercher-remplacer, annuler."]
+  ],
+  "Japonca": [
+    ["AI翻訳", "字幕を", "{AIで翻訳}", "ファイルを追加して言語を選ぶだけ。"],
+    ["言語", "好きな言語に", "{すぐ翻訳}", "翻訳先の言語を数秒で検索・選択。"],
+    ["翻訳履歴", "中断したところから", "{再開}", "翻訳は自動で保存されます。"],
+    ["プレビュー", "結果を", "{すぐ確認}", "翻訳された各行をタイムコード付きで表示。"],
+    ["比較", "原文と", "{並べてチェック}", "原文と訳文を1行ずつ確認。"],
+    ["カスタマイズ", "自分好みに", "{設定}", "ダークテーマ、OLEDモード、ウィンドウ設定。"],
+    ["オールインワン", "必要な機能が", "{ひとつに}", "文脈を保つ翻訳、SDH除去、一括翻訳。"],
+    ["字幕エディター", "すべての行を", "{思いのままに}", "タイミング調整、検索と置換、元に戻す。"]
+  ],
+  "Korece": [
+    ["AI 번역", "자막을", "{AI로 번역}", "파일을 추가하고 언어를 선택하면 끝."],
+    ["언어", "원하는 언어로", "{바로 번역}", "번역할 언어를 몇 초 만에 검색하고 선택하세요."],
+    ["번역 기록", "멈춘 곳에서", "{이어서}", "번역이 자동으로 저장됩니다."],
+    ["미리보기", "결과를", "{바로 확인}", "번역된 모든 줄을 타임코드와 함께 보세요."],
+    ["비교", "원문과", "{나란히 확인}", "원문과 번역을 한 줄씩."],
+    ["맞춤 설정", "나에게 맞게", "{설정}", "다크 테마, OLED 모드, 창 옵션."],
+    ["올인원", "필요한 모든 것을", "{한곳에}", "문맥을 살린 번역, SDH 정리, 일괄 번역."],
+    ["자막 편집기", "모든 줄을", "{내 마음대로}", "싱크 이동, 찾아 바꾸기, 실행 취소."]
+  ],
+  "Lehçe": [
+    ["TŁUMACZENIE AI", "Tłumacz napisy", "{z pomocą AI}", "Dodaj plik, wybierz język, zacznij tłumaczyć."],
+    ["JĘZYKI", "Tłumacz na", "{dowolny język}", "Wyszukaj i wybierz język docelowy w kilka sekund."],
+    ["HISTORIA TŁUMACZEŃ", "Kontynuuj", "{tam, gdzie skończyłeś}", "Twoje tłumaczenia zapisują się automatycznie."],
+    ["PODGLĄD", "Zobacz wynik", "{od razu}", "Każda przetłumaczona linia z kodem czasowym."],
+    ["PORÓWNAJ", "Sprawdź", "{obok siebie}", "Oryginał i tłumaczenie, linia po linii."],
+    ["PERSONALIZACJA", "Dopasuj", "{do siebie}", "Ciemny motyw, tryb OLED i opcje okna."],
+    ["WSZYSTKO W JEDNYM", "Wszystko, czego potrzebujesz,", "{w jednym miejscu}", "Tłumaczenie z kontekstem, czyszczenie SDH, tłumaczenie wsadowe."],
+    ["EDYTOR NAPISÓW", "Każda linia", "{pod kontrolą}", "Przesuwanie czasu, znajdź i zamień, cofnij."]
+  ],
+  "Macarca": [
+    ["MI-FORDÍTÁS", "Fordítsd le a feliratokat", "{MI-vel}", "Adj hozzá fájlt, válassz nyelvet, indítsd el."],
+    ["NYELVEK", "Fordítás", "{bármely nyelvre}", "Keresd meg és válaszd ki a célnyelvet pillanatok alatt."],
+    ["FORDÍTÁSI ELŐZMÉNYEK", "Folytasd", "{ott, ahol abbahagytad}", "A fordításaid automatikusan mentődnek."],
+    ["ELŐNÉZET", "Nézd meg az eredményt", "{azonnal}", "Minden lefordított sor időkóddal."],
+    ["ÖSSZEHASONLÍTÁS", "Ellenőrizd", "{egymás mellett}", "Eredeti és fordítás, soronként."],
+    ["SZEMÉLYRE SZABÁS", "Alakítsd", "{a saját ízlésedre}", "Sötét téma, OLED mód és ablakbeállítások."],
+    ["MINDEN EGY HELYEN", "Minden, amire szükséged van,", "{egy helyen}", "Kontextusérzékeny fordítás, SDH-tisztítás, kötegelt fordítás."],
+    ["FELIRATSZERKESZTŐ", "Minden sor", "{a te kezedben}", "Időzítés eltolása, keresés és csere, visszavonás."]
+  ],
+  "Portekizce": [
+    ["TRADUÇÃO COM IA", "Traduza legendas", "{com IA}", "Adicione um arquivo, escolha o idioma e comece."],
+    ["IDIOMAS", "Traduza para", "{qualquer idioma}", "Pesquise e escolha o idioma de destino em segundos."],
+    ["HISTÓRICO", "Continue", "{de onde parou}", "Suas traduções são salvas automaticamente."],
+    ["PRÉVIA", "Veja o resultado", "{na hora}", "Cada linha traduzida com seu código de tempo."],
+    ["COMPARAR", "Confira", "{lado a lado}", "Original e tradução, linha por linha."],
+    ["PERSONALIZAR", "Deixe do", "{seu jeito}", "Tema escuro, modo OLED e opções de janela."],
+    ["TUDO EM UM", "Tudo o que você precisa", "{em um só lugar}", "Tradução com contexto, limpeza SDH, tradução em lote."],
+    ["EDITOR DE LEGENDAS", "Cada linha", "{sob seu controle}", "Ajuste de tempo, localizar e substituir, desfazer."]
+  ],
+  "Romence": [
+    ["TRADUCERE AI", "Tradu subtitrări", "{cu AI}", "Adaugă un fișier, alege limba, pornește traducerea."],
+    ["LIMBI", "Tradu în", "{orice limbă}", "Caută și alege limba țintă în câteva secunde."],
+    ["ISTORIC TRADUCERI", "Continuă", "{de unde ai rămas}", "Traducerile tale se salvează automat."],
+    ["PREVIZUALIZARE", "Vezi rezultatul", "{instant}", "Fiecare linie tradusă, cu codul de timp."],
+    ["COMPARĂ", "Verifică", "{una lângă alta}", "Original și traducere, linie cu linie."],
+    ["PERSONALIZARE", "Adaptează aplicația", "{după gustul tău}", "Temă întunecată, mod OLED și opțiuni de fereastră."],
+    ["TOTUL ÎNTR-UNUL", "Tot ce ai nevoie", "{într-un singur loc}", "Traducere cu context, curățare SDH, traducere în lot."],
+    ["EDITOR DE SUBTITRĂRI", "Fiecare linie", "{sub controlul tău}", "Decalare timp, caută și înlocuiește, anulare."]
+  ],
+  "Rusça": [
+    ["ИИ-ПЕРЕВОД", "Переводите субтитры", "{с помощью ИИ}", "Добавьте файл, выберите язык и начните перевод."],
+    ["ЯЗЫКИ", "Переводите", "{на любой язык}", "Найдите и выберите целевой язык за секунды."],
+    ["ИСТОРИЯ ПЕРЕВОДОВ", "Продолжайте", "{с того же места}", "Переводы сохраняются автоматически."],
+    ["ПРЕДПРОСМОТР", "Смотрите результат", "{сразу}", "Каждая переведённая строка с таймкодом."],
+    ["СРАВНЕНИЕ", "Проверяйте", "{бок о бок}", "Оригинал и перевод — строка за строкой."],
+    ["НАСТРОЙКА", "Настройте", "{под себя}", "Тёмная тема, режим OLED и параметры окна."],
+    ["ВСЁ В ОДНОМ", "Всё, что нужно,", "{в одном месте}", "Перевод с учётом контекста, очистка SDH, пакетный перевод."],
+    ["РЕДАКТОР СУБТИТРОВ", "Каждая строка", "{под контролем}", "Сдвиг тайминга, поиск и замена, отмена."]
+  ],
+  "Tayca": [
+    ["แปลด้วย AI", "แปลซับไตเติล", "{ด้วย AI}", "เพิ่มไฟล์ เลือกภาษา แล้วเริ่มแปลได้เลย"],
+    ["ภาษา", "แปลเป็น", "{ภาษาใดก็ได้}", "ค้นหาและเลือกภาษาปลายทางได้ในไม่กี่วินาที"],
+    ["ประวัติการแปล", "ทำต่อ", "{จากจุดเดิม}", "งานแปลของคุณถูกบันทึกอัตโนมัติ"],
+    ["ตัวอย่าง", "ดูผลลัพธ์", "{ทันที}", "ดูทุกบรรทัดที่แปลพร้อมไทม์โค้ด"],
+    ["เปรียบเทียบ", "ตรวจสอบ", "{แบบเคียงข้าง}", "ต้นฉบับและคำแปล ทีละบรรทัด"],
+    ["ปรับแต่ง", "ปรับให้", "{เป็นแบบของคุณ}", "ธีมมืด โหมด OLED และตัวเลือกหน้าต่าง"],
+    ["ครบในที่เดียว", "ทุกอย่างที่คุณต้องการ", "{ในที่เดียว}", "แปลแบบเข้าใจบริบท ล้าง SDH แปลทีละหลายไฟล์"],
+    ["ตัวแก้ไขซับไตเติล", "ทุกบรรทัด", "{อยู่ในมือคุณ}", "เลื่อนเวลา ค้นหาและแทนที่ เลิกทำ"]
+  ],
+  "Ukraynaca": [
+    ["ШІ-ПЕРЕКЛАД", "Перекладайте субтитри", "{за допомогою ШІ}", "Додайте файл, оберіть мову й почніть переклад."],
+    ["МОВИ", "Перекладайте", "{будь-якою мовою}", "Знайдіть і оберіть цільову мову за секунди."],
+    ["ІСТОРІЯ ПЕРЕКЛАДІВ", "Продовжуйте", "{з того ж місця}", "Переклади зберігаються автоматично."],
+    ["ПОПЕРЕДНІЙ ПЕРЕГЛЯД", "Дивіться результат", "{одразу}", "Кожен перекладений рядок із таймкодом."],
+    ["ПОРІВНЯННЯ", "Перевіряйте", "{поруч}", "Оригінал і переклад — рядок за рядком."],
+    ["НАЛАШТУВАННЯ", "Налаштуйте", "{під себе}", "Темна тема, режим OLED і параметри вікна."],
+    ["ВСЕ В ОДНОМУ", "Усе, що потрібно,", "{в одному місці}", "Переклад з урахуванням контексту, очищення SDH, пакетний переклад."],
+    ["РЕДАКТОР СУБТИТРІВ", "Кожен рядок", "{під контролем}", "Зсув таймінгу, пошук і заміна, скасування."]
+  ],
+  "Vietnamca": [
+    ["DỊCH BẰNG AI", "Dịch phụ đề", "{bằng AI}", "Thêm tệp, chọn ngôn ngữ và bắt đầu dịch."],
+    ["NGÔN NGỮ", "Dịch sang", "{mọi ngôn ngữ}", "Tìm và chọn ngôn ngữ đích chỉ trong vài giây."],
+    ["LỊCH SỬ DỊCH", "Tiếp tục", "{từ chỗ đã dừng}", "Bản dịch của bạn được lưu tự động."],
+    ["XEM TRƯỚC", "Xem kết quả", "{ngay lập tức}", "Xem từng dòng đã dịch kèm mã thời gian."],
+    ["SO SÁNH", "Kiểm tra", "{song song}", "Bản gốc và bản dịch, từng dòng một."],
+    ["TÙY CHỈNH", "Tùy chỉnh", "{theo ý bạn}", "Giao diện tối, chế độ OLED và tùy chọn cửa sổ."],
+    ["TẤT CẢ TRONG MỘT", "Mọi thứ bạn cần", "{ở một nơi}", "Dịch theo ngữ cảnh, dọn SDH, dịch hàng loạt."],
+    ["TRÌNH SỬA PHỤ ĐỀ", "Mọi dòng", "{trong tầm tay}", "Dời thời gian, tìm và thay thế, hoàn tác."]
+  ],
+  "Yunanca": [
+    ["ΜΕΤΑΦΡΑΣΗ AI", "Μεταφράστε υπότιτλους", "{με AI}", "Προσθέστε αρχείο, επιλέξτε γλώσσα, ξεκινήστε."],
+    ["ΓΛΩΣΣΕΣ", "Μετάφραση", "{σε κάθε γλώσσα}", "Βρείτε και επιλέξτε τη γλώσσα-στόχο σε δευτερόλεπτα."],
+    ["ΙΣΤΟΡΙΚΟ", "Συνεχίστε", "{από εκεί που μείνατε}", "Οι μεταφράσεις σας αποθηκεύονται αυτόματα."],
+    ["ΠΡΟΕΠΙΣΚΟΠΗΣΗ", "Δείτε το αποτέλεσμα", "{αμέσως}", "Κάθε μεταφρασμένη γραμμή με τον χρονοκωδικό της."],
+    ["ΣΥΓΚΡΙΣΗ", "Ελέγξτε", "{δίπλα-δίπλα}", "Πρωτότυπο και μετάφραση, γραμμή προς γραμμή."],
+    ["ΠΡΟΣΑΡΜΟΓΗ", "Κάντε την", "{δική σας}", "Σκούρο θέμα, λειτουργία OLED και επιλογές παραθύρου."],
+    ["ΟΛΑ ΣΕ ΕΝΑ", "Ό,τι χρειάζεστε", "{σε ένα μέρος}", "Μετάφραση με συμφραζόμενα, καθαρισμός SDH, μαζική μετάφραση."],
+    ["ΕΠΕΞΕΡΓΑΣΤΗΣ", "Κάθε γραμμή", "{υπό τον έλεγχό σας}", "Μετατόπιση χρόνου, εύρεση και αντικατάσταση, αναίρεση."]
+  ],
+  "Çekçe": [
+    ["PŘEKLAD S AI", "Překládejte titulky", "{pomocí AI}", "Přidejte soubor, vyberte jazyk a začněte."],
+    ["JAZYKY", "Překládejte", "{do libovolného jazyka}", "Vyhledejte a vyberte cílový jazyk během pár sekund."],
+    ["HISTORIE PŘEKLADŮ", "Pokračujte", "{tam, kde jste skončili}", "Vaše překlady se ukládají automaticky."],
+    ["NÁHLED", "Prohlédněte si výsledek", "{hned}", "Každý přeložený řádek s časovým kódem."],
+    ["POROVNÁNÍ", "Zkontrolujte", "{vedle sebe}", "Originál a překlad, řádek po řádku."],
+    ["PŘIZPŮSOBENÍ", "Nastavte si ji", "{po svém}", "Tmavý motiv, režim OLED a možnosti okna."],
+    ["VŠE V JEDNOM", "Vše, co potřebujete,", "{na jednom místě}", "Kontextový překlad, čištění SDH, dávkový překlad."],
+    ["EDITOR TITULKŮ", "Každý řádek", "{pod kontrolou}", "Posun časování, najít a nahradit, zpět."]
+  ],
+  "Çince": [
+    ["AI 翻译", "用 AI", "{翻译字幕}", "添加文件，选择语言，即可开始翻译。"],
+    ["语言", "翻译成", "{任何语言}", "几秒钟内搜索并选择目标语言。"],
+    ["翻译记录", "从上次中断处", "{继续}", "你的翻译会自动保存。"],
+    ["预览", "立即", "{查看结果}", "查看每一行译文及其时间码。"],
+    ["对比", "与原文", "{并排核对}", "原文与译文，逐行对照。"],
+    ["个性化", "按你的喜好", "{设置}", "深色主题、OLED 模式和窗口选项。"],
+    ["一站式", "所需功能", "{一应俱全}", "保留语境的翻译、SDH 清理、批量翻译。"],
+    ["字幕编辑器", "每一行", "{尽在掌控}", "时间轴平移、查找替换、撤销。"]
+  ],
+  "İbranice": [
+    ["תרגום AI", "תרגמו כתוביות", "{עם AI}", "הוסיפו קובץ, בחרו שפה והתחילו לתרגם."],
+    ["שפות", "תרגמו", "{לכל שפה}", "חפשו ובחרו את שפת היעד בתוך שניות."],
+    ["היסטוריית תרגום", "המשיכו", "{מאיפה שעצרתם}", "התרגומים שלכם נשמרים אוטומטית."],
+    ["תצוגה מקדימה", "צפו בתוצאה", "{מיד}", "כל שורה מתורגמת עם קוד הזמן שלה."],
+    ["השוואה", "בדקו", "{זה לצד זה}", "מקור ותרגום, שורה אחר שורה."],
+    ["התאמה אישית", "התאימו", "{לטעמכם}", "ערכת נושא כהה, מצב OLED ואפשרויות חלון."],
+    ["הכול במקום אחד", "כל מה שצריך", "{במקום אחד}", "תרגום ששומר על ההקשר, ניקוי SDH, תרגום אצווה."],
+    ["עורך כתוביות", "כל שורה", "{בשליטתכם}", "הזזת תזמון, חיפוש והחלפה, ביטול."]
+  ],
+  "İspanyolca": [
+    ["TRADUCCIÓN CON IA", "Traduce subtítulos", "{con IA}", "Añade un archivo, elige el idioma y empieza."],
+    ["IDIOMAS", "Traduce a", "{cualquier idioma}", "Busca y elige tu idioma de destino en segundos."],
+    ["HISTORIAL", "Continúa", "{donde lo dejaste}", "Tus traducciones se guardan automáticamente."],
+    ["VISTA PREVIA", "Mira el resultado", "{al instante}", "Cada línea traducida con su código de tiempo."],
+    ["COMPARAR", "Revísalo", "{lado a lado}", "Original y traducción, línea por línea."],
+    ["PERSONALIZAR", "Hazla", "{a tu manera}", "Tema oscuro, modo OLED y opciones de ventana."],
+    ["TODO EN UNO", "Todo lo que necesitas", "{en un solo lugar}", "Traducción con contexto, limpieza SDH, traducción por lotes."],
+    ["EDITOR DE SUBTÍTULOS", "Cada línea,", "{bajo tu control}", "Desplaza tiempos, buscar y reemplazar, deshacer."]
+  ],
+  "İsveççe": [
+    ["AI-ÖVERSÄTTNING", "Översätt undertexter", "{med AI}", "Lägg till en fil, välj språk och börja översätta."],
+    ["SPRÅK", "Översätt till", "{vilket språk som helst}", "Sök och välj målspråk på några sekunder."],
+    ["ÖVERSÄTTNINGSHISTORIK", "Fortsätt", "{där du slutade}", "Dina översättningar sparas automatiskt."],
+    ["FÖRHANDSVISNING", "Se resultatet", "{direkt}", "Varje översatt rad med sin tidskod."],
+    ["JÄMFÖR", "Kontrollera", "{sida vid sida}", "Original och översättning, rad för rad."],
+    ["ANPASSA", "Gör den", "{till din egen}", "Mörkt tema, OLED-läge och fönsteralternativ."],
+    ["ALLT I ETT", "Allt du behöver", "{på ett ställe}", "Kontextmedveten översättning, SDH-rensning, batchöversättning."],
+    ["UNDERTEXTREDIGERARE", "Varje rad", "{under kontroll}", "Flytta tider, sök och ersätt, ångra."]
+  ],
+  "İtalyanca": [
+    ["TRADUZIONE IA", "Traduci i sottotitoli", "{con l’IA}", "Aggiungi un file, scegli la lingua e inizia."],
+    ["LINGUE", "Traduci in", "{qualsiasi lingua}", "Cerca e scegli la lingua di destinazione in pochi secondi."],
+    ["CRONOLOGIA", "Riprendi", "{da dove eri rimasto}", "Le tue traduzioni vengono salvate automaticamente."],
+    ["ANTEPRIMA", "Guarda il risultato", "{subito}", "Ogni riga tradotta con il suo timecode."],
+    ["CONFRONTA", "Controlla", "{fianco a fianco}", "Originale e traduzione, riga per riga."],
+    ["PERSONALIZZA", "Rendila", "{tua}", "Tema scuro, modalità OLED e opzioni della finestra."],
+    ["TUTTO IN UNO", "Tutto ciò che ti serve", "{in un unico posto}", "Traduzione contestuale, pulizia SDH, traduzione in batch."],
+    ["EDITOR DI SOTTOTITOLI", "Ogni riga", "{sotto controllo}", "Sposta i tempi, trova e sostituisci, annulla."]
+  ]
+}

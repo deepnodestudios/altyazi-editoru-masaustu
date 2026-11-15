@@ -54,7 +54,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0.5,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: TextStyle(
+        titleTextStyle: TextStyle(fontFamily: 'Segoe UI', 
           color: colorScheme.onSurface,
           fontSize: 18,
           fontWeight: FontWeight.w700,
@@ -75,7 +75,7 @@ class AppTheme {
       // ── SnackBar ──
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.inverseSurface,
-        contentTextStyle: TextStyle(color: colorScheme.onInverseSurface),
+        contentTextStyle: TextStyle(fontFamily: 'Segoe UI', color: colorScheme.onInverseSurface),
         actionTextColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_snackBarRadius)),
@@ -89,14 +89,14 @@ class AppTheme {
           elevation: 0,
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -104,7 +104,7 @@ class AppTheme {
           foregroundColor: colorScheme.primary,
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -113,7 +113,7 @@ class AppTheme {
           side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
@@ -162,7 +162,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_dialogRadius)),
         surfaceTintColor: Colors.transparent,
         elevation: 8,
-        titleTextStyle: TextStyle(
+        titleTextStyle: TextStyle(fontFamily: 'Segoe UI', 
           color: colorScheme.onSurface,
           fontSize: 20,
           fontWeight: FontWeight.w700,
@@ -265,7 +265,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.surfaceContainerHigh,
-        contentTextStyle: TextStyle(color: colorScheme.onSurface),
+        contentTextStyle: TextStyle(fontFamily: 'Segoe UI', color: colorScheme.onSurface),
         actionTextColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_snackBarRadius)),
@@ -278,7 +278,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0.5,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: const TextStyle(fontFamily: 'Segoe UI', 
           color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.w700,
@@ -302,14 +302,14 @@ class AppTheme {
           elevation: 0,
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -317,7 +317,7 @@ class AppTheme {
           foregroundColor: colorScheme.primary,
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -326,7 +326,7 @@ class AppTheme {
           side: BorderSide(color: darkOutline),
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
@@ -372,7 +372,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         backgroundColor: const Color(0xFF1E1E34),
         elevation: 12,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: const TextStyle(fontFamily: 'Segoe UI', 
           color: Colors.white,
           fontSize: 20,
           fontWeight: FontWeight.w700,
@@ -468,7 +468,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.surfaceContainerHigh,
-        contentTextStyle: TextStyle(color: colorScheme.onSurface),
+        contentTextStyle: TextStyle(fontFamily: 'Segoe UI', color: colorScheme.onSurface),
         actionTextColor: colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_snackBarRadius)),
@@ -480,7 +480,7 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: TextStyle(
+        titleTextStyle: TextStyle(fontFamily: 'Segoe UI', 
           color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.w700,
@@ -504,7 +504,7 @@ class AppTheme {
           elevation: 0,
           padding: _defaultButtonPadding,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_buttonRadius)),
-          textStyle: const TextStyle(inherit: false, fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
+          textStyle: const TextStyle(inherit: false, fontFamily: 'Segoe UI', fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.3),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -563,7 +563,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         backgroundColor: const Color(0xFF0A0A14),
         elevation: 12,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: const TextStyle(fontFamily: 'Segoe UI', 
           color: Colors.white,
           fontSize: 20,
           fontWeight: FontWeight.w700,

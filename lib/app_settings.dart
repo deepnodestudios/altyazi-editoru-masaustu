@@ -1106,6 +1106,11 @@ class AppSettings extends ChangeNotifier {
     _uiStateManager.setTabRestored(true);
   }
 
+  /// Yalnızca tanıtım ekran görüntüsü üreticisi (tool/store_shots) için.
+  @visibleForTesting
+  Future<void> debugReloadProjectsFromPrefs() =>
+      _projectManager.loadProjectsFromPrefs();
+
   Future<void> setLastTabIndex(int index) async {
     _uiStateManager.setLastTabIndex(index);
     final prefs = await SharedPreferences.getInstance();

@@ -463,6 +463,11 @@ class BillingService extends ChangeNotifier {
     });
   }
 
+  /// Yalnızca tanıtım ekran görüntüsü üreticisi (tool/store_shots) için.
+  @visibleForTesting
+  void debugApplyUserSnapshot(Map<String, dynamic> data) =>
+      _applyCreditsFromUserSnapshot(data);
+
   void _applyCreditsFromUserSnapshot(Map<String, dynamic>? data) {
     final purchasedA = _asInt(data?['purchasedCredits']);
     final purchasedB = _asInt(data?['credits']);
