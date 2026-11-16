@@ -36,6 +36,10 @@ const String kSentryDsn =
     'https://b475ca7076c2499baac1d734301acaff@o4512196697128960.ingest.de.sentry.io/4512196703420496';
 
 const String _kPrefAppInForeground = 'app_in_foreground';
+
+/// Kapanış başladıktan sonra pencere/yaşam döngüsü olaylarının
+/// "ön planda" işaretini yeniden true yapmasını engeller.
+bool _appShutdownStarted = false;
 const String _kPrefCrashForcePrompt = 'crash_report_force_prompt';
 const String _kPrefWindowAlwaysOnTop = 'window_always_on_top';
 
@@ -257,6 +261,7 @@ class _ForegroundFlagObserver extends WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_appShutdownStarted) return;
     // Treat "resumed" as foreground. Other states mean we're not actively in the foreground.
     if (state == AppLifecycleState.resumed) {
       // Don't await; this runs on lifecycle callbacks.
@@ -906,16 +911,14 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
   @override
   void onWindowClose() async {
     if (!mounted) {
-      _isShuttingDown = true;
-      await windowManager.destroy();
+      await _shutdownApp();
       return;
     }
 
     final settings = context.read<AppSettings>();
     final controller = context.read<TranslationController>();
     if (_isQuitRequested) {
-      _isShuttingDown = true;
-      await windowManager.destroy();
+      await _shutdownApp();
       return;
     }
 
@@ -938,26 +941,12 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
 
     // Hiçbir engel yoksa doğrudan kapat
     if (!isTranslating && !hasUnsavedEditor) {
-      _isShuttingDown = true;
-      _isQuitRequested = true;
-      
-      // Uygulama normal şekilde kapatıldığında foreground bayrağını temizle
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kPrefAppInForeground, false);
-      
-      await windowManager.destroy();
+      await _shutdownApp();
       return;
     }
 
     if (!context.mounted || _navigatorKey.currentContext == null) {
-      _isShuttingDown = true;
-      _isQuitRequested = true;
-      
-      // Uygulama normal şekilde kapatıldığında foreground bayrağını temizle
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kPrefAppInForeground, false);
-      
-      await windowManager.destroy();
+      await _shutdownApp();
       return;
     }
 
@@ -1011,15 +1000,45 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
         );
       }
 
-      _isShuttingDown = true;
-      _isQuitRequested = true;
-      
-      // Uygulama normal şekilde kapatıldığında foreground bayrağını temizle
+      await _shutdownApp();
+    }
+  }
+
+  /// Uygulamayı temiz kapatır.
+  ///
+  /// Windows'ta `windowManager.destroy()` Flutter motorunu kapatırken
+  /// flutter_windows.dll içinde çöküyor (0xc0000005). Süreç bu çökmeyle
+  /// bittiği için bir sonraki açılışta "uygulama çöktü" uyarısı çıkıyordu.
+  /// Bu yüzden önce "ön planda" işareti diske yazılır, tepsi simgesi ve
+  /// Sentry kapatılır, sonra süreç doğrudan sonlandırılır.
+  Future<void> _shutdownApp() async {
+    if (_appShutdownStarted) return;
+    _appShutdownStarted = true;
+    _isShuttingDown = true;
+    _isQuitRequested = true;
+
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      try {
+        await windowManager.hide().timeout(const Duration(seconds: 1));
+      } catch (_) {}
+    }
+    try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPrefAppInForeground, false);
-      
-      await windowManager.destroy();
+    } catch (_) {}
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      try {
+        await trayManager.destroy().timeout(const Duration(seconds: 1));
+      } catch (_) {}
     }
+    try {
+      await Sentry.close().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+
+    if (Platform.isWindows) {
+      exit(0);
+    }
+    await windowManager.destroy();
   }
 
   Future<bool> _initSystemTray() async {
@@ -1206,27 +1225,12 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
             unawaited(controller.stopTranslation(
               clearSdh: settings.sdhClear,
               targetLanguage: settings.targetLanguage,
-            ).then((_) {
-              _isShuttingDown = true;
-              _isQuitRequested = true;
-              SharedPreferences.getInstance().then((prefs) {
-                prefs.setBool(_kPrefAppInForeground, false);
-              });
-              unawaited(windowManager.destroy());
-            }));
+            ).then((_) => _shutdownApp()));
             return;
           }
         }
 
-        _isShuttingDown = true;
-        _isQuitRequested = true;
-        
-        // Uygulama normal şekilde kapatıldığında foreground bayrağını temizle
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setBool(_kPrefAppInForeground, false);
-        });
-        
-        unawaited(windowManager.destroy());
+        unawaited(_shutdownApp());
         return;
     }
   }
