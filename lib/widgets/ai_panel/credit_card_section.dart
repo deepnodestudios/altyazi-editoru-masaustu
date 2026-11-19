@@ -172,13 +172,12 @@ class AiPanelCreditCardSection extends StatelessWidget {
       constraints: BoxConstraints(minHeight: minHeight),
       child: Card(
         margin: EdgeInsets.zero,
-        elevation: 4,
-        shadowColor: colorScheme.shadow.withValues(alpha: 0.26),
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
         ),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(kAiPanelBorderRadius),
             gradient: LinearGradient(
@@ -246,7 +245,6 @@ class AiPanelCreditCardSection extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 4),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
@@ -256,16 +254,17 @@ class AiPanelCreditCardSection extends StatelessWidget {
                             : '${controller.userCredits} ${settings.trans['translations'] ?? 'ÇEVİRİ'}',
                         style: TextStyle(
                           color: colorScheme.onSurface,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Courier',
+                          fontSize: 23,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         if (tokenUi && paidCredits > 0)
                           _WalletChip(

@@ -38,6 +38,7 @@ import 'translations/translations_maintenance.dart';
 import 'translations/translations_log_updates.dart';
 import 'translations/translations_policy_change.dart';
 import 'translations/translations_token_wallet.dart';
+import 'translations/translations_token_ui.dart';
 import 'translations/translations_bonus_policy.dart';
 
 const Map<String, Map<String, String>> _desktopDialogTranslations = {
@@ -929,6 +930,12 @@ class Translations {
         merged.addAll(translationsTokenWallet['EN'] ?? const {});
         if (lang != 'EN') {
           merged.addAll(translationsTokenWallet[lang] ?? const {});
+        }
+        // Token-era wording taken from the mobile app; added last so every
+        // language gets its own text instead of the English fallback.
+        merged.addAll(translationsTokenUi['EN'] ?? const {});
+        if (lang != 'EN') {
+          merged.addAll(translationsTokenUi[lang] ?? const {});
         }
         final view = _TranslationMapView(
             Map<String, String>.unmodifiable(merged), lang);

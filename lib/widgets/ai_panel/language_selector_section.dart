@@ -9,12 +9,16 @@ class AiPanelLanguageSelectorSection extends StatelessWidget {
   final Key? selectorTapKey;
   final bool balancedTopBand;
 
+  /// Shows an info icon (translation quality tip) when set.
+  final VoidCallback? onInfoTap;
+
   const AiPanelLanguageSelectorSection({
     super.key,
     required this.displayText,
     required this.onTap,
     this.selectorTapKey,
     this.balancedTopBand = false,
+    this.onInfoTap,
   });
 
   @override
@@ -93,6 +97,19 @@ class AiPanelLanguageSelectorSection extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onInfoTap != null)
+                InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onInfoTap,
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.info,
+                      color: colorScheme.primary,
+                      size: 18 * compactScale,
+                    ),
+                  ),
+                ),
             ],
           ),
         );

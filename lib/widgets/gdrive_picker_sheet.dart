@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../app_settings.dart';
@@ -23,7 +22,8 @@ Future<GDriveFileInfo?> showGoogleDriveSubtitlePickerSheet(
           child: Consumer<AppSettings>(
             builder: (context, _, __) {
               final trans = context.read<AppSettings>().trans;
-              return _GoogleDrivePickerContent(settings: settings, trans: trans);
+              return _GoogleDrivePickerContent(
+                  settings: settings, trans: trans);
             },
           ),
         ),
@@ -39,7 +39,6 @@ Future<List<GDriveFileInfo>?> showGoogleDriveSubtitleMultiPickerSheet(
 }) {
   return showModalBottomSheet<List<GDriveFileInfo>>(
     context: context,
-    enableDrag: false,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (ctx) {
@@ -49,7 +48,8 @@ Future<List<GDriveFileInfo>?> showGoogleDriveSubtitleMultiPickerSheet(
           child: Consumer<AppSettings>(
             builder: (context, _, __) {
               final trans = context.read<AppSettings>().trans;
-              return _GoogleDriveMultiPickerContent(settings: settings, trans: trans);
+              return _GoogleDriveMultiPickerContent(
+                  settings: settings, trans: trans);
             },
           ),
         ),
@@ -122,8 +122,8 @@ class _GoogleDriveFolderPickerContentState
   }
 
   Future<List<GDriveFileInfo>> _load() async {
-    final items = await widget.settings
-        .cloudStorage.listGDriveFolderItems(folderId: _folderStack.last.id);
+    final items = await widget.settings.cloudStorage
+        .listGDriveFolderItems(folderId: _folderStack.last.id);
     if (!widget.settings.isGDriveConnected && !_didAutoClose) {
       _didAutoClose = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -243,8 +243,11 @@ class _GoogleDriveFolderPickerContentState
                     Navigator.pop(context, _folderStack.last.id ?? '');
                   },
                   icon: const Icon(Icons.check),
-                  label:
-                      Text(trans['select_this_folder'] ?? 'Select this folder'),
+                  label: Text(
+                    trans['save_here'] ??
+                        trans['select_this_folder'] ??
+                        'Save here',
+                  ),
                 ),
               ),
             ],
@@ -389,11 +392,11 @@ class _GoogleDrivePickerContentState extends State<_GoogleDrivePickerContent> {
   Future<List<GDriveFileInfo>> _load() async {
     final List<GDriveFileInfo> items;
     if (_searchMode) {
-      items = await widget.settings
-          .cloudStorage.searchGDriveSubtitleFiles(_searchController.text);
+      items = await widget.settings.cloudStorage
+          .searchGDriveSubtitleFiles(_searchController.text);
     } else {
-      items = await widget.settings
-          .cloudStorage.listGDriveFolderItems(folderId: _folderStack.last.id);
+      items = await widget.settings.cloudStorage
+          .listGDriveFolderItems(folderId: _folderStack.last.id);
     }
 
     if (!widget.settings.isGDriveConnected && !_didAutoClose) {
@@ -579,6 +582,8 @@ class _GoogleDrivePickerContentState extends State<_GoogleDrivePickerContent> {
               Expanded(
                 child: TextField(
                   controller: _searchController,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   decoration: InputDecoration(
                     hintText: trans['search_hint'] ?? 'Search…',
                     prefixIcon: const Icon(Icons.search),
@@ -714,18 +719,6 @@ class _GoogleDriveMultiPickerContentState
 
   // Keep selection order stable.
   final Map<String, GDriveFileInfo> _selected = <String, GDriveFileInfo>{};
-  String? _lastSelectedFileId;
-  final FocusNode _focusNode = FocusNode(debugLabel: 'gdrive_multi_picker');
-  final GlobalKey _listAreaKey = GlobalKey();
-  final Map<String, GlobalKey> _tileKeys = <String, GlobalKey>{};
-  List<GDriveFileInfo> _visibleItems = const <GDriveFileInfo>[];
-  static const double _marqueeDragThreshold = 6;
-  bool _isMarqueeArmed = false;
-  bool _isMarqueeActive = false;
-  Offset? _marqueeStartGlobal;
-  Offset? _marqueeCurrentGlobal;
-  Map<String, GDriveFileInfo> _marqueeBaseSelection = <String, GDriveFileInfo>{};
-  bool _marqueeIsAdditive = false;
 
   @override
   void initState() {
@@ -737,171 +730,17 @@ class _GoogleDriveMultiPickerContentState
   @override
   void dispose() {
     _searchController.dispose();
-    _focusNode.dispose();
     super.dispose();
-  }
-
-  GlobalKey _keyForFile(String fileId) {
-    return _tileKeys.putIfAbsent(fileId, () => GlobalKey());
-  }
-
-  Rect? _rectForKey(GlobalKey key) {
-    final context = key.currentContext;
-    if (context == null) return null;
-    final renderObject = context.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
-    final topLeft = renderObject.localToGlobal(Offset.zero);
-    return topLeft & renderObject.size;
-  }
-
-  bool _isPointOverFileTile(Offset globalPoint) {
-    for (final key in _tileKeys.values) {
-      final rect = _rectForKey(key);
-      if (rect != null && rect.contains(globalPoint)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Rect? _marqueeRectGlobal() {
-    final start = _marqueeStartGlobal;
-    final current = _marqueeCurrentGlobal;
-    if (start == null || current == null) return null;
-
-    final left = start.dx < current.dx ? start.dx : current.dx;
-    final top = start.dy < current.dy ? start.dy : current.dy;
-    final right = start.dx > current.dx ? start.dx : current.dx;
-    final bottom = start.dy > current.dy ? start.dy : current.dy;
-    return Rect.fromLTRB(left, top, right, bottom);
-  }
-
-  Rect? _marqueeRectLocal() {
-    final globalRect = _marqueeRectGlobal();
-    if (globalRect == null) return null;
-
-    final context = _listAreaKey.currentContext;
-    if (context == null) return null;
-    final renderObject = context.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
-
-    final origin = renderObject.localToGlobal(Offset.zero);
-    return globalRect.shift(-origin);
-  }
-
-  void _startMarquee(Offset globalPosition) {
-    _focusNode.requestFocus();
-    final isCtrlOrMeta =
-        HardwareKeyboard.instance.isControlPressed ||
-        HardwareKeyboard.instance.isMetaPressed;
-    setState(() {
-      _isMarqueeArmed = true;
-      _isMarqueeActive = false;
-      _marqueeStartGlobal = globalPosition;
-      _marqueeCurrentGlobal = globalPosition;
-      _marqueeIsAdditive = isCtrlOrMeta;
-      _marqueeBaseSelection = Map<String, GDriveFileInfo>.from(_selected);
-    });
-  }
-
-  void _updateMarquee(Offset globalPosition) {
-    if (_marqueeStartGlobal == null || (!_isMarqueeArmed && !_isMarqueeActive)) {
-      return;
-    }
-
-    if (!_isMarqueeActive) {
-      final distance = (globalPosition - _marqueeStartGlobal!).distance;
-      if (distance < _marqueeDragThreshold) return;
-      setState(() {
-        _isMarqueeActive = true;
-        if (!_marqueeIsAdditive) {
-          _selected.clear();
-          _lastSelectedFileId = null;
-        }
-      });
-    }
-
-    final next = <String, GDriveFileInfo>{};
-    _marqueeCurrentGlobal = globalPosition;
-    final marquee = _marqueeRectGlobal();
-    if (marquee != null) {
-      for (final item in _visibleItems) {
-        if (item.isFolder || item.id.isEmpty) continue;
-        final rect = _rectForKey(_keyForFile(item.id));
-        if (rect != null && rect.overlaps(marquee)) {
-          next[item.id] = item;
-        }
-      }
-    }
-    setState(() {
-      if (_marqueeIsAdditive) {
-        _selected
-          ..clear()
-          ..addAll(_marqueeBaseSelection)
-          ..addAll(next);
-      } else {
-        _selected
-          ..clear()
-          ..addAll(next);
-      }
-      if (_selected.isEmpty) {
-        _lastSelectedFileId = null;
-      }
-    });
-  }
-
-  void _endMarquee() {
-    if (!_isMarqueeActive && !_isMarqueeArmed) return;
-    setState(() {
-      _isMarqueeArmed = false;
-      _isMarqueeActive = false;
-      _marqueeStartGlobal = null;
-      _marqueeCurrentGlobal = null;
-      _marqueeBaseSelection = <String, GDriveFileInfo>{};
-      _marqueeIsAdditive = false;
-    });
-  }
-
-  KeyEventResult _onKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final isCtrlOrMeta =
-        HardwareKeyboard.instance.isControlPressed ||
-        HardwareKeyboard.instance.isMetaPressed;
-
-    if (isCtrlOrMeta && event.logicalKey == LogicalKeyboardKey.keyA) {
-      final selectable = _visibleItems
-          .where((e) => !e.isFolder && e.id.isNotEmpty)
-          .toList(growable: false);
-      setState(() {
-        _selected
-          ..clear()
-          ..addEntries(selectable.map((f) => MapEntry(f.id, f)));
-        _lastSelectedFileId = selectable.isNotEmpty ? selectable.last.id : null;
-      });
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.enter && _selected.isNotEmpty) {
-      _selectAndClose();
-      return KeyEventResult.handled;
-    }
-
-    return KeyEventResult.ignored;
   }
 
   Future<List<GDriveFileInfo>> _load() async {
     final List<GDriveFileInfo> items;
     if (_searchMode) {
-      items = await widget.settings
-          .cloudStorage.searchGDriveSubtitleFiles(_searchController.text);
+      items = await widget.settings.cloudStorage
+          .searchGDriveSubtitleFiles(_searchController.text);
     } else {
-      items = await widget.settings
-          .cloudStorage.listGDriveFolderItems(folderId: _folderStack.last.id);
+      items = await widget.settings.cloudStorage
+          .listGDriveFolderItems(folderId: _folderStack.last.id);
     }
 
     if (!widget.settings.isGDriveConnected && !_didAutoClose) {
@@ -1018,64 +857,7 @@ class _GoogleDriveMultiPickerContentState
       } else {
         _selected[file.id] = file;
       }
-      _lastSelectedFileId = _selected.isEmpty ? null : file.id;
     });
-  }
-
-  void _toggleSelectedAtIndex(
-    GDriveFileInfo file,
-    int index,
-    List<GDriveFileInfo> items,
-  ) {
-    if (file.id.isEmpty) return;
-    final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
-    final isCtrlOrMeta =
-        HardwareKeyboard.instance.isControlPressed ||
-        HardwareKeyboard.instance.isMetaPressed;
-    if (isShiftPressed && _lastSelectedFileId != null) {
-      final selectable = items
-          .where((e) => !e.isFolder && e.id.isNotEmpty)
-          .toList(growable: false);
-      final anchorIndex =
-          selectable.indexWhere((e) => e.id == _lastSelectedFileId);
-      final currentIndex = selectable.indexWhere((e) => e.id == file.id);
-      if (anchorIndex != -1 && currentIndex != -1) {
-        final start = anchorIndex < currentIndex ? anchorIndex : currentIndex;
-        final end = anchorIndex > currentIndex ? anchorIndex : currentIndex;
-        setState(() {
-          if (!isCtrlOrMeta) {
-            _selected.clear();
-          }
-          for (var i = start; i <= end; i++) {
-            final item = selectable[i];
-            _selected[item.id] = item;
-          }
-          _lastSelectedFileId = file.id;
-        });
-        return;
-      }
-    }
-    if (isCtrlOrMeta) {
-      _toggleSelected(file);
-      return;
-    }
-    setState(() {
-      _selected
-        ..clear()
-        ..[file.id] = file;
-      _lastSelectedFileId = file.id;
-    });
-  }
-
-  void _addWithDoubleClick(GDriveFileInfo file) {
-    if (file.id.isEmpty) return;
-    if (!_selected.containsKey(file.id)) {
-      setState(() {
-        _selected[file.id] = file;
-      });
-    }
-    _lastSelectedFileId = file.id;
-    _selectAndClose();
   }
 
   void _selectAndClose() {
@@ -1087,17 +869,13 @@ class _GoogleDriveMultiPickerContentState
   Widget build(BuildContext context) {
     final trans = widget.trans;
 
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: (node, event) => _onKeyEvent(event),
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: 12 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
         mainAxisSize: MainAxisSize.max,
         children: [
           Row(
@@ -1183,6 +961,8 @@ class _GoogleDriveMultiPickerContentState
               Expanded(
                 child: TextField(
                   controller: _searchController,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   decoration: InputDecoration(
                     hintText: trans['search_hint'] ?? 'Search…',
                     prefixIcon: const Icon(Icons.search),
@@ -1235,7 +1015,6 @@ class _GoogleDriveMultiPickerContentState
                 }
 
                 final items = snapshot.data ?? const <GDriveFileInfo>[];
-                _visibleItems = items;
                 if (items.isEmpty) {
                   return Center(
                     child: Padding(
@@ -1249,97 +1028,48 @@ class _GoogleDriveMultiPickerContentState
                   );
                 }
 
-                return Listener(
-                  behavior: HitTestBehavior.translucent,
-                  onPointerDown: (event) {
-                    _focusNode.requestFocus();
-                    if (event.buttons != 1) return;
-                    if (_isPointOverFileTile(event.position) && _selected.isEmpty) {
-                      return;
-                    }
-                    _startMarquee(event.position);
-                  },
-                  onPointerMove: (event) => _updateMarquee(event.position),
-                  onPointerUp: (_) => _endMarquee(),
-                  onPointerCancel: (_) => _endMarquee(),
-                  child: Stack(
-                    key: _listAreaKey,
-                    children: [
-                      ListView.separated(
-                        physics: _isMarqueeActive
-                            ? const NeverScrollableScrollPhysics()
-                            : const ClampingScrollPhysics(),
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          if (item.isFolder) {
-                            return ListTile(
-                              leading: const Icon(Icons.folder),
-                              title: Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => _enterFolder(item),
-                            );
-                          }
-
-                          final isSelected = _selected.containsKey(item.id);
-                          return GestureDetector(
-                            key: _keyForFile(item.id),
-                            onDoubleTap: () => _addWithDoubleClick(item),
-                            child: ListTile(
-                              leading: const Icon(Icons.subtitles),
-                              title: Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: item.modifiedTime != null
-                                  ? Text(item.modifiedTime!.toLocal().toString())
-                                  : null,
-                              trailing: Checkbox(
-                                value: isSelected,
-                                onChanged: (_) =>
-                                    _toggleSelectedAtIndex(item, index, items),
-                              ),
-                              onTap: () =>
-                                  _toggleSelectedAtIndex(item, index, items),
-                            ),
-                          );
-                        },
-                      ),
-                      if (_isMarqueeActive && _marqueeRectLocal() != null)
-                        Positioned.fromRect(
-                          rect: _marqueeRectLocal()!,
-                          child: IgnorePointer(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.15),
-                                border: Border.all(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  width: 1.2,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ),
+                return ListView.separated(
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    if (item.isFolder) {
+                      return ListTile(
+                        leading: const Icon(Icons.folder),
+                        title: Text(
+                          item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    ],
-                  ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _enterFolder(item),
+                      );
+                    }
+
+                    final isSelected = _selected.containsKey(item.id);
+                    return ListTile(
+                      leading: const Icon(Icons.subtitles),
+                      title: Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: item.modifiedTime != null
+                          ? Text(item.modifiedTime!.toLocal().toString())
+                          : null,
+                      trailing: Checkbox(
+                        value: isSelected,
+                        onChanged: (_) => _toggleSelected(item),
+                      ),
+                      onTap: () => _toggleSelected(item),
+                    );
+                  },
                 );
               },
             ),
           ),
         ],
       ),
-      ),
     );
   }
 }
-

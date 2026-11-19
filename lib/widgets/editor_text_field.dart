@@ -11,6 +11,7 @@ class EditorTextField extends StatefulWidget {
   final bool isRegexSearch;
   final double fontSize;
   final bool isCurrentMatch;
+  final VoidCallback? onFocusGained;
 
   const EditorTextField({
     super.key,
@@ -21,6 +22,7 @@ class EditorTextField extends StatefulWidget {
     this.isRegexSearch = false,
     this.fontSize = 16.0,
     this.isCurrentMatch = false,
+    this.onFocusGained,
   });
 
   @override
@@ -52,28 +54,35 @@ class _EditorTextFieldState extends State<EditorTextField> {
         _focusNode.hasFocus,
       );
     });
+    if (_focusNode.hasFocus) {
+      widget.onFocusGained?.call();
+    }
   }
 
   void _transformSelection(String Function(String) transformer) {
     final text = _controller.text;
     final selection = _controller.selection;
     if (selection.isValid && !selection.isCollapsed) {
-      final selectedText = text.substring(selection.start, selection.end);
+      final safeStart = selection.start.clamp(0, text.length);
+      final safeEnd = selection.end.clamp(safeStart, text.length);
+      final selectedText = text.substring(safeStart, safeEnd);
       final transformedText = transformer(selectedText);
       final newText = text.replaceRange(
-        selection.start,
-        selection.end,
+        safeStart,
+        safeEnd,
         transformedText,
       );
 
       final newSelection = selection.baseOffset <= selection.extentOffset
           ? TextSelection(
-              baseOffset: selection.start,
-              extentOffset: selection.start + transformedText.length,
+              baseOffset: safeStart,
+              extentOffset:
+                  (safeStart + transformedText.length).clamp(0, newText.length),
             )
           : TextSelection(
-              baseOffset: selection.start + transformedText.length,
-              extentOffset: selection.start,
+              baseOffset:
+                  (safeStart + transformedText.length).clamp(0, newText.length),
+              extentOffset: safeStart,
             );
 
       _controller.value = TextEditingValue(
@@ -88,7 +97,19 @@ class _EditorTextFieldState extends State<EditorTextField> {
   void didUpdateWidget(covariant EditorTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.initialText != _controller.text) {
-      _controller.text = widget.initialText;
+      final currentSelection = _controller.selection;
+      final newText = widget.initialText;
+      final safeSelection = currentSelection.isValid
+          ? TextSelection(
+              baseOffset: currentSelection.baseOffset.clamp(0, newText.length),
+              extentOffset:
+                  currentSelection.extentOffset.clamp(0, newText.length),
+            )
+          : const TextSelection.collapsed(offset: -1);
+      _controller.value = TextEditingValue(
+        text: newText,
+        selection: safeSelection,
+      );
     }
     if (widget.searchQuery != oldWidget.searchQuery ||
         widget.isCaseSensitive != oldWidget.isCaseSensitive ||
@@ -119,7 +140,7 @@ class _EditorTextFieldState extends State<EditorTextField> {
       focusNode: _focusNode,
       minLines: 1,
       maxLines: 8,
-      style: TextStyle(fontSize: widget.fontSize),
+      autocorrect: false,
       enableInteractiveSelection: true,
       decoration: InputDecoration(
         border: InputBorder.none,
@@ -130,46 +151,14 @@ class _EditorTextFieldState extends State<EditorTextField> {
       ),
       contextMenuBuilder:
           (BuildContext context, EditableTextState editableTextState) {
-            final settings = context.read<AppSettings>();
-            final trans = settings.trans;
-
             final List<ContextMenuButtonItem> buttonItems =
                 editableTextState.contextMenuButtonItems;
 
-            // Override Flutter's built-in context menu labels with localized versions
-            for (int i = 0; i < buttonItems.length; i++) {
-              final item = buttonItems[i];
-              String? label;
-              switch (item.type) {
-                case ContextMenuButtonType.cut:
-                  label = trans['cut'];
-                  break;
-                case ContextMenuButtonType.copy:
-                  label = trans['copy'];
-                  break;
-                case ContextMenuButtonType.paste:
-                  label = trans['paste'];
-                  break;
-                case ContextMenuButtonType.selectAll:
-                  label = trans['select_all'];
-                  break;
-                case ContextMenuButtonType.delete:
-                  label = trans['delete'];
-                  break;
-                default:
-                  break;
-              }
-              if (label != null) {
-                buttonItems[i] = ContextMenuButtonItem(
-                  label: label,
-                  onPressed: item.onPressed,
-                  type: item.type,
-                );
-              }
-            }
-
             if (_controller.selection.isValid &&
                 !_controller.selection.isCollapsed) {
+              final settings = context.read<AppSettings>();
+              final trans = settings.trans;
+
               buttonItems.add(
                 ContextMenuButtonItem(
                   label: trans["ctx_menu_upper"] ?? "AA",
@@ -233,6 +222,7 @@ class _EditorTextFieldState extends State<EditorTextField> {
               buttonItems: buttonItems,
             );
           },
+      style: TextStyle(fontSize: widget.fontSize),
       onChanged: widget.onChanged,
     );
   }

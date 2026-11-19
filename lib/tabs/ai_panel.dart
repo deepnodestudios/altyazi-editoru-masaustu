@@ -26,7 +26,6 @@ import '../utils/language_heuristic.dart';
 import '../widgets/batch_save_dialog.dart';
 import '../widgets/cloud_source_sheet.dart';
 import '../widgets/ai_panel/credit_card_section.dart';
-import '../widgets/ai_panel/english_source_tip_banner.dart';
 import '../widgets/ai_panel/file_picker_section.dart';
 import '../widgets/ai_panel/header_section.dart';
 import '../widgets/ai_panel/language_selector_section.dart';
@@ -1996,16 +1995,23 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
     );
   }
 
-  Widget _buildEnglishSourceTipBanner(
-    AppSettings settings, {
-    bool fillHeight = false,
-    double? fontSize,
-  }) {
-    return AiPanelEnglishSourceTipBanner(
-      text: settings.trans['english_source_tip'] ??
-          'İpucu: En iyi çeviri kalitesi için kaynak yada hedef altyazı diliniz mümkün olduğunca İngilizce olsun.',
-      fillHeight: fillHeight,
-      fontSize: fontSize,
+  // The quality tip used to be a banner on the panel; it now opens from the
+  // info icon next to the language selector (same as the mobile app).
+  void _showEnglishSourceTip(BuildContext context, AppSettings settings) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: Text(
+          settings.trans['english_source_tip'] ??
+              'İpucu: En iyi çeviri kalitesi için kaynak yada hedef altyazı diliniz mümkün olduğunca İngilizce olsun.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(settings.trans['ok'] ?? 'Tamam'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2035,6 +2041,9 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
       selectorTapKey: _languageSelectorTapKey,
       displayText: displayText,
       balancedTopBand: balancedTopBand,
+      onInfoTap: settings.hideInfoButtons
+          ? null
+          : () => _showEnglishSourceTip(context, settings),
       onTap: () {
         () async {
           final picked = await _showTargetLanguagePickerBottomSheet(
@@ -2614,12 +2623,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
                                 ),
                                 const SizedBox(height: kAiPanelSectionGap),
                               ],
-                              if (!settings.hideInfoButtons &&
-                                  controller.status ==
-                                      TranslationStatus.idle) ...[
-                                _buildEnglishSourceTipBanner(settings),
-                                const SizedBox(height: kAiPanelSectionGap),
-                              ],
                               _buildLanguageSelectorSection(
                                 context,
                                 settings: settings,
@@ -2675,8 +2678,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
                             48.0 + (hasFooterFileNameRow ? 28.0 : 0.0);
 
                         const desktopSectionGap = kAiPanelSectionGap;
-                        final showInfoBanner = !settings.hideInfoButtons &&
-                            controller.status == TranslationStatus.idle;
 
                         return SizedBox(
                           height: constraints.maxHeight,
@@ -2739,14 +2740,6 @@ class _AITranslationPanelState extends State<AITranslationPanel> with WidgetsBin
                                             controller: controller,
                                             colorScheme: colorScheme,
                                           ),
-                                          if (showInfoBanner) ...[
-                                            const SizedBox(height: desktopSectionGap),
-                                            _buildEnglishSourceTipBanner(
-                                              settings,
-                                              fillHeight: false,
-                                              fontSize: 15,
-                                            ),
-                                          ]
                                         ],
                                       ),
                                     ),

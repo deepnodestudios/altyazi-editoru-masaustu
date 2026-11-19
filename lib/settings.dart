@@ -346,12 +346,14 @@ class _FeaturesContent extends StatelessWidget {
       ),
       (
         title: tokenUi
-            ? (trans['feature_credit_title_tokens'] ??
+            ? (trans['feature_token_title'] ??
+                trans['feature_credit_title_tokens'] ??
                 trans['feature_credit_title'] ??
                 'Token System & History')
             : (trans['feature_credit_title'] ?? 'Credit System & History'),
         desc: tokenUi
-            ? (trans['feature_credit_desc_tokens'] ??
+            ? (trans['feature_token_desc'] ??
+                trans['feature_credit_desc_tokens'] ??
                 trans['feature_credit_desc'] ??
                 'Track token and leftover file-credit usage in detail.')
             : (trans['feature_credit_desc'] ??

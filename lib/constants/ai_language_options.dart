@@ -124,6 +124,7 @@ const Map<String, String> aiPanelLanguageCodeAliases = {
   'CS': 'CZ',
   'JV': 'JW',
   'PT-PT': 'PT',
+  'Vı': 'VI',
 };
 
 const Map<String, String> aiPanelLanguageValueAliases = {
