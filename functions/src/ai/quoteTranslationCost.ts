@@ -7,13 +7,16 @@ import {
     normalizePlatform,
     requireDeviceId,
 } from '../billing/creditUtils';
+import { getFirstFreeConfig } from '../config/firstFreeConfig';
 import {
-    FIRST_FREE_MAX_TOKENS,
     hydrateTokenWallet,
     planTokenWalletCharge,
     spendableTokenBalance,
     tokenChargeRequiresRewardedAd,
     usesFirstFreeTranslation,
+    firstFreeRequiresGoogleAccount,
+    firstFreeSkipsAppCheck,
+    hasGoogleIdentity,
 } from '../billing/tokenWallet';
 import {
     isUnsupportedDesktopClient,
@@ -254,8 +257,14 @@ export const quoteTranslationCost = onCall(
 
         // First-free translation (mobile 1.8.5+): the very first translation is
         // free up to a fair-use cap. Older clients and desktop are untouched.
+        // Knobs come from Remote Config (server template) and are frozen into
+        // this quote session below.
+        const firstFreeConfig = await getFirstFreeConfig();
         let firstFreeEligible = false;
-        if (usesFirstFreeTranslation({ appVersion, platform })) {
+        if (
+            firstFreeConfig.enabled
+            && usesFirstFreeTranslation({ appVersion, platform })
+        ) {
             const [userSnap, deviceSnap] = await Promise.all([
                 db.collection('users').doc(request.auth.uid).get(),
                 db.collection('device_bonuses').doc(deviceId).get(),
@@ -272,14 +281,19 @@ export const quoteTranslationCost = onCall(
             // Rooted/modified devices cannot obtain an App Check token; the
             // same signal already blocks starter tokens for mobile. Rooted
             // devices must not receive the free first translation either.
-            const isWeb = platform === 'web';
-            const rootedDeviceBlocked = isWeb ? false : !request.app;
+            const rootedDeviceBlocked = firstFreeSkipsAppCheck(platform)
+                ? false
+                : !request.app;
+            // Windows: free first translation only for a Google account.
+            const googleAccountOk = !firstFreeRequiresGoogleAccount(platform)
+                || hasGoogleIdentity(request.auth.token);
             firstFreeEligible =
+                googleAccountOk &&
                 !rootedDeviceBlocked &&
                 !usedByUser && !usedByDevice && !starterAlreadyGranted;
         }
         const firstFreeCoverageTokens = firstFreeEligible
-            ? Math.min(FIRST_FREE_MAX_TOKENS, quotedAppTokens)
+            ? Math.min(firstFreeConfig.maxTokens, quotedAppTokens)
             : 0;
         const chargeAppTokens = Math.max(
             0,
@@ -311,7 +325,8 @@ export const quoteTranslationCost = onCall(
                 chargeMode: 'first_free',
                 fromPaidTokens: 0,
                 fromGrantTokens: 0,
-                requiresRewardedAd: (platform === 'android' || platform === 'ios'),
+                requiresRewardedAd: (platform === 'android' || platform === 'ios')
+                    && firstFreeConfig.requiresAd,
                 translationCreditType: 'free',
                 spendableTokens,
             };
@@ -457,6 +472,10 @@ export const quoteTranslationCost = onCall(
                 quotedAppTokens,
                 firstFreeApplied: firstFreeEligible,
                 firstFreeCoverageTokens,
+                // Audit: Remote Config values this quote was built with.
+                firstFreeConfigEnabled: firstFreeConfig.enabled,
+                firstFreeConfigRequiresAd: firstFreeConfig.requiresAd,
+                firstFreeConfigMaxTokens: firstFreeConfig.maxTokens,
                 chargeAppTokens,
                 regularAppTokens: quotedAppTokens,
                 quotedChargeMode: preview.chargeMode,

@@ -46,6 +46,12 @@ export const AD_REWARD_WEEKLY_TOKEN_LIMIT = 200_000;
  * Older clients (and desktop) keep the legacy starter/quote flow untouched.
  */
 export const FIRST_FREE_MIN_MOBILE_VERSION = '1.8.5';
+/**
+ * Windows joins the first-free policy only from the single-codebase build
+ * (owner decision 2026-11-18). Desktop 1.8.x never reaches it, so the live
+ * desktop app is unaffected.
+ */
+export const FIRST_FREE_MIN_WINDOWS_VERSION = '1.9.6';
 /** Fair-use cap for the one-time free first translation. */
 export const FIRST_FREE_MAX_TOKENS = 250_000;
 
@@ -58,10 +64,39 @@ export function usesFirstFreeTranslation(args: {
     if (platform === 'web') {
         return true;
     }
+    if (platform === 'windows') {
+        return meetsMinimumVersion(args.appVersion, FIRST_FREE_MIN_WINDOWS_VERSION);
+    }
     if (platform !== 'android' && platform !== 'ios') {
         return false;
     }
     return meetsMinimumVersion(args.appVersion, FIRST_FREE_MIN_MOBILE_VERSION);
+}
+
+/**
+ * Windows has no App Check, so its device id is easy to fake; the free
+ * first translation is tied to a Google account there instead.
+ */
+export function firstFreeRequiresGoogleAccount(platform?: string | null): boolean {
+    return String(platform ?? '').trim().toLowerCase() === 'windows';
+}
+
+/** Web and Windows clients cannot obtain App Check tokens. */
+export function firstFreeSkipsAppCheck(platform?: string | null): boolean {
+    const p = String(platform ?? '').trim().toLowerCase();
+    return p === 'web' || p === 'windows';
+}
+
+/**
+ * True when the caller's ID token carries a Google identity. Uses
+ * firebase.identities, which also covers anonymous users that linked Google
+ * (their sign_in_provider can stay 'anonymous').
+ */
+export function hasGoogleIdentity(token: unknown): boolean {
+    const identities = (token as { firebase?: { identities?: Record<string, unknown> } } | null | undefined)
+        ?.firebase?.identities;
+    const google = identities?.['google.com'];
+    return Array.isArray(google) && google.length > 0;
 }
 
 const TOKEN_CHAR_MULTIPLIER = 1.30;
@@ -415,6 +450,20 @@ export function googleLoginGrantSpendAmount(args: {
     return Math.max(0, fromGrant - Math.min(otherGrant, fromGrant));
 }
 
+/** Web and desktop spend paid tokens only (no bonus or grant tokens). */
+export function paidTokensOnlyPlatform(args: {
+    platform?: string | null;
+    appVersion?: string | null;
+}): boolean {
+    const platform = String(args.platform ?? '').trim().toLowerCase();
+    return platform === 'web'
+        || isDesktopPlatform(platform)
+        || shouldEnforceDesktopPaidCreditsOnly({
+            platform: args.platform,
+            appVersion: args.appVersion,
+        });
+}
+
 export function spendableTokenBalance(args: {
     state: Pick<TokenWalletState, 'tokenBalance' | 'tokenGrantBalance'>;
     platform?: string | null;
@@ -422,19 +471,11 @@ export function spendableTokenBalance(args: {
     googleLoginTokenGrantBalance?: unknown;
 }): number {
     const paid = paidTokenBalance(args.state);
-    if (shouldEnforceDesktopPaidCreditsOnly({
-        platform: args.platform,
-        appVersion: args.appVersion,
-    }) || isDesktopPlatform(args.platform)) {
+    // Web and desktop spend paid tokens only; their one gift is the free
+    // first translation (owner decision, Nov 2026). The old web Google-login
+    // grant and mobile ad/pack bonuses are spent on mobile.
+    if (paidTokensOnlyPlatform(args)) {
         return paid;
-    }
-    const platform = String(args.platform ?? '').trim().toLowerCase();
-    if (platform === 'web') {
-        const loginGrant = Math.min(
-            Math.max(0, args.state.tokenGrantBalance),
-            clampNonNegativeInt(args.googleLoginTokenGrantBalance),
-        );
-        return paid + loginGrant;
     }
     return Math.max(0, args.state.tokenBalance);
 }
@@ -1044,6 +1085,8 @@ function emptyFilePlanFields(): Pick<
  * Web: paid file-credits / paid tokens, plus Google-login 100k grant only.
  * Lemon pack base+10% is paid. Converted ads/starter grants stay mobile-only.
  */
+export const BONUS_FIRST_NEEDS_BONUS_MIN_MOBILE_VERSION = '1.9.6';
+
 export function planTokenWalletCharge(args: {
     state: TokenWalletState;
     bonus?: BonusFileBuckets | null;
@@ -1055,11 +1098,9 @@ export function planTokenWalletCharge(args: {
     googleLoginTokenGrantBalance?: unknown;
 }): TokenChargePlan {
     const { state, platform, appVersion } = args;
-    const desktopPaidOnly = shouldEnforceDesktopPaidCreditsOnly({ platform, appVersion })
-        || isDesktopPlatform(platform);
-    const isWeb = String(platform ?? '').trim().toLowerCase() === 'web';
+    // Web and desktop: paid tokens only (see spendableTokenBalance).
+    const desktopPaidOnly = paidTokensOnlyPlatform({ platform, appVersion });
     const bonus = desktopPaidOnly ? clampBonusBuckets(null) : clampBonusBuckets(args.bonus);
-    const preferBonusFirst = !desktopPaidOnly && args.preferFreeCreditsFirst === true;
     const estimatedTokens = Math.max(
         estimateTokens(args.charCount),
         clampNonNegativeInt(args.estimatedTokens),
@@ -1067,12 +1108,20 @@ export function planTokenWalletCharge(args: {
     const paidFiles = state.legacyFlatRateRemaining;
     const bonusFiles = bonusFileTotal(bonus);
     const paidAvailable = paidTokenBalance(state);
-    const loginGrantAvailable = clampNonNegativeInt(args.googleLoginTokenGrantBalance);
     const grantAvailable = desktopPaidOnly
         ? 0
-        : isWeb
-            ? Math.min(Math.max(0, state.tokenGrantBalance), loginGrantAvailable)
-            : Math.max(0, state.tokenGrantBalance);
+        : Math.max(0, state.tokenGrantBalance);
+    // "Use bonus first" only reorders spending when there is a bonus to spend.
+    // Without one it must not pull paid tokens ahead of paid file credits.
+    // Mobile clients before BONUS_FIRST_NEEDS_BONUS_MIN_MOBILE_VERSION keep the
+    // old order, which is what their start button label describes.
+    const platformKey = String(platform ?? '').trim().toLowerCase();
+    const bonusFirstNeedsBonus =
+        (platformKey !== 'android' && platformKey !== 'ios')
+        || meetsMinimumVersion(appVersion, BONUS_FIRST_NEEDS_BONUS_MIN_MOBILE_VERSION);
+    const preferBonusFirst = !desktopPaidOnly
+        && args.preferFreeCreditsFirst === true
+        && (!bonusFirstNeedsBonus || bonusFiles > 0 || grantAvailable > 0);
 
     if (estimatedTokens <= 0 && (paidAvailable + grantAvailable) > 0) {
         throw new HttpsError('invalid-argument', 'CHAR_COUNT_REQUIRED');

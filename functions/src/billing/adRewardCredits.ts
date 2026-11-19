@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 import { shouldUseV163AdRewardRules, shouldUseV169DeviceAdRewardRules } from '../referral/referralUtils';
 import { assertFreeRewardsAllowed } from './regionPolicy';
 import { resolveClientCountry } from './geoIp';
+import { getAdRewardConfig } from '../config/adRewardConfig';
 import {
   AD_REWARD_TOKENS,
   addGrantTokens,
@@ -135,6 +136,24 @@ function normalizeRewardState(
   };
 }
 
+/**
+ * Device rules count views per device id, which the client reports. The same
+ * limits are also counted per account so a changed device id cannot reset them.
+ */
+function normalizeAccountRewardState(
+  userData: Record<string, unknown>,
+  now: Date,
+  limits: RewardLimits,
+): { dailyViews: number; weeklyCredits: number } {
+  const dailyViews = String(userData.adRewardAccountDailyKey ?? '').trim() === utcDayKey(now)
+    ? Math.min(limits.daily, clampNonNegativeInt(userData.adRewardAccountDailyViews))
+    : 0;
+  const weeklyCredits = String(userData.adRewardAccountWeeklyKey ?? '').trim() === utcWeekKey(now)
+    ? Math.min(limits.weekly, clampNonNegativeInt(userData.adRewardAccountWeeklyCredits))
+    : 0;
+  return { dailyViews, weeklyCredits };
+}
+
 function buildStatus(
   state: RewardState,
   supported: boolean,
@@ -211,8 +230,18 @@ export const getAdRewardStatus = onCall<AdRewardData>(
       if (!deviceId) {
         throw new HttpsError('invalid-argument', 'DEVICE_ID_REQUIRED_FOR_V169');
       }
-      const deviceDoc = await db.collection('device_bonuses').doc(deviceId).get();
-      stateData = deviceDoc.data() ?? {};
+      const [deviceDoc, userDoc] = await Promise.all([
+        db.collection('device_bonuses').doc(deviceId).get(),
+        db.collection('users').doc(auth.uid).get(),
+      ]);
+      const now = new Date();
+      const deviceState = normalizeRewardState(deviceDoc.data() ?? {}, now, limits);
+      const accountState = normalizeAccountRewardState(userDoc.data() ?? {}, now, limits);
+      return buildStatus({
+        ...deviceState,
+        dailyViews: Math.max(deviceState.dailyViews, accountState.dailyViews),
+        weeklyCredits: Math.max(deviceState.weeklyCredits, accountState.weeklyCredits),
+      }, true, limits, useWallet);
     } else {
       const userDoc = await db.collection('users').doc(auth.uid).get();
       stateData = userDoc.data() ?? {};
@@ -266,6 +295,18 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
     }
 
     const platform = String(data.platform ?? '').trim().toLowerCase() || null;
+    if (!request.app && (platform === 'android' || platform === 'ios')) {
+      const { requireAppCheck } = await getAdRewardConfig();
+      console.warn('recordAdRewardWatch without App Check token', {
+        uid: auth.uid,
+        deviceId: deviceId || null,
+        appVersion: data.appVersion ?? null,
+        enforced: requireAppCheck,
+      });
+      if (requireAppCheck) {
+        throw new HttpsError('failed-precondition', 'APP_CHECK_REQUIRED');
+      }
+    }
     const targetRef = useDeviceRules
       ? db.collection('device_bonuses').doc(deviceId)
       : db.collection('users').doc(auth.uid);
@@ -273,13 +314,21 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
 
     return db.runTransaction(async (tx) => {
       const targetDoc = await tx.get(targetRef);
-      const userDoc = useWallet ? await tx.get(userRef) : null;
+      const userDoc = useWallet || useDeviceRules ? await tx.get(userRef) : null;
       const now = new Date();
       const targetData = targetDoc.data() ?? {};
       const state = normalizeRewardState(targetData, now, limits);
 
       if (state.dailyViews >= limits.daily ||
           state.weeklyCredits >= limits.weekly) {
+        throw new HttpsError('resource-exhausted', 'AD_REWARD_LIMIT_REACHED');
+      }
+
+      const accountState = useDeviceRules
+        ? normalizeAccountRewardState(userDoc?.data() ?? {}, now, limits)
+        : null;
+      if (accountState && (accountState.dailyViews >= limits.daily ||
+          accountState.weeklyCredits >= limits.weekly)) {
         throw new HttpsError('resource-exhausted', 'AD_REWARD_LIMIT_REACHED');
       }
 
@@ -365,6 +414,15 @@ export const recordAdRewardWatch = onCall<AdRewardData>(
       }
 
       tx.set(targetRef, updateData, { merge: true });
+      if (accountState) {
+        tx.set(userRef, {
+          adRewardAccountDailyViews: accountState.dailyViews + 1,
+          adRewardAccountDailyKey: state.todayKey,
+          adRewardAccountWeeklyCredits:
+            accountState.weeklyCredits + (weeklyCredits - state.weeklyCredits),
+          adRewardAccountWeeklyKey: state.weekKey,
+        }, { merge: true });
+      }
       if (useWallet && walletState && (
         tokensGranted > 0
         || walletState.snapshotPending

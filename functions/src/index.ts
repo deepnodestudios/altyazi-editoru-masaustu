@@ -24,6 +24,7 @@ export { claimReferral } from './referral/claimReferral';
 // ── Subscriptions (v1.6.0+) ──
 export { handleSubscription } from './subscription/handleSubscription';
 export { handleVoidedPurchase } from './subscription/handleVoidedPurchase';
+export { reconcileSubscriptionAccess } from './subscription/reconcileSubscriptionAccess';
 
 // ── Bonus & Notifications (v1.6.0+) ──
 // Keep monthlyGoogleBonus exported (no-op) so deploy does not delete the live scheduled job.

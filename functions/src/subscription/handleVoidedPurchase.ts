@@ -7,6 +7,7 @@ import {
   subscriptionDocIdForToken,
   verifySubscriptionWithStore,
 } from './subscriptionUtils';
+import { syncUserSubscriptionFlags } from './subscriptionSync';
 import {
   CREDIT_POLICY_TOKEN_V1,
   hydrateTokenWallet,
@@ -131,6 +132,9 @@ export const handleVoidedPurchase = onRequest(
             lastNotificationType: notificationType,
             lastNotificationTypeName: notificationTypeName,
           }, { merge: true });
+          // Expiry/revocation must also clear the user's paid flag, otherwise the
+          // app keeps treating a lapsed subscriber as paid (no upgrade prompts).
+          await syncUserSubscriptionFlags(db, mappedUserId);
           res.status(200).send('OK — subscription inactive');
           return;
         }

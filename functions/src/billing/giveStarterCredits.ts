@@ -7,6 +7,7 @@ import {
     RESTRICTED_STARTER_BONUS,
 } from './regionPolicy';
 import { resolveClientCountry } from './geoIp';
+import { getFirstFreeConfig } from '../config/firstFreeConfig';
 import {
     addGrantTokens,
     hydrateTokenWallet,
@@ -17,6 +18,8 @@ import {
     tokenWalletDeviceFields,
     tokenWalletUserFields,
     usesFirstFreeTranslation,
+    firstFreeRequiresGoogleAccount,
+    hasGoogleIdentity,
 } from './tokenWallet';
 import {
     ensureGrantLotsConsistentInTx,
@@ -151,6 +154,8 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
     });
 
     const db = admin.firestore();
+    // Read outside the transaction; only gates the first-free badge (kill switch).
+    const firstFreeConfig = await getFirstFreeConfig();
     const deviceBonusRef = normalizedDeviceId
         ? db.collection('device_bonuses').doc(normalizedDeviceId)
         : null;
@@ -361,8 +366,14 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
                 existingData.bonusGranted === true &&
                 Number(existingData.bonusAmount ?? 0) > 0 &&
                 existingData.adRewardOnlyInit !== true;
+            // Mirrors quoteTranslationCost: Windows needs a Google account.
+            const firstFreeAccountOk =
+                !firstFreeRequiresGoogleAccount(resolvedPlatform) ||
+                hasGoogleIdentity(auth?.token);
             const firstTranslationFree =
                 firstFreePolicyActive &&
+                firstFreeAccountOk &&
+                firstFreeConfig.enabled &&
                 !starterBonusBlockedOnRootedDevice &&
                 !firstFreeUsed &&
                 !starterAlreadyGranted;

@@ -5,6 +5,7 @@ import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Type } from '@google/gen
 import { assertCreditsAvailable, consumeCreditInternal, getAuthEmail, normalizePlatform, requireDeviceId } from '../billing/creditUtils';
 import { isUnsupportedDesktopClient, isUnsupportedMobileClient } from '../referral/referralUtils';
 import { resolveGeminiModel, shouldUseVertexAi } from './modelUtils';
+import { withSubtitleContextRules } from './subtitleContextRules';
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY_LEGACY');
 
@@ -174,6 +175,72 @@ async function markFirstFreeTranslationUsed({
     });
 }
 
+const CHARGED_SESSIONS_COLLECTION = 'charged_sessions';
+const MAX_DEVICE_ID_HINTS = 10;
+
+function deviceIdHintsFromHistory(
+    historyData: FirebaseFirestore.DocumentData,
+    currentDeviceId: string,
+): string[] {
+    const resumeState = historyData.resumeState && typeof historyData.resumeState === 'object'
+        ? historyData.resumeState as Record<string, unknown>
+        : {};
+    const candidates: unknown[] = [
+        historyData.deviceId,
+        historyData.lastDeviceId,
+        historyData.creatorDeviceId,
+        resumeState.deviceId,
+        ...(Array.isArray(historyData.deviceIds) ? historyData.deviceIds : []),
+    ];
+    const hints = new Set<string>();
+    for (const candidate of candidates) {
+        const id = typeof candidate === 'string' ? candidate.trim() : '';
+        if (id && id !== currentDeviceId && !id.includes('/')) hints.add(id);
+    }
+    return [...hints].slice(0, MAX_DEVICE_ID_HINTS);
+}
+
+/**
+ * Server-only proof that a translation run was paid for, stored under the
+ * user so it can be found from any of their devices.
+ */
+async function recordChargedSessionMarker({
+    db,
+    uid,
+    deviceId,
+    chargeKey,
+    sessionData,
+    chargeReceipt,
+}: {
+    db: admin.firestore.Firestore;
+    uid: string;
+    deviceId: string;
+    chargeKey: string;
+    sessionData: FirebaseFirestore.DocumentData;
+    chargeReceipt: Record<string, unknown> | null;
+}): Promise<void> {
+    await db
+        .collection('users')
+        .doc(uid)
+        .collection(CHARGED_SESSIONS_COLLECTION)
+        .doc(chargeKey)
+        .set({
+            chargeKey,
+            uid,
+            deviceId,
+            email: sessionData.email ?? null,
+            fileName: sessionData.fileName ?? null,
+            targetLanguage: sessionData.targetLanguage ?? null,
+            platform: sessionData.platform ?? null,
+            prepared: true,
+            approved: true,
+            charged: true,
+            chargeMode: chargeReceipt?.chargeMode ?? sessionData.chargeMode ?? null,
+            chargedAt: sessionData.chargedAt ?? admin.firestore.FieldValue.serverTimestamp(),
+            lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+}
+
 async function loadTranslationSessionByChargeKey({
     db,
     deviceId,
@@ -204,50 +271,64 @@ async function loadTranslationSessionByChargeKey({
         };
     }
 
+    // Resume on another device: the session doc lives under the device that
+    // paid, so look for proof of payment elsewhere. Only server-written records
+    // count. translation_history is client-writable and is used solely as a
+    // hint for which device to check.
+    const userRef = db.collection('users').doc(uid);
+    const markerSnap = await userRef
+        .collection(CHARGED_SESSIONS_COLLECTION)
+        .doc(chargeKey)
+        .get();
+    if (markerSnap.exists && markerSnap.data()?.charged === true) {
+        return { exists: true, ref: null, data: markerSnap.data() ?? {} };
+    }
+
     const parsed = parseChargeKeyMetadata(chargeKey);
     if (parsed) {
-        const historyDocId = `${parsed.sourceHash}_${parsed.targetToken}`;
-        const historySnap = await db
-            .collection('users')
-            .doc(uid)
+        const historySnap = await userRef
             .collection('translation_history')
-            .doc(historyDocId)
+            .doc(`${parsed.sourceHash}_${parsed.targetToken}`)
             .get();
-        const historyData = historySnap.data() ?? {};
-        const resumeStateRaw = historyData.resumeState;
-        const resumeState = resumeStateRaw && typeof resumeStateRaw === 'object'
-            ? resumeStateRaw as Record<string, unknown>
-            : null;
-        const historyChargeKey = String(
-            historyData.chargeKey ?? resumeState?.chargeKey ?? ''
-        ).trim();
-        const translatedBlocks = Array.isArray(resumeState?.translatedBlocks)
-            ? resumeState?.translatedBlocks
-            : [];
-        const translatedLinesRaw = Number(historyData.translatedLines ?? resumeState?.processedLines ?? 0);
-        const translatedLines = Number.isFinite(translatedLinesRaw) ? translatedLinesRaw : 0;
-        const hasProgress = translatedBlocks.length > 0 || translatedLines > 0;
-
-        if (historySnap.exists && historyChargeKey === chargeKey && hasProgress) {
-            return {
-                exists: true,
-                ref: null,
-                data: {
-                    chargeKey,
-                    uid,
-                    email: historyData.lastUserEmail ?? null,
-                    fileName: historyData.fileName ?? null,
-                    targetLanguage: historyData.targetLanguage ?? null,
-                    platform: historyData.completedPlatform ?? null,
-                    prepared: true,
-                    approved: true,
-                    approvedAt: historyData.resumeUpdatedAt ?? historyData.updatedAt ?? null,
-                    charged: true,
-                    chargedAt: historyData.resumeUpdatedAt ?? historyData.updatedAt ?? null,
-                    lastSeenAt: historyData.updatedAt ?? null,
-                },
-            };
+        for (const hintedDeviceId of deviceIdHintsFromHistory(historySnap.data() ?? {}, deviceId)) {
+            const hintedSnap = await db
+                .collection('device_bonuses')
+                .doc(hintedDeviceId)
+                .collection('translation_sessions')
+                .doc(chargeKey)
+                .get();
+            const hintedData = hintedSnap.data() ?? {};
+            if (hintedSnap.exists && hintedData.uid === uid && hintedData.charged === true) {
+                return { exists: true, ref: null, data: hintedData };
+            }
         }
+    }
+
+    // Sessions charged before the marker existed: the spend ledger is server-only.
+    const ledgerSnap = await userRef
+        .collection('credit_transactions')
+        .where('chargeKey', '==', chargeKey)
+        .limit(1)
+        .get();
+    const ledgerData = ledgerSnap.docs[0]?.data();
+    if (ledgerData && ledgerData.type === 'spend') {
+        return {
+            exists: true,
+            ref: null,
+            data: {
+                chargeKey,
+                uid,
+                email: ledgerData.email ?? null,
+                fileName: ledgerData.fileName ?? null,
+                targetLanguage: ledgerData.targetLanguage ?? null,
+                platform: ledgerData.platform ?? null,
+                prepared: true,
+                approved: true,
+                approvedAt: ledgerData.timestamp ?? null,
+                charged: true,
+                chargedAt: ledgerData.timestamp ?? null,
+            },
+        };
     }
 
     return {
@@ -488,6 +569,19 @@ export const translateText = onCall({
                 });
             }
         }
+
+        // Best effort: the charge already succeeded, and older records still
+        // prove it if this write fails.
+        await recordChargedSessionMarker({
+            db,
+            uid: request.auth.uid,
+            deviceId: normalizedDeviceId,
+            chargeKey: trimmedChargeKey,
+            sessionData,
+            chargeReceipt,
+        }).catch((error) => {
+            console.warn('translateText charged session marker write failed', error);
+        });
     } else {
         let hasChargedSession = false;
 
@@ -533,13 +627,10 @@ export const translateText = onCall({
         }
 
         if (!hasChargedSession) {
-            await assertCreditsAvailable({
-                db,
-                uid: request.auth.uid,
-                deviceId: normalizedDeviceId,
-                platform: normalizedPlatform,
-                appVersion: resolvedAppVersion,
-            });
+            throw new HttpsError(
+                'failed-precondition',
+                'TRANSLATION_SESSION_NOT_CHARGED',
+            );
         }
     }
 
@@ -559,6 +650,10 @@ export const translateText = onCall({
 
     console.log('translateText provider/model', { provider: useVertex ? 'vertex' : 'gemini_api', modelName, appVersion: resolvedAppVersion, structuredOutput: useStructuredOutput, numberedLines: useNumberedLines });
     let effectiveSystemPrompt = withExplicitContentFallback(systemPrompt);
+    if (!useNumberedLines) {
+        // Numbered (repair) input arrives out of order, so scene context does not apply there.
+        effectiveSystemPrompt = withSubtitleContextRules(effectiveSystemPrompt);
+    }
     if (useStructuredOutput) {
         // Altyapı katmanı kuralı: çıktı her zaman JSON string array olmalı.
         // (System prompt yalnızca ek bilgidir; asıl garanti responseSchema'da.)

@@ -207,7 +207,11 @@ export const checkTranslationAccess = onCall({ invoker: 'public', enforceAppChec
         plannedEstimatedTokens = 0;
         plannedFromPaidTokens = 0;
         plannedFromGrantTokens = 0;
-        requiresRewardedAd = supportsRewardedAd;
+        // Honour the ad decision frozen into the quote (Remote Config
+        // first_free_requires_ad) so a config change mid-quote cannot trip
+        // TRANSLATION_QUOTE_BALANCE_CHANGED below.
+        requiresRewardedAd = supportsRewardedAd
+            && quoteSessionData?.quotedRequiresRewardedAd === true;
         usesAdRewardCredits = false;
         translationCreditType = 'free';
     } else if (summary.usesTokenWallet) {

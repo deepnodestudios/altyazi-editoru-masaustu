@@ -5,6 +5,7 @@ import {
   normalizeSubscriptionProductId,
   verifySubscriptionWithStore,
 } from '../subscription/subscriptionUtils';
+import { syncUserSubscriptionFlags } from '../subscription/subscriptionSync';
 
 type Options = {
   userId?: string;
@@ -147,6 +148,13 @@ async function main() {
 
       if (options.write) {
         await doc.ref.set(updatePayload, {merge: true});
+        const uid = typeof data.userId === 'string' ? data.userId.trim() : '';
+        if (uid) {
+          const userSync = await syncUserSubscriptionFlags(admin.firestore(), uid);
+          if (userSync.deactivated) {
+            console.log(`[${doc.id}] user ${uid}: subscriptionActive cleared`);
+          }
+        }
       }
     } catch (error: any) {
       failures++;
