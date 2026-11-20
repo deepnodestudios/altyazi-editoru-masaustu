@@ -8,6 +8,7 @@ import {
     requireDeviceId,
 } from '../billing/creditUtils';
 import { getFirstFreeConfig } from '../config/firstFreeConfig';
+import { hasTranslatedBefore } from '../billing/firstFreeHistory';
 import {
     hydrateTokenWallet,
     planTokenWalletCharge,
@@ -271,7 +272,12 @@ export const quoteTranslationCost = onCall(
             ]);
             const userData = userSnap.data() ?? {};
             const deviceData = deviceSnap.data() ?? {};
-            const usedByUser = userData.firstFreeTranslationUsedAt != null;
+            // Anyone who has translated before (also before the gift existed)
+            // does not get it (owner decision, Nov 2026).
+            const usedByUser = await hasTranslatedBefore(
+                userSnap.ref,
+                userData,
+            );
             const usedByDevice = deviceData.firstFreeTranslationUsedAt != null;
             const starterAlreadyGranted =
                 deviceSnap.exists

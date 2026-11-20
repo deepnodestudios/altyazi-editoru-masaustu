@@ -8,6 +8,7 @@ import {
 } from './regionPolicy';
 import { resolveClientCountry } from './geoIp';
 import { getFirstFreeConfig } from '../config/firstFreeConfig';
+import { hasTranslatedBefore } from './firstFreeHistory';
 import {
     addGrantTokens,
     hydrateTokenWallet,
@@ -179,6 +180,13 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
     const trackingRef = googleTrackingEmail
         ? db.collection('claimed_login_bonuses').doc(googleTrackingEmail)
         : null;
+
+    // Read outside the transaction (history queries); mirrors
+    // quoteTranslationCost, which decides the actual free quote.
+    const translatedBefore = await hasTranslatedBefore(
+        userRef,
+        (await userRef.get()).data() ?? {},
+    );
 
     let deviceBonusExisted = false;
     let grantedNow = false;
@@ -359,6 +367,7 @@ export const giveStarterCredits = onCall<StarterCreditsData>({ invoker: 'public'
             // Must mirror quoteTranslationCost: no prior first-free usage,
             // no legacy starter grant, and not a rooted (no App Check) device.
             const firstFreeUsed =
+                translatedBefore ||
                 (userDoc.data() ?? {}).firstFreeTranslationUsedAt != null ||
                 existingData.firstFreeTranslationUsedAt != null;
             const starterAlreadyGranted =
